@@ -1,0 +1,114 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "socrates-ai"
+version = "0.1.0"
+description = "A Socratic method tutoring system with Claude AI integration, multi-agent orchestration, and RAG support"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+    {name = "Socrates AI Contributors", email = "info@socrates-ai.com"}
+]
+keywords = ["ai", "education", "tutoring", "socratic-method", "claude", "multi-agent", "rag"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Education",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Education",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    "anthropic>=0.7.0",
+    "chromadb>=0.3.21",
+    "sentence-transformers>=2.2.0",
+    "fastapi>=0.95.0",
+    "sqlalchemy>=2.0.0",
+    "redis>=4.5.0",
+    "pydantic>=2.0.0",
+    "python-multipart>=0.0.5",
+    "slowapi>=0.1.8",
+    "prometheus-client>=0.16.0",
+    "pyjwt>=2.6.0",
+    "passlib>=1.7.4",
+    "bcrypt>=4.0.0",
+    "python-dotenv>=1.0.0",
+    "requests>=2.28.0",
+    "gitpython>=3.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+    "pytest-timeout>=2.1.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+    "types-requests",
+    "types-python-dateutil",
+]
+docs = [
+    "sphinx>=6.0.0",
+    "sphinx-rtd-theme>=1.2.0",
+    "myst-parser>=1.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/Nireus79/Socrates-ai"
+Repository = "https://github.com/Nireus79/Socrates-ai.git"
+"Bug Tracker" = "https://github.com/Nireus79/Socrates-ai/issues"
+Documentation = "https://socrates-ai.readthedocs.io"
+
+[tool.setuptools]
+packages = ["socratic_system"]
+
+[tool.setuptools.package-data]
+socratic_system = ["*.py", "*.json", "*.yaml", "*.yml"]
+
+[tool.black]
+line-length = 100
+target-version = ["py38", "py39", "py310", "py311", "py312"]
+include = '\.pyi?$'
+
+[tool.ruff]
+line-length = 100
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "C",    # flake8-comprehensions
+    "B",    # flake8-bugbear
+]
+ignore = [
+    "E501",  # line too long (black handles this)
+]
+target-version = "py38"
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+disallow_untyped_defs = false
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+asyncio_mode = "strict"
+timeout = 300
+addopts = "-v --cov=socratic_system --cov-report=term-missing --cov-report=html"

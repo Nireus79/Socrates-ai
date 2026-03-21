@@ -1,0 +1,8 @@
+include README.md
+include LICENSE
+include CHANGELOG.md
+recursive-include socratic_system *.py
+recursive-include socratic_system *.json
+recursive-include socratic_system *.yaml
+recursive-include socratic_system *.yml
+recursive-include tests *.py
