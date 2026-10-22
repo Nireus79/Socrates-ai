@@ -1,6 +1,7 @@
 # Socrates: a philosopher you can ask anything
 
-Status: plan, 2026-10-22. Nothing is built. Open decisions are in section 10; they must be answered before work starts.
+Status: plan, 2026-10-22, revised the same day after the founder's answers (sections 10 to 12). Nothing is built. Where section 12 (the game) and
+an earlier section disagree, section 12 wins; sections 4.4, 4.8 and 6 are marked where they change.
 
 ## 1. What it is
 
@@ -109,7 +110,7 @@ Guards stay: a question is asked only if its answer changes the reply and nothin
 holds it (`GuardNext`); a topic that is open, answered or declined is not asked again; a pushback closes the topic; the do-not-repeat list from the
 proof of concept comes from the ledger's question list.
 
-**Direct answer** (the Socrates "Direct" mode): the product promise is "ask anything", and a pure question-machine frustrates people. A *factual*
+**Direct answer** (the Socrates "Direct" mode; *superseded by section 12: every philosopher has his own method and both asks and answers*): the product promise is "ask anything", and a pure question-machine frustrates people. A *factual*
 question (a date, a definition in the dictionary sense, who said what) is answered in a sentence, then Socrates asks what the user makes of it.
 Whether the question is factual or philosophical is the model's judgement (a small judge with defined labels and a battery). A visible
 setting lets the user choose *Strict* (always questions), *Balanced* (default) or *Open* (answers first, then one question). Decision pending.
@@ -167,8 +168,7 @@ Socrates suggested.
 - Release trains: `v*` tags for desktop and extension, `mobile-v*` tags for Android, as in Moly. Store listings follow after the beta.
 
 ## 6. Language
-Greek and English at launch is proposed (the founder's language and the philosopher's); the reply language follows the user's message, as in Moly's
-title writer. Prompts are English. Decision pending.
+English only at the beginning (decided 2026-10-22). Prompts are English.
 
 ## 7. Quality plan
 - Scenario suite as in `orchestration_test.go`: scripted model, real temporary database, one scenario per rule, each checked to fail without the rule.
@@ -196,5 +196,96 @@ title writer. Prompts are English. Decision pending.
 - The copy of Moly diverges from Moly. Mitigation: decide the sharing model (open question 9).
 - A local model on desktop may be too weak for the examination moves; it is optional and labelled untested.
 
-## 10. Open questions for the founder
-See the list sent with this plan; answers are recorded here as decisions with the date.
+## 10. Decisions of the founder, 2026-10-22
+
+| # | Question | Decision |
+|---|---|---|
+| 1 | Game or chat | A game: the user unlocks philosophers; Socrates, unlocked last, gives endless conversation by the Socratic method (section 12) |
+| 2 | Strictness | No single setting. Each philosopher has his own method; each both asks and answers questions |
+| 3 | Own view | Socrates may give his own view (labelled as one view among others) |
+| 4 | Language | English only at first |
+| 5 | Name | Socrates (or Socrates-ai); the founder has a logo; package `io.github.nireus79.socrates`, Hermes Software |
+| 6 | Code sharing | "Whatever is better". Recommendation: **start as a copy of Moly** (M0), port shared fixes by hand during the beta, and extract the shared parts (keystore, privacy, provider and key handling, installers) into one module only after both products are stable. Revisit at M5 |
+| 7 | Memory | Socrates remembers claims across conversations (the ledger belongs to the user, not the conversation; deletable by the user) |
+| 8 | Hard topics | The principle of no harm; ethical reasoning as in Moly (safety stage, refusal rules, check-in after a crisis) |
+| 9 | Local model | Local (desktop, Ollama) and cloud (Claude, OpenAI), as in Moly; Android cloud only |
+| 10 | Business | Free launch with the sponsor card, as in Moly. Later the user can buy more time (turns) and more suggestions |
+| 11 | Android timing | Undecided. Recommendation: extension and desktop first, Android after the game loop is proven (the copy/paste layout needs its own screens) |
+| 12 | Knowledge | A curated set of philosophical texts, bundled and searched on the device (section 13) |
+
+## 11. What the decisions change
+- The memory is per user, so claims outlive the conversation (4.2 changes: the ledger table gets a `user_id`, a `conversation_id` of origin, and
+  a "said on" date; Socrates may say "last week you said..." only with the stored quote).
+- The suggestion service (4.8) becomes a game resource with a daily budget (12.3), not an unlimited help.
+- The reply decision (4.4) is chosen per philosopher: each has a *method profile* (12.2).
+- The safety stage stays above the game: no philosopher, level or purchase can switch it off.
+
+## 12. The game
+
+### 12.1 Shape
+A roster of philosophers, each a character with an era, a level of difficulty, a set of topics, a method and a persona. The user starts with
+the first and unlocks the next by points. The last, Socrates, is the reward: endless conversation with the Socratic method and no daily limit
+(his own cost control is the user's key and the provider's rules, not game turns).
+
+### 12.2 Philosophers
+Each philosopher is **data plus a method profile**, not new code per character: id, name, era, level (1 to N), unlock cost in points, topics,
+persona text, method profile, texts (section 13), and the thresholds of 12.4.
+
+The method profile chooses among the dialogue moves of 4.4 and sets the balance between asking and answering. Proposed starting roster
+(order and names are the founder's to change; each method is a real feature of that thinker's practice):
+
+| Level | Philosopher | Method in the dialogue | Topics |
+|---|---|---|---|
+| 1 | Thales (placeholder) or an easy guide | Simple "what do you see, why" questions; short answers | Nature, first principles |
+| 2 | Aristotle | Definition and classification: genus, difference, examples | Ethics of character, logic, happiness |
+| 3 | Descartes | Systematic doubt: remove what can be doubted, keep what remains | Knowledge, mind, certainty |
+| 4 | Kant | Tests a maxim by universalising it; asks for duty vs inclination | Moral law, freedom |
+| 5 | Nietzsche | Provokes, reverses values, asks who benefits from a belief | Values, power, meaning |
+| 6 | Wittgenstein | Asks how a word is used; dissolves a problem by clarifying language | Language, meaning |
+| final | Socrates | Pure elenchus: definitions, assumptions, contradiction, aporia | Anything the user asks |
+
+Each one **asks and answers**: in the question phase the philosopher poses a question from his topics (a "question card"), the user answers;
+in the answer phase the user may ask the philosopher something and he answers in his own manner (Socrates answers with questions, but may give his
+own view when stuck, decision 3).
+
+### 12.3 Resources
+- **Turns per day** (answers the user may give to the philosopher of their level), higher levels give fewer or cost more.
+- **Suggestions per day**, a separate smaller budget.
+- Both reset daily (local midnight) and can be extended later by purchase (decision 10; the store route and the F-Droid anti-feature rule are an open
+  question, 14.5).
+- Socrates, once unlocked, is outside the daily turns.
+
+### 12.4 Scoring and the loss of turns
+"Accurate" cannot mean "true", because philosophy has no answer key. It must be defined as measurable qualities, judged by the model with defined
+labels (a judge with a battery, like Moly's judges), against criteria that belong to the philosopher's method. Proposal, to be confirmed:
+- **Responsive**: the answer addresses the question asked.
+- **Reasoned**: the answer gives a reason, not only a position.
+- **Consistent**: it does not contradict the user's earlier claims in the ledger.
+- **In method**: it does what that philosopher asks (a definition for Aristotle, a universalised maxim for Kant, a doubt carried through for Descartes).
+Each answer receives a grade (insufficient, adequate, strong) and points follow the grade and the level. At higher levels the philosopher requires
+a higher grade: an answer under the bar **costs an extra turn** (the user "loses turns") and the philosopher says in one sentence what was missing,
+never the model answer. A suggestion taken as an answer scores less than the same words in the user's own writing (the suggestion is help).
+
+### 12.5 Unlocking
+Points accumulate per user. A philosopher unlocks when points reach his cost and the previous one has been completed (a minimum number of strong
+answers). Socrates unlocks at the end. Points and progress are stored on the device, encrypted with the rest, and are deleted with the profile.
+
+## 13. Curated texts
+- A **bundled corpus** of public-domain works per philosopher (translations in the public domain only, each with source, translator and licence
+  recorded in a manifest), split into passages with metadata (work, section) and indexed on the device. No web access at run time, no page scanning.
+- Retrieval picks passages relevant to the question; the reply may paraphrase or quote with the citation shown. A quote must be exact text from
+  a passage (checked by code), never recalled by the model. Same discipline as the ledger's quoted evidence.
+- Size matters on Android and in the extension: the corpus is a per-philosopher download or a compact index, to be measured.
+- Search method undecided: plain full-text (SQLite FTS5) first; embeddings only if FTS proves poor, because embeddings need a model or a service.
+
+## 14. Open questions after the answers (2026-10-22)
+1. Who chooses the roster: the proposal in 12.2 or the founder's own list, and how many philosophers at launch (one, three, seven)?
+2. How many turns and suggestions per day for the first level, and should they shrink or cost more at higher levels?
+3. May the user ask a philosopher a question freely, or is asking also limited by turns?
+4. The score: confirm the four criteria of 12.4 (responsive, reasoned, consistent, in method), or give others.
+5. Purchases: through Play billing only, or also outside (F-Droid has anti-feature rules for non-free add-ons)? And a clock-change cheat cannot be stopped on a local-only app; accept it?
+6. Do points and progress sync across the user's devices, or stay on each device?
+7. Does the user see points and a level bar in the chat, and is there a "profile" screen with the roster and locked characters?
+8. Can the user replay a finished philosopher, and does it cost turns?
+9. The philosophers speak in character. Is a modern manner (an old thinker speaking plain English) acceptable, or in period voice?
+10. Does Socrates' endless mode use the same ledger, and does it show the earlier claims from the game ("you said to Kant...")?
