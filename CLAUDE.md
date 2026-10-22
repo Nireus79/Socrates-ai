@@ -1,6 +1,9 @@
 # Claude Code guide: Socrates (Socrates-ai)
 
-Read first: `docs/PLAN.md` (architecture, layers, the game, decisions, open questions), then `docs/SESSION_2026-10-22.md`.
+Read first: `docs/PLAN.md` (architecture, layers, the game, decisions, open questions), then `docs/SESSION_2026-10-22.md`. Both are imported here:
+
+@docs/PLAN.md
+@docs/SESSION_2026-10-22.md
 
 ## State (2026-10-22)
 Planning only. No code yet. The repository was emptied of the old Python project (still in git history). Next: the founder answers the open
