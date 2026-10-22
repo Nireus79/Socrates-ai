@@ -1,1 +1,0 @@
-"""Utilities tests package"""
