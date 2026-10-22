@@ -1,0 +1,7 @@
+*.log
+*.db
+node_modules/
+bin/
+dist/
+private/
+.env
