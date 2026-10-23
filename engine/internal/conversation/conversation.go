@@ -18,6 +18,7 @@ import (
 	"socrates/internal/philosophers"
 	"socrates/internal/safety"
 	"socrates/internal/store"
+	"socrates/internal/suggest"
 )
 
 const (
@@ -34,6 +35,7 @@ var (
 	ErrTooLong         = errors.New("the message is too long")
 	ErrAgeNotConfirmed = errors.New("the age limit has not been confirmed")
 	ErrNoProvider      = errors.New("no AI provider has been set up")
+	ErrNotNow          = errors.New("suggestions are not offered now")
 	ErrNotFound        = store.ErrNotFound
 	ErrLocked          = errors.New("this philosopher is not unlocked")
 )
@@ -94,11 +96,12 @@ type View struct {
 	Role      string    `json:"role"` // "user", "philosopher" or "marker"
 	Text      string    `json:"text"`
 	Kind      string    `json:"kind,omitempty"` // for a marker: what it stands for
+	Suggested bool      `json:"suggested,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 }
 
 func view(m store.Message) View {
-	v := View{ID: m.ID, Seq: m.Seq, Role: m.Role, Text: m.Content, CreatedAt: m.CreatedAt}
+	v := View{ID: m.ID, Seq: m.Seq, Role: m.Role, Text: m.Content, CreatedAt: m.CreatedAt, Suggested: m.Suggested}
 	if m.Role == "marker" {
 		v.Kind, v.Text = m.Content, safety.TextFor(safety.MarkerKind(m.Content))
 	}
@@ -209,6 +212,18 @@ func contextFor(msgs []store.Message, newest string) []llm.Message {
 
 // Send runs one turn.
 func (s *Service) Send(ctx context.Context, conversationID, text string) (*Result, error) {
+	return s.send(ctx, conversationID, text, false)
+}
+
+// SendSuggested runs a turn for a message the user chose (or started from) among the suggestions: it is kept marked as such, and the
+// philosopher is told to take it as tentative.
+func (s *Service) SendSuggested(ctx context.Context, conversationID, text string) (*Result, error) {
+	return s.send(ctx, conversationID, text, true)
+}
+
+const suggestedNote = `The person's newest message was one of several wordings you offered to help them answer, which they chose or started from. It is a starting point, not yet their settled view: take it seriously, and when it matters you may ask whether it is really what they think.`
+
+func (s *Service) send(ctx context.Context, conversationID, text string, suggested bool) (*Result, error) {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return nil, ErrEmpty
@@ -261,10 +276,10 @@ func (s *Service) Send(ctx context.Context, conversationID, text string) (*Resul
 		return &Result{Outcome: OutcomeEnded, Added: []View{}, Text: safety.TextEndForAge}, nil
 
 	case safety.ActionCrisis, safety.ActionRefuseHarm, safety.ActionRefuseMinorContent, safety.ActionRefuseIllegal:
-		return s.fixed(ctx, conversationID, d, nil)
+		return s.fixed(ctx, conversationID, d, nil, false)
 
 	case safety.ActionCheckIn:
-		return s.fixed(ctx, conversationID, d, &text)
+		return s.fixed(ctx, conversationID, d, &text, suggested)
 
 	case safety.ActionAskBeforeRefusing:
 		q, err := s.guarded(ctx, client, ph.System()+"\n\n"+philosophers.ReflectiveQuestion, contextFor(history, text), toLLM(history), text)
@@ -273,14 +288,17 @@ func (s *Service) Send(ctx context.Context, conversationID, text string) (*Resul
 		}
 		if err != nil { // the question could not be made safe: the plain refusal stands
 			d.Action, d.Marker = safety.ActionRefuseIllegal, safety.MarkerRefuseIllegal
-			return s.fixed(ctx, conversationID, d, nil)
+			return s.fixed(ctx, conversationID, d, nil, false)
 		}
-		return s.commit(ctx, conversationID, d, nil, q)
+		return s.commit(ctx, conversationID, d, nil, q, false)
 
 	default: // proceed, proceed gently
 		system := ph.System()
 		if d.Action == safety.ActionProceedGently {
 			system += "\n\n" + philosophers.Gentle
+		}
+		if suggested {
+			system += "\n\n" + suggestedNote
 		}
 		if sum, _, ok, _ := s.st.Summary(ctx, conversationID); ok {
 			system += "\n\nWhat has been said earlier in this conversation, in short:\n" + sum
@@ -289,11 +307,11 @@ func (s *Service) Send(ctx context.Context, conversationID, text string) (*Resul
 		switch {
 		case errors.Is(err, errHeldBack): // held back twice: the user's message is kept, the reply is a fixed text
 			d.Marker = safety.MarkerGateFallback
-			return s.commit(ctx, conversationID, d, &text, "")
+			return s.commit(ctx, conversationID, d, &text, "", suggested)
 		case err != nil:
 			return unavailable(err), nil
 		}
-		res, err := s.commit(ctx, conversationID, d, &text, reply)
+		res, err := s.commit(ctx, conversationID, d, &text, reply, suggested)
 		if err == nil && res.Outcome == OutcomeReplied {
 			s.afterTurn(client, conv)
 		}
@@ -302,8 +320,8 @@ func (s *Service) Send(ctx context.Context, conversationID, text string) (*Resul
 }
 
 // fixed keeps only what a refusal, a crisis or a check-in may keep and answers with the fixed text.
-func (s *Service) fixed(ctx context.Context, id string, d safety.Decision, userText *string) (*Result, error) {
-	res, err := s.commit(ctx, id, d, userText, "")
+func (s *Service) fixed(ctx context.Context, id string, d safety.Decision, userText *string, suggested bool) (*Result, error) {
+	res, err := s.commit(ctx, id, d, userText, "", suggested)
 	if err == nil {
 		res.Outcome = OutcomeFixed
 		res.Text = safety.TextFor(d.Marker)
@@ -313,7 +331,7 @@ func (s *Service) fixed(ctx context.Context, id string, d safety.Decision, userT
 
 // commit writes the turn in one transaction: the user's message when the decision allows it, the marker when there is one, the reply
 // when there is one, and the safety state. When the transaction fails nothing is kept.
-func (s *Service) commit(ctx context.Context, id string, d safety.Decision, userText *string, reply string) (*Result, error) {
+func (s *Service) commit(ctx context.Context, id string, d safety.Decision, userText *string, reply string, suggested bool) (*Result, error) {
 	res := &Result{Outcome: OutcomeReplied, Added: []View{}}
 	err := s.st.Update(ctx, func(o *store.Ops) error {
 		add := func(role, content string) error {
@@ -324,9 +342,17 @@ func (s *Service) commit(ctx context.Context, id string, d safety.Decision, user
 			return err
 		}
 		if d.SaveMessage && userText != nil {
-			if err := add("user", *userText); err != nil {
+			var m store.Message
+			var err error
+			if suggested {
+				m, err = o.AppendSuggested(ctx, id, *userText)
+			} else {
+				m, err = o.AppendMessage(ctx, id, "user", *userText)
+			}
+			if err != nil {
 				return err
 			}
+			res.Added = append(res.Added, view(m))
 		}
 		if d.Marker != "" {
 			if err := add("marker", string(d.Marker)); err != nil {
@@ -462,4 +488,39 @@ func (s *Service) summary(ctx context.Context, client Completer, id string, msgs
 	if t := strings.TrimSpace(resp.Text); t != "" {
 		s.st.SetSummary(ctx, id, t, last)
 	}
+}
+
+// Suggest offers a few ways to answer the philosopher's last message. It is not offered after a crisis step, a refusal or while a check-in
+// is pending, and only when the conversation ends with the philosopher's own message.
+func (s *Service) Suggest(ctx context.Context, conversationID string, exclude []string) (*suggest.Result, error) {
+	if ok, err := s.AgeConfirmed(ctx); err != nil {
+		return nil, err
+	} else if !ok {
+		return nil, ErrAgeNotConfirmed
+	}
+	client, err := s.models(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer s.lock(conversationID)()
+	if _, err := s.st.Conversation(ctx, conversationID); err != nil {
+		return nil, err
+	}
+	ss, err := s.st.SafetyState(ctx, conversationID)
+	if err != nil {
+		return nil, err
+	}
+	history, err := s.st.RecentMessages(ctx, conversationID, storedForContext)
+	if err != nil {
+		return nil, err
+	}
+	if ss.PendingCheckin || len(history) == 0 || history[len(history)-1].Role != "philosopher" {
+		if ss.PendingCheckin || (len(history) > 0 && history[len(history)-1].Role == "marker") {
+			return nil, ErrNotNow
+		}
+		return nil, suggest.ErrNothingToAnswer
+	}
+	msgs := contextFor(history, "")
+	msgs = msgs[:len(msgs)-1] // contextFor appends the newest user message; there is none here
+	return suggest.Generate(ctx, client, msgs, exclude)
 }

@@ -143,3 +143,87 @@ test("the page has a strict content security policy and loads nothing from outsi
   assert.ok(!/https?:\/\//.test(html), "no external address in the page");
   assert.ok(!/innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(/.test(fs.readFileSync(path.join(__dirname, "../app.js"), "utf8")), "no markup injection in the script");
 });
+
+const withQuestion = (extra = {}) => ready(Object.assign({
+  "GET /api/conversations/c1": [200, { conversation: { id: "c1", philosopherId: "socrates", title: "t" }, messages: [{ role: "user", text: "Is lying ever fine?" }, { role: "philosopher", text: "What is a lie?" }] }],
+}, extra));
+const open1 = async (p) => { p.app.start(p.root); await settle(); click(p.root.querySelectorAll(".card.click")[1] || p.root.querySelector(".card.click")); await settle(); };
+const helpButton = (p) => [...p.root.querySelectorAll("button")].find((b) => b.textContent === "Help me answer");
+
+test("Help me answer is offered after a philosopher's message and not before one", async () => {
+  const p = page(ready());           // an empty conversation: only the opening line
+  p.app.start(p.root); await settle();
+  click(p.root.querySelector(".card.click")); await settle();
+  assert.ok(helpButton(p).hidden, "no question to answer yet");
+  const q = page(withQuestion({ "GET /api/conversations": [200, { conversations: [{ id: "c1", philosopherId: "socrates", title: "t" }] }] }));
+  await open1(q);
+  assert.ok(!helpButton(q).hidden);
+});
+
+test("a chosen suggestion fills the box, can be edited, and is sent marked as suggested; asking again passes what was shown", async () => {
+  const sets = [["A one.", "B two.", "C three.", "D four."], ["E five.", "F six.", "G seven.", "H eight."]];
+  const sent = [];
+  const p = page(withQuestion({
+    "GET /api/conversations": [200, { conversations: [{ id: "c1", philosopherId: "socrates", title: "t" }] }],
+    "POST /api/conversations/c1/suggestions": (b) => { sent.push(b); return [200, { suggestions: sets.shift(), fallback: false }]; },
+    "POST /api/conversations/c1/messages": (b) => [200, { outcome: "replied", added: [{ role: "user", text: b.text, suggested: !!b.suggested }, { role: "philosopher", text: "Go on." }] }],
+  }));
+  await open1(p);
+  click(helpButton(p)); await settle();
+  const chips = [...p.root.querySelectorAll(".chip")];
+  assert.equal(chips.length, 4);
+  click([...p.root.querySelectorAll("button")].find((b) => b.textContent === "Different ones")); await settle();
+  assert.deepEqual(sent[1].exclude, ["A one.", "B two.", "C three.", "D four."]);
+  click(p.root.querySelectorAll(".chip")[1]); await settle();
+  const ta = p.root.querySelector("textarea");
+  assert.equal(ta.value, "F six.");
+  ta.value = "F six, but I would say it differently."; // edited, still started from a suggestion
+  p.root.querySelector("form").dispatchEvent(new p.dom.window.Event("submit", { cancelable: true })); await settle();
+  assert.match(text(p.root), /Go on\./);
+});
+
+test("clearing the box forgets that the text came from a suggestion", async () => {
+  const bodies = [];
+  const p = page(withQuestion({
+    "GET /api/conversations": [200, { conversations: [{ id: "c1", philosopherId: "socrates", title: "t" }] }],
+    "POST /api/conversations/c1/suggestions": [200, { suggestions: ["One.", "Two.", "Three."] }],
+    "POST /api/conversations/c1/messages": (b) => { bodies.push(b); return [200, { outcome: "replied", added: [{ role: "user", text: b.text }, { role: "philosopher", text: "ok" }] }]; },
+  }));
+  await open1(p);
+  click(helpButton(p)); await settle();
+  click(p.root.querySelector(".chip")); await settle();
+  const ta = p.root.querySelector("textarea");
+  ta.value = ""; ta.dispatchEvent(new p.dom.window.Event("input"));
+  ta.value = "My own words."; ta.dispatchEvent(new p.dom.window.Event("input"));
+  p.root.querySelector("form").dispatchEvent(new p.dom.window.Event("submit", { cancelable: true })); await settle();
+  assert.deepEqual(bodies[0], { text: "My own words." });
+  // and a suggestion that was kept is sent marked
+  click(helpButton(p)); await settle();
+  click(p.root.querySelector(".chip")); await settle();
+  p.root.querySelector("form").dispatchEvent(new p.dom.window.Event("submit", { cancelable: true })); await settle();
+  assert.deepEqual(bodies[1], { text: "One.", suggested: true });
+});
+
+test("when suggestions cannot be made the person sees a plain sentence and the box is untouched", async () => {
+  const p = page(withQuestion({
+    "GET /api/conversations": [200, { conversations: [{ id: "c1", philosopherId: "socrates", title: "t" }] }],
+    "POST /api/conversations/c1/suggestions": [503, { error: "I cannot offer suggestions right now. Please try again in a moment." }],
+  }));
+  await open1(p);
+  p.root.querySelector("textarea").value = "half a thought";
+  click(helpButton(p)); await settle();
+  assert.match(text(p.root), /cannot offer suggestions/);
+  assert.equal(p.root.querySelector("textarea").value, "half a thought");
+});
+
+test("suggestions are shown as text, never as markup", async () => {
+  const evil = '<img src=x onerror="window.pwned=1">';
+  const p = page(withQuestion({
+    "GET /api/conversations": [200, { conversations: [{ id: "c1", philosopherId: "socrates", title: "t" }] }],
+    "POST /api/conversations/c1/suggestions": [200, { suggestions: [evil, "b", "c"] }],
+  }));
+  await open1(p);
+  click(helpButton(p)); await settle();
+  assert.equal(p.root.querySelectorAll("img").length, 0);
+  assert.ok(text(p.root).includes(evil));
+});

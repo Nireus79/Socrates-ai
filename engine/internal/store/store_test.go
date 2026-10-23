@@ -390,3 +390,63 @@ func TestADeletedValueDoesNotStayInTheFile(t *testing.T) {
 		}
 	}
 }
+
+func TestASuggestedMessageIsMarkedAndTheMarkSurvivesReopening(t *testing.T) {
+	s, path, key := open(t)
+	c := mustConv(t, &s.Ops, "socrates")
+	if _, err := s.AppendMessage(ctx, c.ID, "user", "mine"); err != nil {
+		t.Fatal(err)
+	}
+	m, err := s.AppendSuggested(ctx, c.ID, "from the list")
+	if err != nil || !m.Suggested || m.Role != "user" {
+		t.Fatalf("%+v %v", m, err)
+	}
+	s.Close()
+	s2, err := Open(path, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s2.Close()
+	msgs, _ := s2.Messages(ctx, c.ID)
+	recent, _ := s2.RecentMessages(ctx, c.ID, 5)
+	if len(msgs) != 2 || msgs[0].Suggested || !msgs[1].Suggested || !recent[1].Suggested {
+		t.Fatalf("%+v", msgs)
+	}
+}
+
+func TestADatabaseFromBeforeTheSuggestedMarkIsUpgradedWithItsMessagesIntact(t *testing.T) {
+	full := migrations
+	migrations = full[:1]
+	dir := filepath.Join(t.TempDir(), "data")
+	path := filepath.Join(dir, "socrates.db")
+	key := testKey(7)
+	s, err := Open(path, key)
+	if err != nil {
+		migrations = full
+		t.Fatal(err)
+	}
+	c := mustConv(t, &s.Ops, "plato")
+	// a message as the first version wrote it: no "suggested" column
+	blob, err := s.c.seal("messages", "content", "old-id", []byte("old words"))
+	if err == nil {
+		_, err = s.db.ExecContext(ctx, "INSERT INTO messages(id, conversation_id, seq, role, content, created_at) VALUES ('old-id', ?, 1, 'user', ?, 1)", c.ID, blob)
+	}
+	if err != nil {
+		migrations = full
+		t.Fatal(err)
+	}
+	s.Close()
+	migrations = full
+	s2, err := Open(path, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s2.Close()
+	msgs, err := s2.Messages(ctx, c.ID)
+	if err != nil || len(msgs) != 1 || msgs[0].Content != "old words" || msgs[0].Suggested {
+		t.Fatalf("%+v %v", msgs, err)
+	}
+	if _, err := s2.AppendSuggested(ctx, c.ID, "new"); err != nil {
+		t.Fatal(err)
+	}
+}

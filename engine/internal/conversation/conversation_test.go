@@ -16,6 +16,7 @@ import (
 	"socrates/internal/philosophers"
 	"socrates/internal/safety"
 	"socrates/internal/store"
+	"socrates/internal/suggest"
 )
 
 var bg = context.Background()
@@ -430,5 +431,69 @@ func TestStartingAndReadingConversations(t *testing.T) {
 	}
 	if err := e.svc.Delete(bg, e.conv.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("%v", err)
+	}
+}
+
+const suggestionsJSON = `{"suggestions":["A lie is saying what you know is false.","I might lie to spare a friend.","It always costs trust.","I really don't know."]}`
+
+func TestSuggestionsAreOfferedAfterThePhilosophersQuestionAndNeverAfterACrisisOrBeforeAnyQuestion(t *testing.T) {
+	e := newEnv(t, llm.Say(judgeOK), llm.Say("What do you mean by a lie?"), llm.Say(gateOK), llm.Say("t"), llm.Say(suggestionsJSON),
+		llm.Say(verdict("self_harm_clear", "0.97", "end my life")))
+	if _, err := e.svc.Suggest(bg, e.conv.ID, nil); err == nil || !errors.Is(err, suggest.ErrNothingToAnswer) {
+		t.Fatalf("an empty conversation: %v", err)
+	}
+	e.send(t, "Is it ever okay to lie?")
+	r, err := e.svc.Suggest(bg, e.conv.ID, []string{"old one"})
+	if err != nil || len(r.Suggestions) != 4 || r.Fallback {
+		t.Fatalf("%+v %v", r, err)
+	}
+	asked := e.mock.Requests[len(e.mock.Requests)-1].Messages[0].Content
+	if !strings.Contains(asked, "What do you mean by a lie?") || !strings.Contains(asked, "old one") {
+		t.Fatalf("what the model was given: %s", asked)
+	}
+	e.send(t, "I want to end my life")
+	n := len(e.mock.Requests)
+	if _, err := e.svc.Suggest(bg, e.conv.ID, nil); !errors.Is(err, ErrNotNow) {
+		t.Fatalf("after a crisis step: %v", err)
+	}
+	if len(e.mock.Requests) != n {
+		t.Fatal("a model call was made when suggestions were not offered")
+	}
+}
+
+func TestAMessageChosenFromSuggestionsIsKeptMarkedAndThePhilosopherIsToldItIsTentative(t *testing.T) {
+	e := newEnv(t, llm.Say(judgeOK), llm.Say("What do you mean by a lie?"), llm.Say(gateOK), llm.Say("t"),
+		llm.Say(judgeOK), llm.Say("And if the friend asked?"), llm.Say(gateOK))
+	e.send(t, "Is it ever okay to lie?")
+	res, err := e.svc.SendSuggested(bg, e.conv.ID, "I might lie to spare a friend.")
+	if err != nil || res.Outcome != OutcomeReplied || !res.Added[0].Suggested || res.Added[1].Suggested {
+		t.Fatalf("%+v %v", res, err)
+	}
+	msgs := e.messages(t)
+	if !msgs[2].Suggested || msgs[0].Suggested {
+		t.Fatalf("%+v", msgs)
+	}
+	reply := e.mock.Requests[len(e.mock.Requests)-2]
+	if !strings.Contains(reply.System, "not yet their settled view") {
+		t.Fatal("the philosopher was not told")
+	}
+	// an ordinary message gets no such note
+	e2 := newEnv(t, llm.Say(judgeOK), llm.Say("A reply."), llm.Say(gateOK), llm.Say("t"))
+	e2.send(t, "Hello there")
+	if strings.Contains(e2.mock.Requests[1].System, "settled view") {
+		t.Fatal("an ordinary message was treated as tentative")
+	}
+}
+
+func TestAChosenSuggestionIsJudgedLikeAnyOtherMessageAndARefusedOneKeepsNothing(t *testing.T) {
+	e := newEnv(t, llm.Say(verdict("harm_to_others", "0.9", "hurt him")))
+	res, err := e.svc.SendSuggested(bg, e.conv.ID, "I would hurt him")
+	if err != nil || res.Outcome != OutcomeFixed {
+		t.Fatalf("%+v %v", res, err)
+	}
+	for _, m := range e.messages(t) {
+		if m.Role != "marker" {
+			t.Fatalf("a %s message was kept", m.Role)
+		}
 	}
 }

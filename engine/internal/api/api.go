@@ -48,6 +48,7 @@ func New(d Deps) (*http.ServeMux, *conversation.Service) {
 	mux.HandleFunc("GET /api/conversations/{id}", h.getConversation)
 	mux.HandleFunc("DELETE /api/conversations/{id}", h.deleteConversation)
 	mux.HandleFunc("POST /api/conversations/{id}/messages", h.sendMessage)
+	mux.HandleFunc("POST /api/conversations/{id}/suggestions", h.suggestions)
 	return mux, h.conv
 }
 

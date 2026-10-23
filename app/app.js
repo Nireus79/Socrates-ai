@@ -176,6 +176,35 @@ async function openChat(id) {
   const add = (m) => list.append(el("div", { class: "msg " + (m.role === "user" ? "user" : m.role === "marker" ? "notice" : "philosopher") }, m.text));
   msgs.forEach(add);
   const input = el("textarea", { rows: "1", placeholder: "Say something…", "aria-label": "Your message", maxlength: "6000" });
+  const helpBox = el("div", { class: "help", hidden: true });
+  const helpBtn = el("button", { class: "link", type: "button" }, "Help me answer");
+  let offered = [];       // everything suggested so far in this chat, so that asking again gives different ones
+  let fromSuggestion = false;
+  const canHelp = () => {
+    const k = [...list.children].filter((c) => !c.classList.contains("opening"));
+    const l = k[k.length - 1];
+    return !!l && l.classList.contains("philosopher") && !l.classList.contains("typing");
+  };
+  const refreshHelp = () => { helpBtn.hidden = !canHelp(); if (helpBtn.hidden) helpBox.hidden = true; };
+  const showSuggestions = async () => {
+    helpBtn.disabled = true; helpBox.hidden = false;
+    helpBox.replaceChildren(el("span", { class: "muted" }, "Thinking of some starting points…"));
+    const r = await api("POST", "/api/conversations/" + encodeURIComponent(id) + "/suggestions", { exclude: offered });
+    helpBtn.disabled = false;
+    if (r.status !== 200) {
+      helpBox.replaceChildren(el("span", { class: "error" }, r.data.error || "That did not work."), el("button", { class: "link", type: "button", onclick: () => { helpBox.hidden = true; } }, "Close"));
+      return;
+    }
+    const items = r.data.suggestions || [];
+    offered = offered.concat(items);
+    const chips = items.map((t) => el("button", { class: "chip", type: "button", onclick: () => { input.value = t; fromSuggestion = true; helpBox.hidden = true; input.focus(); } }, t));
+    helpBox.replaceChildren(
+      el("div", { class: "muted" }, items.length ? "Pick one to start from, change it as you like, or write your own." : "I have no more starting points. Try putting it in your own words."),
+      ...chips,
+      el("div", { class: "row" }, items.length ? el("button", { class: "link", type: "button", onclick: showSuggestions }, "Different ones") : null, el("button", { class: "link", type: "button", onclick: () => { helpBox.hidden = true; } }, "Close")));
+  };
+  helpBtn.addEventListener("click", showSuggestions);
+  input.addEventListener("input", () => { if (!input.value.trim()) fromSuggestion = false; });
   const send = el("button", { class: "primary", type: "submit" }, "Send");
   const err = errorLine();
   let busy = false;
@@ -187,7 +216,8 @@ async function openChat(id) {
     const mine = el("div", { class: "msg user" }, text);
     const typing = el("div", { class: "msg philosopher typing" }, who.name + " is thinking…");
     list.append(mine, typing); input.value = ""; main.scrollTop = main.scrollHeight;
-    const res = await api("POST", "/api/conversations/" + encodeURIComponent(id) + "/messages", { text });
+    const flag = fromSuggestion; fromSuggestion = false; helpBox.hidden = true;
+    const res = await api("POST", "/api/conversations/" + encodeURIComponent(id) + "/messages", flag ? { text, suggested: true } : { text });
     typing.remove();
     busy = false; send.disabled = false;
     const d = res.data;
@@ -199,20 +229,20 @@ async function openChat(id) {
       (d.added || []).forEach((m) => { if (m.role !== "user") add(m); });
       if (d.outcome === "fixed" && !(d.added || []).some((m) => m.role === "marker")) add({ role: "marker", text: d.text });
     } else {
-      mine.remove(); input.value = text;
+      mine.remove(); input.value = text; fromSuggestion = flag;
       if (res.status === 503) err.textContent = d.text || "I cannot answer right now. Nothing was sent or saved; please try again in a moment.";
       else if (d.kind === "age") err.textContent = AGE_TEXT;
       else if (d.kind === "no_provider") err.textContent = "Set up an AI provider in Settings first.";
       else err.textContent = d.error || "That did not work.";
     }
-    main.scrollTop = main.scrollHeight; input.focus();
+    refreshHelp(); main.scrollTop = main.scrollHeight; input.focus();
   };
   input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) submit(e); });
   const form = el("form", { class: "composer", onsubmit: submit }, input, send);
   mount(el("header", {}, el("button", { class: "link", onclick: home }, "← Back"), el("h1", {}, who.name),
     confirmButton("Delete", "link", "Sure?", async () => { await api("DELETE", "/api/conversations/" + encodeURIComponent(id)); home(); })),
-    main, err, form);
-  main.scrollTop = main.scrollHeight; input.focus();
+    main, err, helpBox, el("div", { class: "helpbar" }, helpBtn), form);
+  refreshHelp(); main.scrollTop = main.scrollHeight; input.focus();
 }
 
 function ended(text) {

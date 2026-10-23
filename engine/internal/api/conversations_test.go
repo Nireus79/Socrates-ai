@@ -245,3 +245,46 @@ func TestDeletingAConversation(t *testing.T) {
 		t.Fatalf("twice: %d", code)
 	}
 }
+
+func TestSuggestionsOverHTTPAndAChosenOneIsMarked(t *testing.T) {
+	sug := `{"suggestions":["A lie is saying what you know is false.","I might lie to spare a friend.","It always costs trust.","I really don't know."]}`
+	a := newApp(t, newScript(t, okJudge, "What do you mean by a lie?", okGate, "On lying", sug, okJudge, "And if the friend asked?", okGate))
+	a.setUp(t)
+	_, conv := a.do(t, "POST", "/api/conversations", `{"philosopherId":"socrates"}`)
+	id := conv["id"].(string)
+	if code, r := a.do(t, "POST", "/api/conversations/"+id+"/suggestions", ""); code != 409 {
+		t.Fatalf("before any question: %d %v", code, r)
+	}
+	a.do(t, "POST", "/api/conversations/"+id+"/messages", `{"text":"Is it ever okay to lie?"}`)
+	a.svc.Wait()
+	code, r := a.do(t, "POST", "/api/conversations/"+id+"/suggestions", `{"exclude":["x"]}`)
+	list, _ := r["suggestions"].([]any)
+	if code != 200 || len(list) != 4 || r["fallback"] != false {
+		t.Fatalf("%d %v", code, r)
+	}
+	code, res := a.do(t, "POST", "/api/conversations/"+id+"/messages", `{"text":"I might lie to spare a friend.","suggested":true}`)
+	added := res["added"].([]any)
+	if code != 200 || added[0].(map[string]any)["suggested"] != true {
+		t.Fatalf("%d %v", code, res)
+	}
+	_, h := a.do(t, "GET", "/api/conversations/"+id, "")
+	if !strings.Contains(mustJSON(h), `"suggested":true`) {
+		t.Fatal("the mark is not in the history")
+	}
+	if code, _ := a.do(t, "POST", "/api/conversations/none/suggestions", ""); code != 404 {
+		t.Fatalf("unknown conversation: %d", code)
+	}
+}
+
+func TestSuggestionsWhenTheProviderIsDownAre503WithAPlainSentence(t *testing.T) {
+	a := newApp(t, newScript(t, okJudge, "What do you mean?", okGate, "t")) // then the script is empty: overloaded
+	a.setUp(t)
+	_, conv := a.do(t, "POST", "/api/conversations", `{"philosopherId":"socrates"}`)
+	id := conv["id"].(string)
+	a.do(t, "POST", "/api/conversations/"+id+"/messages", `{"text":"hello there"}`)
+	a.svc.Wait()
+	code, r := a.do(t, "POST", "/api/conversations/"+id+"/suggestions", "")
+	if code != 503 || !strings.Contains(r["error"].(string), "cannot offer suggestions") {
+		t.Fatalf("%d %v", code, r)
+	}
+}

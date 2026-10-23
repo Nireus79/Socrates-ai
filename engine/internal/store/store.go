@@ -68,6 +68,8 @@ var migrations = []string{
 		reflective_asked INTEGER NOT NULL DEFAULT 0 CHECK (reflective_asked IN (0, 1)),
 		updated_at      INTEGER NOT NULL
 	);`,
+	// 2: a user message may be marked as chosen from suggestions the philosopher offered (it is not yet the user's own conviction)
+	`ALTER TABLE messages ADD COLUMN suggested INTEGER NOT NULL DEFAULT 0 CHECK (suggested IN (0, 1));`,
 }
 
 // dbtx is what both *sql.DB and *sql.Tx offer.
@@ -325,10 +327,20 @@ type Message struct {
 	Role           string // "user", "philosopher", or "marker" (a refusal, a crisis step or an age end: only the kind is kept, never the words)
 	Content        string
 	CreatedAt      time.Time
+	Suggested      bool // a user message chosen from the philosopher's suggestions
 }
 
 // AppendMessage adds a message at the end of the conversation.
 func (o *Ops) AppendMessage(ctx context.Context, conversationID, role, content string) (Message, error) {
+	return o.appendMessage(ctx, conversationID, role, content, false)
+}
+
+// AppendSuggested adds a user message that was chosen from suggestions.
+func (o *Ops) AppendSuggested(ctx context.Context, conversationID, content string) (Message, error) {
+	return o.appendMessage(ctx, conversationID, "user", content, true)
+}
+
+func (o *Ops) appendMessage(ctx context.Context, conversationID, role, content string, suggested bool) (Message, error) {
 	if role != "user" && role != "philosopher" && role != "marker" {
 		return Message{}, fmt.Errorf("unknown role %q", role)
 	}
@@ -339,16 +351,20 @@ func (o *Ops) AppendMessage(ctx context.Context, conversationID, role, content s
 	}
 	// The sequence number is chosen inside the INSERT, so two writers can never take the same one.
 	var seq int
-	err = o.q.QueryRowContext(ctx, `INSERT INTO messages(id, conversation_id, seq, role, content, created_at)
-		VALUES (?, ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM messages WHERE conversation_id = ?), ?, ?, ?) RETURNING seq`,
-		id, conversationID, conversationID, role, blob, now).Scan(&seq)
+	flag := 0
+	if suggested {
+		flag = 1
+	}
+	err = o.q.QueryRowContext(ctx, `INSERT INTO messages(id, conversation_id, seq, role, content, created_at, suggested)
+		VALUES (?, ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM messages WHERE conversation_id = ?), ?, ?, ?, ?) RETURNING seq`,
+		id, conversationID, conversationID, role, blob, now, flag).Scan(&seq)
 	if err != nil {
 		return Message{}, err
 	}
 	if res, err := o.q.ExecContext(ctx, "UPDATE conversations SET updated_at = ? WHERE id = ?", now, conversationID); affected(res, err) != nil {
 		return Message{}, affected(res, err)
 	}
-	return Message{ID: id, ConversationID: conversationID, Seq: seq, Role: role, Content: content, CreatedAt: time.Unix(now, 0)}, nil
+	return Message{ID: id, ConversationID: conversationID, Seq: seq, Role: role, Content: content, CreatedAt: time.Unix(now, 0), Suggested: suggested}, nil
 }
 
 func (o *Ops) scanMessages(rows *sql.Rows) ([]Message, error) {
@@ -357,15 +373,15 @@ func (o *Ops) scanMessages(rows *sql.Rows) ([]Message, error) {
 	for rows.Next() {
 		var m Message
 		var blob []byte
-		var created int64
-		if err := rows.Scan(&m.ID, &m.ConversationID, &m.Seq, &m.Role, &blob, &created); err != nil {
+		var created, flag int64
+		if err := rows.Scan(&m.ID, &m.ConversationID, &m.Seq, &m.Role, &blob, &created, &flag); err != nil {
 			return nil, err
 		}
 		plain, err := o.c.open("messages", "content", m.ID, blob)
 		if err != nil {
 			return nil, fmt.Errorf("message %s: %w", m.ID, err)
 		}
-		m.Content, m.CreatedAt = string(plain), time.Unix(created, 0)
+		m.Content, m.CreatedAt, m.Suggested = string(plain), time.Unix(created, 0), flag == 1
 		out = append(out, m)
 	}
 	return out, rows.Err()
@@ -373,7 +389,7 @@ func (o *Ops) scanMessages(rows *sql.Rows) ([]Message, error) {
 
 // Messages returns the whole conversation in order.
 func (o *Ops) Messages(ctx context.Context, conversationID string) ([]Message, error) {
-	rows, err := o.q.QueryContext(ctx, "SELECT id, conversation_id, seq, role, content, created_at FROM messages WHERE conversation_id = ? ORDER BY seq", conversationID)
+	rows, err := o.q.QueryContext(ctx, "SELECT id, conversation_id, seq, role, content, created_at, suggested FROM messages WHERE conversation_id = ? ORDER BY seq", conversationID)
 	if err != nil {
 		return nil, err
 	}
@@ -382,7 +398,7 @@ func (o *Ops) Messages(ctx context.Context, conversationID string) ([]Message, e
 
 // RecentMessages returns the last n messages, in order.
 func (o *Ops) RecentMessages(ctx context.Context, conversationID string, n int) ([]Message, error) {
-	rows, err := o.q.QueryContext(ctx, "SELECT id, conversation_id, seq, role, content, created_at FROM (SELECT * FROM messages WHERE conversation_id = ? ORDER BY seq DESC LIMIT ?) ORDER BY seq", conversationID, n)
+	rows, err := o.q.QueryContext(ctx, "SELECT id, conversation_id, seq, role, content, created_at, suggested FROM (SELECT * FROM messages WHERE conversation_id = ? ORDER BY seq DESC LIMIT ?) ORDER BY seq", conversationID, n)
 	if err != nil {
 		return nil, err
 	}

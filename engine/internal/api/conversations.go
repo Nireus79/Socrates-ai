@@ -10,6 +10,7 @@ import (
 	"socrates/internal/llm"
 	"socrates/internal/philosophers"
 	"socrates/internal/store"
+	"socrates/internal/suggest"
 	"socrates/internal/transport"
 )
 
@@ -126,12 +127,17 @@ func (h *handler) deleteConversation(w http.ResponseWriter, r *http.Request) {
 
 func (h *handler) sendMessage(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Text string `json:"text"`
+		Text      string `json:"text"`
+		Suggested bool   `json:"suggested"`
 	}
 	if !transport.ReadBody(w, r, &body) {
 		return
 	}
-	res, err := h.conv.Send(r.Context(), r.PathValue("id"), body.Text)
+	send := h.conv.Send
+	if body.Suggested {
+		send = h.conv.SendSuggested
+	}
+	res, err := send(r.Context(), r.PathValue("id"), body.Text)
 	switch {
 	case errors.Is(err, conversation.ErrEmpty):
 		fail(w, http.StatusBadRequest, "The message is empty.")
@@ -148,6 +154,34 @@ func (h *handler) sendMessage(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusInternalServerError, "the message could not be handled")
 	case res.Outcome == conversation.OutcomeUnavailable:
 		transport.WriteJSON(w, http.StatusServiceUnavailable, res)
+	default:
+		transport.WriteJSON(w, http.StatusOK, res)
+	}
+}
+
+func (h *handler) suggestions(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Exclude []string `json:"exclude"`
+	}
+	if r.ContentLength != 0 && !transport.ReadBody(w, r, &body) {
+		return
+	}
+	res, err := h.conv.Suggest(r.Context(), r.PathValue("id"), body.Exclude)
+	var le *llm.Error
+	switch {
+	case errors.Is(err, conversation.ErrAgeNotConfirmed):
+		transport.WriteJSON(w, http.StatusForbidden, map[string]string{"error": "The age limit has to be confirmed first.", "kind": "age"})
+	case errors.Is(err, conversation.ErrNoProvider):
+		transport.WriteJSON(w, http.StatusConflict, map[string]string{"error": "Set up an AI provider first.", "kind": "no_provider"})
+	case errors.Is(err, store.ErrNotFound):
+		fail(w, http.StatusNotFound, "There is no such conversation.")
+	case errors.Is(err, conversation.ErrNotNow), errors.Is(err, suggest.ErrNothingToAnswer):
+		fail(w, http.StatusConflict, "There is nothing to answer just now.")
+	case errors.As(err, &le):
+		transport.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "I cannot offer suggestions right now. Please try again in a moment.", "providerKind": string(le.Kind)})
+	case err != nil:
+		log.Printf("[api] suggestions failed: %T", err)
+		fail(w, http.StatusInternalServerError, "the suggestions could not be made")
 	default:
 		transport.WriteJSON(w, http.StatusOK, res)
 	}
