@@ -1,0 +1,8 @@
+{
+  "name": "socrates-app",
+  "private": true,
+  "version": "0.0.0",
+  "description": "The screens of Socrates (no build step; jsdom is for the tests only)",
+  "scripts": { "test": "node --test test/*.test.js" },
+  "devDependencies": { "jsdom": "24.1.3" }
+}

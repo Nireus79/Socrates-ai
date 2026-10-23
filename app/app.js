@@ -1,0 +1,263 @@
+// The screens of Socrates. Plain JavaScript, no build step, no framework. Everything that comes from the engine, a model or the user is put
+// on the page with textContent, never as markup. The page talks to the same origin only (the shell adds the engine's token).
+"use strict";
+
+const AGE_TEXT = "This is for people aged 16 and over.";
+
+function el(tag, props, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props || {})) {
+    if (k === "class") e.className = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else if (v === true) e.setAttribute(k, "");
+    else if (v !== false && v != null) e.setAttribute(k, v);
+  }
+  for (const kid of kids.flat()) if (kid != null && kid !== false) e.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+  return e;
+}
+
+async function api(method, path, body) {
+  let res;
+  try {
+    res = await fetch(path, { method, headers: body ? { "Content-Type": "application/json" } : {}, body: body ? JSON.stringify(body) : undefined });
+  } catch (_) {
+    return { status: 0, data: { error: "The engine does not answer." } };
+  }
+  let data = null;
+  if (res.status !== 204) { try { data = await res.json(); } catch (_) { data = null; } }
+  return { status: res.status, data: data || {} };
+}
+
+const S = { philosophers: [], root: null, current: null };
+
+// A button that asks twice: the first click arms it, the second (within five seconds) does it. No browser dialogs, which not every shell shows.
+function confirmButton(label, cls, armed, action) {
+  const b = el("button", { class: cls }, label);
+  let timer = null;
+  b.addEventListener("click", () => {
+    if (timer) { clearTimeout(timer); timer = null; b.textContent = label; return action(); }
+    b.textContent = armed;
+    timer = setTimeout(() => { timer = null; b.textContent = label; }, 5000);
+  });
+  return b;
+}
+
+function mount(...nodes) { S.root.replaceChildren(...nodes); }
+function screen(title, body, actions) {
+  return [el("header", {}, el("h1", {}, title), actions || null), el("main", {}, body)];
+}
+function errorLine(text) { return el("p", { class: "error", role: "alert" }, text || ""); }
+
+// ---- start: the engine, the key, the age, the provider
+
+async function boot() {
+  mount(...screen("Socrates", el("p", { class: "muted" }, "Starting…")));
+  for (let i = 0; i < 120; i++) {
+    const r = await api("GET", "/api/status");
+    if (r.status === 200) return afterReady();
+    if (r.status === 423) return keyGate();
+    await new Promise((ok) => setTimeout(ok, 500));
+  }
+  mount(...screen("Socrates", [el("p", { class: "error" }, "The engine did not start."), el("button", { onclick: boot }, "Try again")]));
+}
+
+async function keyGate() {
+  const r = await api("GET", "/api/keystore/status");
+  const st = r.data || {};
+  const err = errorLine();
+  const finish = async (res) => {
+    if (res.status === 200) return boot();
+    err.textContent = res.data.error || "That did not work.";
+  };
+  if (st.state === "locked") {
+    const pass = el("input", { type: "password", autocomplete: "current-password", "aria-label": "Passphrase" });
+    return mount(...screen("Unlock Socrates", el("div", { class: "card stack" },
+      el("p", {}, "Your conversations are encrypted. Enter your passphrase to open them."), pass, err,
+      el("button", { class: "primary", onclick: async () => finish(await api("POST", "/api/keystore/unlock", { passphrase: pass.value })) }, "Unlock"))));
+  }
+  if (st.state === "needs_setup") {
+    const pass = el("input", { type: "password", autocomplete: "new-password", "aria-label": "New passphrase" });
+    const opts = st.options || [];
+    const body = el("div", { class: "card stack" }, el("p", {}, "Socrates keeps your conversations encrypted on this computer. Choose where the key is kept."));
+    if (opts.includes("keychain")) body.append(el("button", { class: "primary", onclick: async () => finish(await api("POST", "/api/keystore/setup", { mode: "keychain" })) }, "Use the system keychain (recommended)"));
+    if (opts.includes("passphrase")) body.append(el("label", {}, "A passphrase (at least 12 characters; if you forget it, your conversations cannot be opened)"), pass,
+      el("button", { class: opts.includes("keychain") ? "" : "primary", onclick: async () => finish(await api("POST", "/api/keystore/setup", { mode: "passphrase", passphrase: pass.value })) }, "Use a passphrase"));
+    if (opts.includes("file")) body.append(el("p", { class: "muted" }, "Or keep the key in a file next to your data. Anyone who can read your files can then read your conversations."),
+      el("button", { onclick: async () => finish(await api("POST", "/api/keystore/setup", { mode: "file", confirmInsecure: true })) }, "Keep the key in a file"));
+    body.append(err);
+    return mount(...screen("Welcome", body));
+  }
+  mount(...screen("Socrates", el("div", { class: "card stack" },
+    el("p", { class: "error" }, st.reason || "The key for your conversations could not be found."),
+    el("button", { onclick: async () => { await api("POST", "/api/keystore/recheck"); boot(); } }, "Check again"))));
+}
+
+async function afterReady() {
+  const p = await api("GET", "/api/profile");
+  if (p.status !== 200) return mount(...screen("Socrates", el("p", { class: "error" }, "Your profile could not be read.")));
+  if (!p.data.ageConfirmed) return ageScreen();
+  if (!p.data.hasProvider) return providerScreen(true);
+  const r = await api("GET", "/api/philosophers");
+  S.philosophers = (r.data.philosophers || []);
+  return home();
+}
+
+function ageScreen() {
+  mount(...screen("Welcome to Socrates", el("div", { class: "card stack" },
+    el("p", {}, "Socrates is a conversation with artificial philosophers, made from what was written about them. They ask hard questions and do not give verdicts."),
+    el("p", {}, AGE_TEXT),
+    el("button", { class: "primary", onclick: async () => { await api("POST", "/api/profile/age"); boot(); } }, "I am 16 or older"))));
+}
+
+function providerScreen(first, back) {
+  const err = errorLine();
+  const provider = el("select", { "aria-label": "Provider" }, el("option", { value: "claude" }, "Claude (Anthropic)"), el("option", { value: "openai" }, "OpenAI"), el("option", { value: "ollama" }, "Ollama (a model on this computer)"));
+  const key = el("input", { type: "password", autocomplete: "off", placeholder: "Paste your API key", "aria-label": "API key" });
+  const endpoint = el("input", { type: "text", value: "http://127.0.0.1:11434", "aria-label": "Ollama address" });
+  const keyBox = el("div", {}, el("label", {}, "Your API key"), key, el("p", { class: "muted" }, "The key stays on this computer, encrypted. It is tested once, then used only to talk to your provider."));
+  const epBox = el("div", { hidden: true }, el("label", {}, "Ollama address"), endpoint);
+  provider.addEventListener("change", () => { const o = provider.value === "ollama"; keyBox.hidden = o; epBox.hidden = !o; });
+  const save = el("button", { class: "primary" }, "Save and test");
+  save.addEventListener("click", async () => {
+    err.textContent = ""; save.disabled = true; save.textContent = "Testing…";
+    const body = { provider: provider.value };
+    if (provider.value === "ollama") body.ollamaEndpoint = endpoint.value; else body.apiKey = key.value;
+    const r = await api("PUT", "/api/settings/llm", body);
+    save.disabled = false; save.textContent = "Save and test";
+    if (r.status === 200) { key.value = ""; return boot(); }
+    err.textContent = r.data.error || "That did not work.";
+  });
+  mount(...screen(first ? "Connect an AI provider" : "AI provider", el("div", { class: "card stack" },
+    el("p", {}, "Socrates uses your own account with an AI provider. You pay the provider directly; Socrates has no server and sees nothing."),
+    el("label", {}, "Provider"), provider, keyBox, epBox, err, save), back ? el("button", { class: "link", onclick: back }, "Back") : null));
+}
+
+// ---- home: the philosophers and the conversations
+
+async function home() {
+  const [c] = await Promise.all([api("GET", "/api/conversations")]);
+  const byId = Object.fromEntries(S.philosophers.map((p) => [p.id, p]));
+  const body = el("div", {});
+  if (S.notice) { body.append(errorLine(S.notice)); S.notice = ""; }
+  body.append(el("h2", { class: "muted" }, "Talk with"));
+  for (const p of S.philosophers) {
+    body.append(el("div", { class: "card click", role: "button", tabindex: "0", onclick: () => startWith(p), onkeydown: (e) => { if (e.key === "Enter") startWith(p); } },
+      el("h2", {}, p.name), el("div", { class: "muted" }, p.era)));
+  }
+  const list = c.data.conversations || [];
+  if (list.length) {
+    body.append(el("h2", { class: "muted" }, "Earlier conversations"));
+    for (const k of list) {
+      const who = (byId[k.philosopherId] || {}).name || k.philosopherId;
+      body.append(el("div", { class: "card click", role: "button", tabindex: "0", onclick: () => openChat(k.id), onkeydown: (e) => { if (e.key === "Enter") openChat(k.id); } },
+        el("h2", {}, k.title || "New conversation"), el("div", { class: "muted" }, who)));
+    }
+  }
+  mount(...screen("Socrates", body, el("button", { class: "link", onclick: settings }, "Settings")));
+}
+
+async function startWith(p) {
+  const r = await api("POST", "/api/conversations", { philosopherId: p.id });
+  if (r.status === 201) return openChat(r.data.id);
+  S.notice = r.data.error || "The conversation could not be started.";
+  home();
+}
+
+// ---- the chat
+
+async function openChat(id) {
+  const r = await api("GET", "/api/conversations/" + encodeURIComponent(id));
+  if (r.status !== 200) return home();
+  const conv = r.data.conversation, msgs = r.data.messages || [];
+  const who = S.philosophers.find((p) => p.id === conv.philosopherId) || { name: conv.philosopherId, opening: "" };
+  const list = el("div", { class: "msgs", "aria-live": "polite" });
+  const main = el("main", {}, list);
+  if (!msgs.length && who.opening) list.append(el("div", { class: "msg opening" }, who.opening));
+  const add = (m) => list.append(el("div", { class: "msg " + (m.role === "user" ? "user" : m.role === "marker" ? "notice" : "philosopher") }, m.text));
+  msgs.forEach(add);
+  const input = el("textarea", { rows: "1", placeholder: "Say something…", "aria-label": "Your message", maxlength: "6000" });
+  const send = el("button", { class: "primary", type: "submit" }, "Send");
+  const err = errorLine();
+  let busy = false;
+  const submit = async (ev) => {
+    ev.preventDefault();
+    const text = input.value.trim();
+    if (!text || busy) return;
+    busy = true; send.disabled = true; err.textContent = "";
+    const mine = el("div", { class: "msg user" }, text);
+    const typing = el("div", { class: "msg philosopher typing" }, who.name + " is thinking…");
+    list.append(mine, typing); input.value = ""; main.scrollTop = main.scrollHeight;
+    const res = await api("POST", "/api/conversations/" + encodeURIComponent(id) + "/messages", { text });
+    typing.remove();
+    busy = false; send.disabled = false;
+    const d = res.data;
+    if (res.status === 200 && d.outcome === "ended") { mine.remove(); return ended(d.text); }
+    if (res.status === 200) {
+      // A refused message is not kept, so the page does not keep it either; the fixed text stands in its place.
+      const kept = (d.added || []).some((m) => m.role === "user");
+      if (!kept) mine.remove();
+      (d.added || []).forEach((m) => { if (m.role !== "user") add(m); });
+      if (d.outcome === "fixed" && !(d.added || []).some((m) => m.role === "marker")) add({ role: "marker", text: d.text });
+    } else {
+      mine.remove(); input.value = text;
+      if (res.status === 503) err.textContent = d.text || "I cannot answer right now. Nothing was sent or saved; please try again in a moment.";
+      else if (d.kind === "age") err.textContent = AGE_TEXT;
+      else if (d.kind === "no_provider") err.textContent = "Set up an AI provider in Settings first.";
+      else err.textContent = d.error || "That did not work.";
+    }
+    main.scrollTop = main.scrollHeight; input.focus();
+  };
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) submit(e); });
+  const form = el("form", { class: "composer", onsubmit: submit }, input, send);
+  mount(el("header", {}, el("button", { class: "link", onclick: home }, "← Back"), el("h1", {}, who.name),
+    confirmButton("Delete", "link", "Sure?", async () => { await api("DELETE", "/api/conversations/" + encodeURIComponent(id)); home(); })),
+    main, err, form);
+  main.scrollTop = main.scrollHeight; input.focus();
+}
+
+function ended(text) {
+  mount(...screen("Socrates", el("div", { class: "card stack" }, el("p", {}, text), el("button", { class: "primary", onclick: home }, "OK"))));
+}
+
+// ---- settings
+
+async function settings() {
+  const err = errorLine();
+  const body = el("div", { class: "stack" });
+  const p = await api("GET", "/api/settings/llm");
+  body.append(el("div", { class: "card stack" }, el("h2", {}, "AI provider"),
+    el("p", { class: "muted" }, p.data.provider ? `${p.data.provider}, models ${p.data.fastModel} and ${p.data.replyModel}` : "Not set up."),
+    el("button", { onclick: () => providerScreen(false, settings) }, "Change provider or key")));
+  body.append(el("div", { class: "card stack" }, el("h2", {}, "Your data"),
+    el("p", { class: "muted" }, "Conversations are stored encrypted on this computer only. An export holds your conversations and never your key."),
+    el("div", { class: "row" },
+      el("button", { onclick: exportData }, "Export conversations"),
+      el("button", { onclick: () => importInput.click() }, "Import")),
+    err));
+  const importInput = el("input", { type: "file", accept: "application/json", hidden: true, onchange: async (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    let json; try { json = JSON.parse(await f.text()); } catch (_) { err.textContent = "That file is not readable."; return; }
+    const r = await api("POST", "/api/profile/import", json);
+    err.textContent = r.status === 200 ? "" : (r.data.error || "That did not work.");
+    if (r.status === 200) home();
+  } });
+  body.append(importInput);
+  body.append(el("div", { class: "card stack" }, el("h2", {}, "Delete everything"),
+    el("p", { class: "muted" }, "Removes every conversation, your provider key and your settings from this computer. It cannot be undone."),
+    confirmButton("Delete everything", "danger", "Click again to delete everything", async () => {
+      const r = await api("DELETE", "/api/profile", { confirm: "delete" });
+      if (r.status === 204) boot(); else err.textContent = r.data.error || "That did not work.";
+    })));
+  mount(...screen("Settings", body, el("button", { class: "link", onclick: home }, "Done")));
+}
+
+async function exportData() {
+  const r = await api("GET", "/api/profile/export");
+  if (r.status !== 200) return;
+  const a = el("a", { href: URL.createObjectURL(new Blob([JSON.stringify(r.data, null, 2)], { type: "application/json" })), download: "socrates-export.json" });
+  document.body.append(a); a.click(); a.remove();
+}
+
+function start(root) { S.root = root || document.getElementById("root"); return boot(); }
+if (typeof module !== "undefined") module.exports = { start, el, api, S };
+else window.addEventListener("DOMContentLoaded", () => start());
