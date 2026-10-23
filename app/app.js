@@ -198,11 +198,14 @@ async function home() {
   body.append(el("h2", { class: "muted" }, "Talk with"));
   for (const p of S.philosophers) {
     if (p.unlocked === false) {
-      body.append(el("div", { class: "card locked", "aria-disabled": "true" }, el("h2", {}, p.name), el("div", { class: "muted" }, p.era + " · Locked")));
+      const who = (p.needs || []).map((n) => n.name + " (" + n.done + " so far)").join(" and ");
+      const need = p.needs && p.needs.length ? " Finish " + p.needs[0].required + " challenges with " + who + " to meet him." : "";
+      body.append(el("div", { class: "card locked", "aria-disabled": "true" }, el("h2", {}, p.name), el("div", { class: "muted" }, p.era + " · Locked." + need)));
       continue;
     }
+    const done = p.challenges > 0 ? " · " + p.challenges + (p.challenges === 1 ? " challenge" : " challenges") + " finished" : "";
     body.append(el("div", { class: "card click", role: "button", tabindex: "0", onclick: () => startWith(p), onkeydown: activate(() => startWith(p)) },
-      el("h2", {}, p.name), el("div", { class: "muted" }, p.era)));
+      el("h2", {}, p.name), el("div", { class: "muted" }, p.era + done)));
   }
   const list = c.data.conversations || [];
   if (list.length) {
@@ -288,6 +291,7 @@ async function openChat(id) {
       if (!kept) mine.remove();
       (d.added || []).forEach((m) => { if (m.role !== "user") add(m); });
       if (d.outcome === "fixed" && !(d.added || []).some((m) => m.role === "marker")) add({ role: "marker", text: d.text });
+      if (d.milestone) add({ role: "marker", text: d.milestone });
     } else {
       mine.remove(); input.value = text; fromSuggestion = flag;
       if (res.status === 503) err.textContent = providerProblem(d);

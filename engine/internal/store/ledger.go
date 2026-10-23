@@ -31,6 +31,7 @@ type Entry struct {
 	Detail         string // for a term: the person's definition
 	Quote          string // the person's own words that support it
 	Suggested      bool   // it came from a message chosen among suggestions
+	Examined       int    // 0 not yet; 1 the person has examined it in their own words (a term defined, a claim tested, a tension seen); 2 the same, from a wording chosen among suggestions
 	Status         string
 	A, B           string // for a tension: the two entries that cannot both hold
 	CreatedAt      time.Time
@@ -61,7 +62,8 @@ func (o *Ops) AddEntry(ctx context.Context, e Entry) (Entry, error) {
 		len([]rune(e.Text)) > MaxEntryText || len([]rune(e.Detail)) > MaxEntryText || len([]rune(e.Quote)) > MaxEntryQuote {
 		return Entry{}, ErrBadEntry
 	}
-	if (e.Kind == KindTension) != (e.A != "" && e.B != "") || (e.Kind != KindTension && (e.A != "" || e.B != "")) || (e.Kind == KindTension && e.A == e.B) {
+	if e.Examined < 0 || e.Examined > 2 ||
+		(e.Kind == KindTension) != (e.A != "" && e.B != "") || (e.Kind != KindTension && (e.A != "" || e.B != "")) || (e.Kind == KindTension && e.A == e.B) {
 		return Entry{}, ErrBadEntry
 	}
 	var n int
@@ -90,23 +92,23 @@ func (o *Ops) AddEntry(ctx context.Context, e Entry) (Entry, error) {
 	if e.Suggested {
 		flag = 1
 	}
-	_, err = o.q.ExecContext(ctx, `INSERT INTO ledger(id, philosopher_id, conversation_id, kind, text, detail, quote, suggested, status, a_id, b_id, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', NULLIF(?, ''), NULLIF(?, ''), ?, ?)`,
-		e.ID, e.PhilosopherID, e.ConversationID, e.Kind, text, detail, quote, flag, e.A, e.B, now, now)
+	_, err = o.q.ExecContext(ctx, `INSERT INTO ledger(id, philosopher_id, conversation_id, kind, text, detail, quote, suggested, status, a_id, b_id, created_at, updated_at, examined)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', NULLIF(?, ''), NULLIF(?, ''), ?, ?, ?)`,
+		e.ID, e.PhilosopherID, e.ConversationID, e.Kind, text, detail, quote, flag, e.A, e.B, now, now, e.Examined)
 	if err != nil {
 		return Entry{}, err
 	}
 	return e, nil
 }
 
-const entryColumns = "id, philosopher_id, conversation_id, kind, text, detail, quote, suggested, status, a_id, b_id, created_at, updated_at"
+const entryColumns = "id, philosopher_id, conversation_id, kind, text, detail, quote, suggested, status, a_id, b_id, created_at, updated_at, examined"
 
 func (o *Ops) scanEntry(sc interface{ Scan(...any) error }) (Entry, error) {
 	var e Entry
 	var text, detail, quote []byte
 	var a, b sql.NullString
 	var flag, created, updated int64
-	if err := sc.Scan(&e.ID, &e.PhilosopherID, &e.ConversationID, &e.Kind, &text, &detail, &quote, &flag, &e.Status, &a, &b, &created, &updated); err != nil {
+	if err := sc.Scan(&e.ID, &e.PhilosopherID, &e.ConversationID, &e.Kind, &text, &detail, &quote, &flag, &e.Status, &a, &b, &created, &updated, &e.Examined); err != nil {
 		return Entry{}, err
 	}
 	open := func(col string, blob []byte) (string, error) {
@@ -212,4 +214,14 @@ func (o *Ops) DeleteEntry(ctx context.Context, id string) error {
 func (o *Ops) ClearLedger(ctx context.Context, philosopherID string) error {
 	_, err := o.q.ExecContext(ctx, "DELETE FROM ledger WHERE philosopher_id = ?", philosopherID)
 	return err
+}
+
+// SetExamined records that the person has examined an entry (1 in their own words, 2 from a wording chosen among suggestions). It never
+// lowers a mark: an entry examined in the person's own words stays so.
+func (o *Ops) SetExamined(ctx context.Context, id string, level int) error {
+	if level < 1 || level > 2 {
+		return ErrBadEntry
+	}
+	res, err := o.q.ExecContext(ctx, `UPDATE ledger SET examined = CASE WHEN examined = 1 THEN 1 ELSE ? END, updated_at = ? WHERE id = ?`, level, o.stamp(), id)
+	return affected(res, err)
 }

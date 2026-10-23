@@ -18,6 +18,7 @@ import (
 	"socrates/internal/ledger"
 	"socrates/internal/llm"
 	"socrates/internal/philosophers"
+	"socrates/internal/progress"
 	"socrates/internal/safety"
 	"socrates/internal/store"
 	"socrates/internal/suggest"
@@ -63,12 +64,13 @@ type Service struct {
 
 	mu      sync.Mutex
 	locks   map[string]*sync.Mutex // one turn at a time per conversation
+	now     func() time.Time       // the clock, replaceable in tests
 	bgLocks map[string]*sync.Mutex // one piece of background work at a time per conversation; never held by a turn
 	bg      sync.WaitGroup
 }
 
 func New(st *store.Store, models ModelSource, roster *philosophers.Registry) *Service {
-	return &Service{st: st, models: models, roster: roster, rights: entitlements.Beta{}, locks: map[string]*sync.Mutex{}, bgLocks: map[string]*sync.Mutex{}}
+	return &Service{st: st, models: models, roster: roster, rights: entitlements.Beta{}, now: time.Now, locks: map[string]*sync.Mutex{}, bgLocks: map[string]*sync.Mutex{}}
 }
 
 // SetEntitlements replaces the source that says what the person may use (the free beta grants everything).
@@ -209,6 +211,8 @@ type Result struct {
 	Text    string  `json:"text,omitempty"` // the fixed text, when nothing was kept to show it
 	// ProviderKind, for an unavailable turn: what went wrong with the provider (auth, rate_limit, overloaded, ...), when it is known.
 	ProviderKind string `json:"providerKind,omitempty"`
+	// Milestone, when a challenge was finished since the person last heard of one: a plain sentence, never a number.
+	Milestone string `json:"milestone,omitempty"`
 }
 
 func unavailable(err error) *Result {
@@ -380,6 +384,9 @@ func (s *Service) send(ctx context.Context, conversationID, text string, suggest
 				}
 			}
 			s.afterTurn(client, conv, userSeq)
+			if n, err := s.st.TakeAnnouncements(ctx, conv.ID); err == nil && n > 0 {
+				res.Milestone = "You finished a challenge with " + ph.Name + ": you took one question a real way through."
+			}
 		}
 		return res, err
 	}
@@ -554,25 +561,81 @@ func (s *Service) remember(ctx context.Context, client Completer, conv store.Con
 	if err != nil {
 		return
 	}
-	ops, shown, err := ledger.Extract(ctx, client, known, recent, newest.Content)
-	if err != nil || len(ops) == 0 {
-		if err != nil {
-			log.Printf("[conversation] the ledger could not be updated")
+	cur, haveCur, err := s.st.CurrentInquiry(ctx, conv.ID)
+	if err != nil {
+		return
+	}
+	var inInquiry map[string]bool
+	current := ""
+	if haveCur {
+		if inInquiry, err = s.st.InquiryEntryIDs(ctx, cur.ID); err != nil {
+			return
+		}
+		current = cur.Question
+		known = inquiryLast(known, inInquiry) // the model sees the newest entries, so the ones the inquiry rests on go last
+	}
+	reading, shown, err := ledger.Extract(ctx, client, ledger.Input{Entries: known, InInquiry: inInquiry, Current: current, Recent: recent, Newest: newest.Content})
+	if err != nil {
+		log.Printf("[conversation] the ledger could not be updated")
+		return
+	}
+	action := ledger.ValidateInquiry(reading.Inquiry, current, shown, inInquiry, userTexts)
+	changes, _ := ledger.Validate(reading.Ops, shown, userTexts, newest.Content, newest.Suggested, conv.PhilosopherID, conv.ID)
+	if action == nil && len(changes) == 0 {
+		// nothing new was said, but an inquiry that qualified beyond the day's limit is counted on the first turn after it
+		if haveCur && !cur.Completed && cur.Banked >= int(progress.Default.Threshold*1000) {
+			if err := s.st.Update(ctx, func(o *store.Ops) error { return s.score(ctx, o, cur) }); err != nil {
+				log.Printf("[conversation] the ledger could not be saved")
+			}
 		}
 		return
 	}
-	changes, _ := ledger.Validate(ops, shown, userTexts, newest.Content, newest.Suggested, conv.PhilosopherID, conv.ID)
-	if len(changes) == 0 {
-		return
-	}
 	err = s.st.Update(ctx, func(o *store.Ops) error {
+		inq, have := cur, haveCur
+		if action != nil {
+			had, err := o.HasInquiry(ctx, conv.ID)
+			if err != nil {
+				return err
+			}
+			next := store.Inquiry{PhilosopherID: conv.PhilosopherID, ConversationID: conv.ID, Question: action.Question, Quote: action.Quote}
+			if action.Deepening {
+				next.ParentID = cur.ID
+			}
+			if inq, err = o.CreateInquiry(ctx, next); err != nil {
+				return err
+			}
+			have = true
+			if had { // a later inquiry builds on the entries it names
+				for _, e := range action.Inherit {
+					if err := o.LinkEntries(ctx, inq.ID, e.ID); err != nil {
+						return err
+					}
+				}
+			} else if err := o.LinkOrphans(ctx, inq.ID, conv.ID); err != nil { // the first one takes what was noted before it was recognised
+				return err
+			}
+		}
+		link := func(id string) error {
+			if !have {
+				return nil
+			}
+			return o.LinkEntries(ctx, inq.ID, id)
+		}
 		for _, c := range changes {
 			var err error
 			switch {
 			case c.New != nil:
-				_, err = o.AddEntry(ctx, *c.New)
+				var added store.Entry
+				if added, err = o.AddEntry(ctx, *c.New); err == nil {
+					err = link(added.ID)
+				}
 			case c.Revise != nil:
-				err = o.ReviseEntry(ctx, c.Revise.ID, c.Revise.Text, c.Revise.Detail, c.Revise.Status)
+				if err = o.ReviseEntry(ctx, c.Revise.ID, c.Revise.Text, c.Revise.Detail, c.Revise.Status); err == nil && c.Revise.Examined > 0 {
+					err = o.SetExamined(ctx, c.Revise.ID, c.Revise.Examined)
+				}
+				if err == nil {
+					err = link(c.Revise.ID)
+				}
 			}
 			if errors.Is(err, store.ErrBadEntry) || errors.Is(err, store.ErrNotFound) {
 				continue // one bad change does not spoil the rest
@@ -581,11 +644,51 @@ func (s *Service) remember(ctx context.Context, client Completer, conv store.Con
 				return err
 			}
 		}
-		return nil
+		if !have {
+			return nil
+		}
+		return s.score(ctx, o, inq)
 	})
 	if err != nil {
 		log.Printf("[conversation] the ledger could not be saved")
 	}
+}
+
+// score reads the maturity of an inquiry, banks the best it has reached and, when it qualifies and the day's limit allows, records the
+// challenge. An inquiry that qualifies beyond the limit is counted on a later turn.
+func (s *Service) score(ctx context.Context, o *store.Ops, inq store.Inquiry) error {
+	entries, err := o.InquiryEntries(ctx, inq.ID)
+	if err != nil {
+		return err
+	}
+	r := progress.Score(entries, progress.Default)
+	if err := o.Bank(ctx, inq.ID, r.Thousandths()); err != nil {
+		return err
+	}
+	if inq.Completed || !r.Complete(progress.Default) {
+		return nil
+	}
+	today, err := o.ChallengesSince(ctx, progress.DayStart(s.now()))
+	if err != nil || today >= progress.MaxPerDay {
+		return err
+	}
+	return o.CompleteInquiry(ctx, inq.ID)
+}
+
+// inquiryLast puts the entries an inquiry rests on after the others, keeping the order within each group.
+func inquiryLast(entries []store.Entry, in map[string]bool) []store.Entry {
+	out := make([]store.Entry, 0, len(entries))
+	for _, e := range entries {
+		if !in[e.ID] {
+			out = append(out, e)
+		}
+	}
+	for _, e := range entries {
+		if in[e.ID] {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 func (s *Service) ledgerFor(ctx context.Context, philosopherID string) ([]store.Entry, error) {

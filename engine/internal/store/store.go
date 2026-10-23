@@ -88,6 +88,38 @@ var migrations = []string{
 		updated_at      INTEGER NOT NULL
 	);
 	CREATE INDEX ledger_by_philosopher ON ledger(philosopher_id, created_at);`,
+	// 4: inquiries and challenges. An inquiry is the question under examination in a conversation (it follows the person as the question
+	// deepens); the ledger entries it rests on are linked to it, and each entry says whether it has been examined (0 no, 1 in the person's
+	// own words, 2 from a wording chosen among suggestions). A finished inquiry is a challenge: the challenge row holds no text, so it
+	// stays when the conversation is deleted and counts toward unlocking.
+	`ALTER TABLE ledger ADD COLUMN examined INTEGER NOT NULL DEFAULT 0 CHECK (examined IN (0, 1, 2));
+	UPDATE ledger SET examined = 1 WHERE kind = 'term' AND length(detail) > 0;
+	CREATE TABLE inquiry (
+		id              TEXT PRIMARY KEY,
+		philosopher_id  TEXT NOT NULL,
+		conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+		parent_id       TEXT,
+		question        BLOB NOT NULL,
+		quote           BLOB NOT NULL,
+		banked          INTEGER NOT NULL DEFAULT 0,
+		completed       INTEGER NOT NULL DEFAULT 0 CHECK (completed IN (0, 1)),
+		announced       INTEGER NOT NULL DEFAULT 0 CHECK (announced IN (0, 1)),
+		created_at      INTEGER NOT NULL,
+		updated_at      INTEGER NOT NULL
+	);
+	CREATE INDEX inquiry_by_conversation ON inquiry(conversation_id, created_at);
+	CREATE TABLE inquiry_entry (
+		inquiry_id TEXT NOT NULL REFERENCES inquiry(id) ON DELETE CASCADE,
+		entry_id   TEXT NOT NULL REFERENCES ledger(id) ON DELETE CASCADE,
+		PRIMARY KEY (inquiry_id, entry_id)
+	);
+	CREATE TABLE challenge (
+		id             TEXT PRIMARY KEY,
+		philosopher_id TEXT NOT NULL,
+		inquiry_id     TEXT NOT NULL UNIQUE,
+		created_at     INTEGER NOT NULL
+	);
+	CREATE INDEX challenge_by_philosopher ON challenge(philosopher_id);`,
 }
 
 // dbtx is what both *sql.DB and *sql.Tx offer.
@@ -227,7 +259,7 @@ func (s *Store) Update(ctx context.Context, fn func(*Ops) error) error {
 // freed space does not keep old data. The caller deletes the file and the key as well when a profile is deleted.
 func (s *Store) Wipe(ctx context.Context) error {
 	err := s.Update(ctx, func(o *Ops) error {
-		for _, t := range []string{"ledger", "safety_state", "summaries", "messages", "conversations", "settings"} {
+		for _, t := range []string{"challenge", "inquiry_entry", "inquiry", "ledger", "safety_state", "summaries", "messages", "conversations", "settings"} {
 			if _, err := o.q.ExecContext(ctx, "DELETE FROM "+t); err != nil {
 				return err
 			}

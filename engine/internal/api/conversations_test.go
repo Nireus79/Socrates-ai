@@ -71,14 +71,16 @@ type app struct {
 	st  *store.Store
 }
 
-func newApp(t *testing.T, sc *script) *app {
+func newApp(t *testing.T, sc *script) *app { return newAppEnforcing(t, sc, false) }
+
+func newAppEnforcing(t *testing.T, sc *script, enforce bool) *app {
 	t.Helper()
 	st, err := store.Open(filepath.Join(t.TempDir(), "d", "socrates.db"), bytes.Repeat([]byte{4}, 32))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { st.Close() })
-	mux, svc := New(Deps{Store: st, Version: "test", LLMOptions: []llm.Option{llm.WithBaseURL(sc.srv.URL), llm.WithSleep(func(context.Context, time.Duration) error { return nil })}})
+	mux, svc := New(Deps{Store: st, Version: "test", EnforceUnlocks: enforce, LLMOptions: []llm.Option{llm.WithBaseURL(sc.srv.URL), llm.WithSleep(func(context.Context, time.Duration) error { return nil })}})
 	pol, _ := transport.NewPolicy(nil)
 	srv := httptest.NewServer(pol.Middleware(mux))
 	t.Cleanup(srv.Close)

@@ -17,6 +17,7 @@ const exportFormat = "socrates-export-1"
 const (
 	maxImportConversations = 500
 	maxImportMessages      = 20000
+	maxImportChallenges    = 2000
 )
 
 type exportMessage struct {
@@ -33,6 +34,7 @@ type exportEntry struct {
 	Quote     string `json:"quote"`
 	Suggested bool   `json:"suggested,omitempty"`
 	Status    string `json:"status"`
+	Examined  int    `json:"examined,omitempty"`
 	A         int    `json:"a,omitempty"`
 	B         int    `json:"b,omitempty"`
 }
@@ -46,10 +48,17 @@ type exportConversation struct {
 	Ledger        []exportEntry   `json:"ledger,omitempty"`
 }
 
+// exportChallenge is a finished challenge: whom it was with and when, no text.
+type exportChallenge struct {
+	PhilosopherID string `json:"philosopherId"`
+	At            int64  `json:"at"`
+}
+
 type exportFile struct {
 	Format        string               `json:"format"`
 	ExportedAt    int64                `json:"exportedAt"`
 	Conversations []exportConversation `json:"conversations"`
+	Challenges    []exportChallenge    `json:"challenges,omitempty"`
 }
 
 func (h *handler) exportProfile(w http.ResponseWriter, r *http.Request) {
@@ -79,10 +88,15 @@ func (h *handler) exportProfile(w http.ResponseWriter, r *http.Request) {
 				pos[e.ID] = i + 1
 			}
 			for _, e := range entries {
-				ec.Ledger = append(ec.Ledger, exportEntry{Kind: e.Kind, Text: e.Text, Detail: e.Detail, Quote: e.Quote, Suggested: e.Suggested, Status: e.Status, A: pos[e.A], B: pos[e.B]})
+				ec.Ledger = append(ec.Ledger, exportEntry{Kind: e.Kind, Text: e.Text, Detail: e.Detail, Quote: e.Quote, Suggested: e.Suggested, Status: e.Status, Examined: e.Examined, A: pos[e.A], B: pos[e.B]})
 			}
 		}
 		out.Conversations = append(out.Conversations, ec)
+	}
+	if cs, err := h.d.Store.Challenges(ctx); err == nil {
+		for _, c := range cs {
+			out.Challenges = append(out.Challenges, exportChallenge{PhilosopherID: c.PhilosopherID, At: c.CreatedAt.Unix()})
+		}
 	}
 	w.Header().Set("Content-Disposition", `attachment; filename="socrates-export.json"`)
 	transport.WriteJSON(w, http.StatusOK, out)
@@ -102,6 +116,16 @@ func (h *handler) importProfile(w http.ResponseWriter, r *http.Request) {
 	if len(in.Conversations) > maxImportConversations {
 		fail(w, http.StatusBadRequest, "The file holds too many conversations.")
 		return
+	}
+	if len(in.Challenges) > maxImportChallenges {
+		fail(w, http.StatusBadRequest, "The file holds too many challenges.")
+		return
+	}
+	for _, c := range in.Challenges {
+		if _, err := h.d.Roster.Get(c.PhilosopherID); err != nil || c.At < 0 {
+			fail(w, http.StatusBadRequest, "The file holds a challenge that cannot be read.")
+			return
+		}
 	}
 	total := 0
 	for _, c := range in.Conversations {
@@ -151,6 +175,9 @@ func validEntry(list []exportEntry, e exportEntry) bool {
 	if e.Text == "" || e.Quote == "" || len([]rune(e.Text)) > store.MaxEntryText || len([]rune(e.Detail)) > store.MaxEntryText || len([]rune(e.Quote)) > store.MaxEntryQuote {
 		return false
 	}
+	if e.Examined < 0 || e.Examined > 2 {
+		return false
+	}
 	if e.Status != store.StatusActive && e.Status != store.StatusRetracted && e.Status != store.StatusResolved {
 		return false
 	}
@@ -197,7 +224,7 @@ func importAll(ctx context.Context, o *store.Ops, in exportFile) error {
 			if e.Kind == store.KindTension {
 				continue
 			}
-			added, err := o.AddEntry(ctx, store.Entry{PhilosopherID: c.PhilosopherID, ConversationID: conv.ID, Kind: e.Kind, Text: e.Text, Detail: e.Detail, Quote: e.Quote, Suggested: e.Suggested})
+			added, err := o.AddEntry(ctx, store.Entry{PhilosopherID: c.PhilosopherID, ConversationID: conv.ID, Kind: e.Kind, Text: e.Text, Detail: e.Detail, Quote: e.Quote, Suggested: e.Suggested, Examined: e.Examined})
 			if err != nil {
 				return err
 			}
@@ -215,7 +242,7 @@ func importAll(ctx context.Context, o *store.Ops, in exportFile) error {
 			if e.A == 0 || e.B == 0 {
 				continue // a tension whose claims were learnt elsewhere cannot be rebuilt
 			}
-			added, err := o.AddEntry(ctx, store.Entry{PhilosopherID: c.PhilosopherID, ConversationID: conv.ID, Kind: store.KindTension, Text: e.Text, Quote: e.Quote, Suggested: e.Suggested, A: ids[e.A-1], B: ids[e.B-1]})
+			added, err := o.AddEntry(ctx, store.Entry{PhilosopherID: c.PhilosopherID, ConversationID: conv.ID, Kind: store.KindTension, Text: e.Text, Quote: e.Quote, Suggested: e.Suggested, Examined: e.Examined, A: ids[e.A-1], B: ids[e.B-1]})
 			if err != nil {
 				return err
 			}
@@ -225,6 +252,11 @@ func importAll(ctx context.Context, o *store.Ops, in exportFile) error {
 					return err
 				}
 			}
+		}
+	}
+	for _, c := range in.Challenges {
+		if err := o.AddChallenge(ctx, store.Challenge{PhilosopherID: c.PhilosopherID, CreatedAt: time.Unix(c.At, 0)}); err != nil {
+			return err
 		}
 	}
 	return nil

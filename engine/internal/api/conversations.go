@@ -10,6 +10,7 @@ import (
 	"socrates/internal/entitlements"
 	"socrates/internal/llm"
 	"socrates/internal/philosophers"
+	"socrates/internal/progress"
 	"socrates/internal/store"
 	"socrates/internal/suggest"
 	"socrates/internal/transport"
@@ -53,13 +54,33 @@ func (h *handler) confirmAge(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handler) philosophers(w http.ResponseWriter, r *http.Request) {
+	type need struct {
+		ID       string `json:"id"`
+		Name     string `json:"name"`
+		Done     int    `json:"done"`
+		Required int    `json:"required"`
+	}
 	type view struct {
 		philosophers.Philosopher
-		Unlocked bool `json:"unlocked"`
+		Unlocked   bool   `json:"unlocked"`   // may the person talk with him now
+		Challenges int    `json:"challenges"` // finished with him
+		Earned     bool   `json:"earned"`     // unlocked by progress alone, whether or not the rules are enforced
+		Needs      []need `json:"needs,omitempty"`
+	}
+	roster := h.d.Roster.All()
+	counts, err := h.d.Store.ChallengeCounts(r.Context())
+	if err != nil {
+		fail(w, http.StatusInternalServerError, "the roster could not be read")
+		return
 	}
 	var out []view
-	for _, p := range h.d.Roster.All() {
-		out = append(out, view{p, h.conv.Allowed(r.Context(), entitlements.Philosopher(p.ID))})
+	for i, st := range progress.StatusOf(roster, counts) {
+		v := view{Philosopher: roster[i], Unlocked: h.conv.Allowed(r.Context(), entitlements.Philosopher(st.ID)), Challenges: st.Challenges, Earned: st.Unlocked}
+		for _, m := range st.Missing {
+			p, _ := h.d.Roster.Get(m.Philosopher)
+			v.Needs = append(v.Needs, need{ID: m.Philosopher, Name: p.Name, Done: m.Done, Required: progress.Required})
+		}
+		out = append(out, v)
 	}
 	transport.WriteJSON(w, http.StatusOK, map[string]any{"philosophers": out})
 }

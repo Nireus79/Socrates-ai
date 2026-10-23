@@ -12,17 +12,21 @@ import (
 	"socrates/internal/entitlements"
 	"socrates/internal/llm"
 	"socrates/internal/philosophers"
+	"socrates/internal/progress"
 	"socrates/internal/store"
 	"socrates/internal/transport"
 )
 
 // Deps is what the routes need.
 type Deps struct {
-	Store      *store.Store
-	Roster     *philosophers.Registry // nil: the standard roster
-	Rights     entitlements.Source    // nil: the free beta grants everything
-	Version    string
-	LLMOptions []llm.Option // only tests change these (a stand-in provider, no waiting between retries)
+	Store  *store.Store
+	Roster *philosophers.Registry // nil: the standard roster
+	Rights entitlements.Source    // nil: the free beta grants everything, unless EnforceUnlocks
+	// EnforceUnlocks puts the production rule in place of the beta's bypass: a philosopher is available only once the person has finished
+	// the required challenges with the ones before him (package progress).
+	EnforceUnlocks bool
+	Version        string
+	LLMOptions     []llm.Option // only tests change these (a stand-in provider, no waiting between retries)
 }
 
 // New builds the routes. The caller adds the shutdown route and puts the door (transport.Policy) and the rate limit in front.
@@ -33,6 +37,9 @@ func New(d Deps) (*http.ServeMux, *conversation.Service) {
 	}
 	h := &handler{d: d}
 	h.conv = conversation.New(d.Store, h.models, d.Roster)
+	if d.Rights == nil && d.EnforceUnlocks {
+		d.Rights = progress.Source{St: d.Store, Roster: d.Roster}
+	}
 	if d.Rights != nil {
 		h.conv.SetEntitlements(d.Rights)
 	}

@@ -31,6 +31,7 @@ Status: written on 2026-10-23 with the first engine packages (secrets, keystore,
 - **Passphrase mode:** the sealed key sits in a file; a thief can guess offline. Length (12 or more) and the scrypt cost are the only protection. The keychain mode is better and is the default whenever there is a keychain.
 - **The environment key:** `SOCRATES_DB_KEY` supplies the key from the environment, for a shell that holds the key itself (the phone app) and for development. Anything that can set the engine's environment can set it; it is never offered to a person.
 - **Same-user malware, the screen, the clipboard:** see section 2.
+- **Progress can be edited:** the count of finished challenges is a plain number of rows in a file the user owns, and an export file can be edited before import. Whoever controls their own machine can unlock the later philosophers; accepted at these amounts (PLAN 15). The inquiry question and its quote are sealed like the ledger and go with the conversation; the challenge rows hold no text.
 - **The user's own key in the provider's hands:** the engine sends it only to the provider endpoint the user chose; whether a provider logs requests is the provider's policy.
 
 ## 5. Checks that gate every merge (so far)

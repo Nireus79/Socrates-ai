@@ -364,6 +364,14 @@ Consequences and open points:
 
 ## 16. The score: dynamic maturity of an inquiry
 
+**Decided and built on 2026-10-23 (founder: "confirmed"); where 16.2 and the paragraph below disagree, this paragraph wins.**
+- **The goal is the inquiry**: the question under examination, found by the fast model in the same background pass as the ledger (no extra call) and valid only when it quotes the person's own words. Relations: `new` (the first), `deepening` (the person now asks what the inquiry rested on: equality leading to "what is freedom"), `different`; anything else leaves it unchanged. A deepening starts a **new inquiry linked to its parent**, inherits the entries it names, and the parent keeps the best score it reached (banked). A different question starts from nothing.
+- **The gaps are ledger entries** of the inquiry: a term is settled when the person has defined it, a claim when they have tested it (kept it, qualified it or given it up), a tension when they have said they see it. Maturity = weighted settled over considered (Moly's rule: nothing settled is 0); it can fall when a new open item appears. Words chosen from suggestions weigh 0.4; at most 5 terms, 6 claims and 3 tensions count.
+- **A challenge** is an inquiry that reaches maturity 0.6 with at least 3 settled items, 2 of them in the person's own words, and at least one examined claim or tension (defining words alone is not examining a view). At most 3 challenges count per local day; one that qualifies beyond that is counted on a later turn. The record of a challenge holds no text, so it stays when its conversation is deleted, travels in the export and goes only with the whole profile. The person is told once, in a plain sentence, on the turn after (no numbers).
+- **Unlocking** (founder): Socrates is open from the start; each later philosopher (Diogenes, Plato, Aristotle) needs **5 challenges with every philosopher before him**. The rule is built as production code (`internal/progress`) and the beta **bypasses** it with `entitlements.Beta` unless the engine is started with `SOCRATES_ENFORCE_UNLOCKS=1`; the roster API reports real progress in both cases.
+- With the memory switch off nothing is tracked, so no challenge can be won; the thresholds are data (`progress.Default`) and are to be tuned on real conversations (no live run has measured them). "Fundamental" is not judged: a challenge is any finished, distinct inquiry. Per-philosopher definitions of "settled" (16.2) are not built.
+
+
 ### 16.1 What the two earlier systems do
 - **Proof of concept** (`socratic_system/core/maturity_calculator.py`): each phase has fixed categories with target points (90 in all). The model extracts *specs* from
   the user's answers, each with a category and a confidence (typically 0.9). Per category: `min(sum(value x confidence), target)`; the phase score is the sum divided by 90.

@@ -241,6 +241,25 @@ test("a locked philosopher is shown as locked and cannot be opened", async () =>
   assert.ok(!p.calls.some((c) => c.key === "POST /api/conversations"), "a locked card must not start a conversation");
 });
 
+test("a locked philosopher says what to finish, and a finished challenge is told once as a plain sentence", async () => {
+  const needs = [{ id: "socrates", name: "Socrates", done: 2, required: 5 }];
+  const answers = [[200, { outcome: "replied", milestone: "You finished a challenge with Socrates: you took one question a real way through.", added: [{ role: "user", text: "Hm." }, { role: "philosopher", text: "And then?" }] }]];
+  const p = page(ready({
+    "GET /api/philosophers": [200, { philosophers: [{ id: "socrates", name: "Socrates", era: "Athens", unlocked: true, challenges: 2 }, { id: "diogenes", name: "Diogenes", era: "Corinth", unlocked: false, needs }] }],
+    "POST /api/conversations/c1/messages": () => answers.shift(),
+  }));
+  p.app.start(p.root); await settle();
+  const locked = p.root.querySelector(".card.locked");
+  assert.match(locked.textContent, /Finish 5 challenges with Socrates \(2 so far\) to meet him/);
+  assert.match(p.root.querySelector(".card.click").textContent, /2 challenges finished/);
+  click(p.root.querySelector(".card.click")); await settle();
+  const ta = p.root.querySelector("textarea");
+  ta.value = "Hm."; p.root.querySelector("form").dispatchEvent(new p.dom.window.Event("submit", { cancelable: true })); await settle();
+  assert.match(text(p.root), /You finished a challenge with Socrates/);
+  assert.ok(p.root.querySelector(".msg.notice"), "shown as a notice, not as the philosopher's words");
+  assert.ok(!/\d+%|score|points/i.test(text(p.root)), "no numbers or scores in the chat");
+});
+
 const key = (el, k) => el.dispatchEvent(new global.window.KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true }));
 
 test("each new screen takes the focus on its heading", async () => {
