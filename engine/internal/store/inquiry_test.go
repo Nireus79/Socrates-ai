@@ -338,3 +338,86 @@ func TestFactsAreAKindOfEntryAndTheUpgradeKeepsEveryLinkOfTheInquiries(t *testin
 		t.Fatal("entries stayed after their conversation went")
 	}
 }
+
+func TestDeletingAConversationRemovesItsEntriesUnlessTheyAreKeptAndKeptOnesBelongToNoConversation(t *testing.T) {
+	s, _, _ := open(t)
+	a, b := mustConv(t, &s.Ops, "socrates"), mustConv(t, &s.Ops, "socrates")
+	ea, _ := s.AddEntry(ctx, claim(a, "from a"))
+	s.AddEntry(ctx, claim(b, "from b"))
+	in := newInquiry(t, s, a, "q")
+	s.LinkEntries(ctx, in.ID, ea.ID)
+	if n, _ := s.CountEntriesForConversation(ctx, a.ID); n != 1 {
+		t.Fatal(n)
+	}
+	if err := s.DeleteConversationKeepingMemory(ctx, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	kept, err := s.DetachedEntries(ctx)
+	if err != nil || len(kept) != 1 || kept[0].Text != "from a" || kept[0].ConversationID != "" {
+		t.Fatalf("%+v %v", kept, err)
+	}
+	if all, _ := s.Entries(ctx, "socrates", true); len(all) != 2 {
+		t.Fatalf("%d", len(all))
+	}
+	var inq, links int
+	s.db.QueryRow("SELECT COUNT(*) FROM inquiry").Scan(&inq)
+	s.db.QueryRow("SELECT COUNT(*) FROM inquiry_entry").Scan(&links)
+	if inq != 0 || links != 0 {
+		t.Fatalf("the inquiry of a deleted conversation stayed: %d %d", inq, links)
+	}
+	if err := s.DeleteConversation(ctx, b.ID); err != nil {
+		t.Fatal(err)
+	}
+	if all, _ := s.Entries(ctx, "socrates", true); len(all) != 1 || all[0].Text != "from a" {
+		t.Fatalf("an ordinary deletion must take its own entries and no one else's: %+v", all)
+	}
+	// a kept entry can still be deleted by the person, and an entry may be added with no conversation at all (an import)
+	if err := s.DeleteEntry(ctx, kept[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if e, err := s.AddEntry(ctx, Entry{PhilosopherID: "plato", Kind: KindFact, Text: "x", Quote: "I said x here"}); err != nil || e.ConversationID != "" {
+		t.Fatalf("%+v %v", e, err)
+	}
+	if err := s.Wipe(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if all, _ := s.Entries(ctx, "plato", true); len(all) != 0 {
+		t.Fatal("a wipe left kept memory")
+	}
+}
+
+func TestADatabaseFromBeforeKeptMemoryIsUpgradedWithItsLinksIntact(t *testing.T) {
+	full := migrations
+	migrations = full[:5]
+	path := filepath.Join(t.TempDir(), "data", "socrates.db")
+	key := testKey(10)
+	s, err := Open(path, key)
+	if err != nil {
+		migrations = full
+		t.Fatal(err)
+	}
+	c := mustConv(t, &s.Ops, "socrates")
+	e1, _ := s.AddEntry(ctx, claim(c, "one"))
+	in, err := s.CreateInquiry(ctx, Inquiry{PhilosopherID: "socrates", ConversationID: c.ID, Question: "q", Quote: "quote"})
+	if err != nil {
+		migrations = full
+		t.Fatal(err)
+	}
+	s.LinkEntries(ctx, in.ID, e1.ID)
+	s.Close()
+	migrations = full
+	s2, err := Open(path, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s2.Close()
+	if got, _ := s2.InquiryEntries(ctx, in.ID); len(got) != 1 || got[0].ConversationID != c.ID {
+		t.Fatalf("%+v", got)
+	}
+	if err := s2.DeleteConversationKeepingMemory(ctx, c.ID); err != nil {
+		t.Fatal(err)
+	}
+	if kept, _ := s2.DetachedEntries(ctx); len(kept) != 1 {
+		t.Fatal("the upgraded table cannot keep entries")
+	}
+}

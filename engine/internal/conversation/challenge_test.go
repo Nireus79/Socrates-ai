@@ -269,3 +269,53 @@ func TestTheCharacterIsToldToGetToKnowThePersonOnlyWhileMemoryIsOn(t *testing.T)
 		t.Fatal("told to get to know the person while memory is off")
 	}
 }
+
+func TestDeletingAConversationForgetsWhatWasLearntUnlessThePersonChoosesToKeepIt(t *testing.T) {
+	for _, keep := range []bool{false, true} {
+		steps := turnSteps(1)
+		if keep {
+			steps = append(steps, llm.Say(judgeOK), llm.Say("Welcome back."), llm.Say(gateOK), llm.Say("t"))
+		}
+		e := newEnv(t, steps...)
+		e.tap.answer = []string{reading(inq("whether lying is ever right", "lying is always wrong", "new"), opAdd("claim", "lying is always wrong", "lying is always wrong"), `{"op":"add_fact","text":"works as a nurse","quote":"I work as a nurse on nights"}`)}
+		e.send(t, q1+" I work as a nurse on nights.")
+		if n := e.svc.Learned(bg, e.conv.ID); n != 2 {
+			t.Fatalf("learned %d", n)
+		}
+		if err := e.svc.Delete(bg, e.conv.ID, keep); err != nil {
+			t.Fatal(err)
+		}
+		left, _ := e.st.Entries(bg, "socrates", true)
+		if keep && len(left) != 2 || !keep && len(left) != 0 {
+			t.Fatalf("keep=%v: %d entries left", keep, len(left))
+		}
+		if _, _, err := e.svc.History(bg, e.conv.ID); err == nil {
+			t.Fatal("the conversation is still there")
+		}
+		if keep {
+			// a new conversation with the same philosopher is told what he kept, and the entries answer to no conversation
+			if left[0].ConversationID != "" {
+				t.Fatalf("%+v", left[0])
+			}
+			conv2, _ := e.svc.Start(bg, "socrates")
+			e.conv = conv2
+			e.send(t, "Hello again, philosopher.")
+			reply := e.mock.Requests[len(e.mock.Requests)-3]
+			if !strings.Contains(reply.System, `"works as a nurse"`) {
+				t.Fatalf("what he kept was not told to him: %s", reply.System)
+			}
+		}
+	}
+}
+
+func TestAnEndedConversationOfAMinorLeavesNothingEvenThoughKeepingExists(t *testing.T) {
+	e := newEnv(t, turnSteps(1)...)
+	e.tap.answer = []string{reading("", opAdd("claim", "lying is always wrong", "lying is always wrong"))}
+	e.send(t, q1)
+	if err := e.st.DeleteConversation(bg, e.conv.ID); err != nil {
+		t.Fatal(err)
+	}
+	if left, _ := e.st.Entries(bg, "socrates", true); len(left) != 0 {
+		t.Fatal("the ordinary deletion kept entries")
+	}
+}

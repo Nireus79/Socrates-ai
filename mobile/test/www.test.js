@@ -14,7 +14,7 @@ test("the phone page may reach the engine on the loopback address and nothing el
   assert.match(csp, /connect-src 'self' http:\/\/127\.0\.0\.1:\*;/);
   assert.ok(!/https?:\/\/(?!127\.0\.0\.1)/.test(html), "no other address in the page");
   assert.ok(html.indexOf("shim.js") > 0 && html.indexOf("shim.js") < html.indexOf("app.js"), "the shim must run before the screens");
-  for (const f of ["app.js", "style.css", "shim.js"]) assert.ok(fs.existsSync(path.join(root, "www", f)), f);
+  for (const f of ["app.js", "style.css", "shim.js", "icon.png", "mark.png"]) assert.ok(fs.existsSync(path.join(root, "www", f)), f);
 });
 
 test("the shim waits for the native plugin, hands the page its address and token, and fails plainly when the plugin is missing", async () => {

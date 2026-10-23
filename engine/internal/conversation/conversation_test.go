@@ -505,10 +505,10 @@ func TestStartingAndReadingConversations(t *testing.T) {
 	if _, _, err := e.svc.History(bg, "none"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("%v", err)
 	}
-	if err := e.svc.Delete(bg, e.conv.ID); err != nil {
+	if err := e.svc.Delete(bg, e.conv.ID, false); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.svc.Delete(bg, e.conv.ID); !errors.Is(err, ErrNotFound) {
+	if err := e.svc.Delete(bg, e.conv.ID, false); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("%v", err)
 	}
 }
@@ -723,7 +723,7 @@ func TestDeletingAConversationDeletesWhatWasLearntInIt(t *testing.T) {
 	e := newEnv(t, llm.Say(judgeOK), llm.Say("Reply."), llm.Say(gateOK), llm.Say("t"))
 	e.tap.answer = []string{addClaimOp("lying is always wrong", "lying is always wrong")}
 	e.send(t, "I am sure that lying is always wrong.")
-	if err := e.svc.Delete(bg, e.conv.ID); err != nil {
+	if err := e.svc.Delete(bg, e.conv.ID, false); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ := e.st.Entries(bg, "socrates", true); len(got) != 0 {
@@ -806,7 +806,7 @@ func TestTheLocksOfADeletedConversationAreDropped(t *testing.T) {
 	if !had {
 		t.Fatal("the test did not take any lock")
 	}
-	if err := e.svc.Delete(bg, e.conv.ID); err != nil {
+	if err := e.svc.Delete(bg, e.conv.ID, false); err != nil {
 		t.Fatal(err)
 	}
 	e.svc.mu.Lock()

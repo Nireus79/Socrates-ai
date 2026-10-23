@@ -203,3 +203,47 @@ func TestFactsTravelInAnExportAndComeBackOnImport(t *testing.T) {
 		t.Fatalf("%+v", es)
 	}
 }
+
+func TestDeletingAConversationOverHTTPForgetsWhatWasLearntUnlessToldToKeepItAndTheKeptMemoryTravels(t *testing.T) {
+	a := newApp(t, newScript(t))
+	a.setUp(t)
+	idA, _ := a.seed(t, "socrates", store.Entry{Kind: store.KindFact, Text: "works as a nurse", Quote: "I work as a nurse"})
+	idB, _ := a.seed(t, "socrates", store.Entry{Kind: store.KindClaim, Text: "lying is wrong", Quote: "lying is always wrong"})
+	_, h := a.do(t, "GET", "/api/conversations/"+idA, "")
+	if h["learned"] != float64(1) {
+		t.Fatalf("the screens cannot ask what to do without the count: %v", h["learned"])
+	}
+	if code, _ := a.do(t, "DELETE", "/api/conversations/"+idA+"?keep=memory", ""); code != 204 {
+		t.Fatalf("%d", code)
+	}
+	if code, _ := a.do(t, "DELETE", "/api/conversations/"+idB, ""); code != 204 {
+		t.Fatalf("%d", code)
+	}
+	_, r := a.do(t, "GET", "/api/ledger?philosopherId=socrates", "")
+	list, _ := r["entries"].([]any)
+	if len(list) != 1 || list[0].(map[string]any)["text"] != "works as a nurse" {
+		t.Fatalf("the default must forget, the choice must keep: %v", list)
+	}
+	_, ex := a.do(t, "GET", "/api/profile/export", "")
+	raw := mustJSON(ex)
+	if !strings.Contains(raw, `"memory"`) || !strings.Contains(raw, "works as a nurse") {
+		t.Fatalf("kept memory is not in the export: %s", raw)
+	}
+	b := newApp(t, newScript(t))
+	b.setUp(t)
+	if code, res := b.do(t, "POST", "/api/profile/import", raw); code != 200 {
+		t.Fatalf("%d %v", code, res)
+	}
+	got, _ := b.st.Entries(bg, "socrates", false)
+	if len(got) != 1 || got[0].Text != "works as a nurse" || got[0].ConversationID != "" {
+		t.Fatalf("%+v", got)
+	}
+	bad := `{"format":"socrates-export-1","conversations":[],"memory":[{"philosopherId":"zeno","ledger":[]}]}`
+	if code, _ := b.do(t, "POST", "/api/profile/import", bad); code != 400 {
+		t.Fatalf("%d", code)
+	}
+	bad = `{"format":"socrates-export-1","conversations":[],"memory":[{"philosopherId":"plato","ledger":[{"kind":"fact","text":"","quote":"x","status":"active"}]}]}`
+	if code, _ := b.do(t, "POST", "/api/profile/import", bad); code != 400 {
+		t.Fatalf("%d", code)
+	}
+}

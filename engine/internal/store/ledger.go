@@ -26,7 +26,7 @@ const (
 type Entry struct {
 	ID             string
 	PhilosopherID  string
-	ConversationID string // where it was learnt; the entry goes when that conversation is deleted
+	ConversationID string // where it was learnt; empty once the person chose to keep it when deleting that conversation
 	Kind           string
 	Text           string // a claim, a term, or the description of a tension
 	Detail         string // for a term: the person's definition
@@ -58,7 +58,7 @@ func (o *Ops) sealOpt(col, id, v string) ([]byte, error) {
 
 // AddEntry stores a new entry (status active) and returns it with its id.
 func (o *Ops) AddEntry(ctx context.Context, e Entry) (Entry, error) {
-	if e.PhilosopherID == "" || e.ConversationID == "" || e.Text == "" || e.Quote == "" ||
+	if e.PhilosopherID == "" || e.Text == "" || e.Quote == "" ||
 		(e.Kind != KindClaim && e.Kind != KindTerm && e.Kind != KindTension && e.Kind != KindFact) ||
 		len([]rune(e.Text)) > MaxEntryText || len([]rune(e.Detail)) > MaxEntryText || len([]rune(e.Quote)) > MaxEntryQuote {
 		return Entry{}, ErrBadEntry
@@ -94,7 +94,7 @@ func (o *Ops) AddEntry(ctx context.Context, e Entry) (Entry, error) {
 		flag = 1
 	}
 	_, err = o.q.ExecContext(ctx, `INSERT INTO ledger(id, philosopher_id, conversation_id, kind, text, detail, quote, suggested, status, a_id, b_id, created_at, updated_at, examined)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', NULLIF(?, ''), NULLIF(?, ''), ?, ?, ?)`,
+		VALUES (?, ?, NULLIF(?, ''), ?, ?, ?, ?, ?, 'active', NULLIF(?, ''), NULLIF(?, ''), ?, ?, ?)`,
 		e.ID, e.PhilosopherID, e.ConversationID, e.Kind, text, detail, quote, flag, e.A, e.B, now, now, e.Examined)
 	if err != nil {
 		return Entry{}, err
@@ -107,9 +107,9 @@ const entryColumns = "id, philosopher_id, conversation_id, kind, text, detail, q
 func (o *Ops) scanEntry(sc interface{ Scan(...any) error }) (Entry, error) {
 	var e Entry
 	var text, detail, quote []byte
-	var a, b sql.NullString
+	var a, b, conv sql.NullString
 	var flag, created, updated int64
-	if err := sc.Scan(&e.ID, &e.PhilosopherID, &e.ConversationID, &e.Kind, &text, &detail, &quote, &flag, &e.Status, &a, &b, &created, &updated, &e.Examined); err != nil {
+	if err := sc.Scan(&e.ID, &e.PhilosopherID, &conv, &e.Kind, &text, &detail, &quote, &flag, &e.Status, &a, &b, &created, &updated, &e.Examined); err != nil {
 		return Entry{}, err
 	}
 	open := func(col string, blob []byte) (string, error) {
@@ -129,7 +129,7 @@ func (o *Ops) scanEntry(sc interface{ Scan(...any) error }) (Entry, error) {
 	if e.Quote, err = open("quote", quote); err != nil {
 		return Entry{}, fmt.Errorf("ledger %s: %w", e.ID, err)
 	}
-	e.Suggested, e.A, e.B = flag == 1, a.String, b.String
+	e.ConversationID, e.Suggested, e.A, e.B = conv.String, flag == 1, a.String, b.String
 	e.CreatedAt, e.UpdatedAt = time.Unix(created, 0), time.Unix(updated, 0)
 	return e, nil
 }
@@ -225,4 +225,29 @@ func (o *Ops) SetExamined(ctx context.Context, id string, level int) error {
 	}
 	res, err := o.q.ExecContext(ctx, `UPDATE ledger SET examined = CASE WHEN examined = 1 THEN 1 ELSE ? END, updated_at = ? WHERE id = ?`, level, o.stamp(), id)
 	return affected(res, err)
+}
+
+// CountEntriesForConversation is how many entries were learnt in a conversation.
+func (o *Ops) CountEntriesForConversation(ctx context.Context, conversationID string) (int, error) {
+	var n int
+	err := o.q.QueryRowContext(ctx, "SELECT COUNT(*) FROM ledger WHERE conversation_id = ?", conversationID).Scan(&n)
+	return n, err
+}
+
+// DetachedEntries are the entries no conversation holds any more (kept when their conversation was deleted), oldest first.
+func (o *Ops) DetachedEntries(ctx context.Context) ([]Entry, error) {
+	rows, err := o.q.QueryContext(ctx, "SELECT "+entryColumns+" FROM ledger WHERE conversation_id IS NULL ORDER BY philosopher_id, created_at, rowid")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Entry
+	for rows.Next() {
+		e, err := o.scanEntry(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
 }

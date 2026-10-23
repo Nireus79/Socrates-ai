@@ -4,7 +4,7 @@ TAGS ?= webkit2_41
 .PHONY: frontend build test windows
 frontend:
 	rm -rf frontend/dist && mkdir -p frontend/dist
-	cp ../app/index.html ../app/style.css ../app/app.js frontend/dist/
+	cp ../app/index.html ../app/style.css ../app/app.js ../app/icon.png ../app/mark.png frontend/dist/
 build: frontend
 	$(MAKE) -C ../engine build
 	CGO_ENABLED=1 go build -tags "$(TAGS),production" -o bin/socrates-desktop .

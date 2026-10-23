@@ -48,6 +48,20 @@ type exportConversation struct {
 	Ledger        []exportEntry   `json:"ledger,omitempty"`
 }
 
+// toExportEntries lists entries for an export; a tension points at its two claims by their position in the same list (0 when one of them is
+// not in it).
+func toExportEntries(entries []store.Entry) []exportEntry {
+	pos := map[string]int{}
+	for i, e := range entries {
+		pos[e.ID] = i + 1
+	}
+	var out []exportEntry
+	for _, e := range entries {
+		out = append(out, exportEntry{Kind: e.Kind, Text: e.Text, Detail: e.Detail, Quote: e.Quote, Suggested: e.Suggested, Status: e.Status, Examined: e.Examined, A: pos[e.A], B: pos[e.B]})
+	}
+	return out
+}
+
 // exportChallenge is a finished challenge: whom it was with and when, no text.
 type exportChallenge struct {
 	PhilosopherID string `json:"philosopherId"`
@@ -59,6 +73,13 @@ type exportFile struct {
 	ExportedAt    int64                `json:"exportedAt"`
 	Conversations []exportConversation `json:"conversations"`
 	Challenges    []exportChallenge    `json:"challenges,omitempty"`
+	// Memory is what the philosophers kept after the conversations it was learnt in were deleted.
+	Memory []exportMemory `json:"memory,omitempty"`
+}
+
+type exportMemory struct {
+	PhilosopherID string        `json:"philosopherId"`
+	Ledger        []exportEntry `json:"ledger"`
 }
 
 func (h *handler) exportProfile(w http.ResponseWriter, r *http.Request) {
@@ -83,15 +104,22 @@ func (h *handler) exportProfile(w http.ResponseWriter, r *http.Request) {
 			ec.Messages = append(ec.Messages, exportMessage{Role: m.Role, Text: m.Content})
 		}
 		if entries, err := h.d.Store.EntriesForConversation(ctx, c.ID); err == nil {
-			pos := map[string]int{}
-			for i, e := range entries {
-				pos[e.ID] = i + 1
-			}
-			for _, e := range entries {
-				ec.Ledger = append(ec.Ledger, exportEntry{Kind: e.Kind, Text: e.Text, Detail: e.Detail, Quote: e.Quote, Suggested: e.Suggested, Status: e.Status, Examined: e.Examined, A: pos[e.A], B: pos[e.B]})
-			}
+			ec.Ledger = toExportEntries(entries)
 		}
 		out.Conversations = append(out.Conversations, ec)
+	}
+	if kept, err := h.d.Store.DetachedEntries(ctx); err == nil {
+		byPhil := map[string][]store.Entry{}
+		var order []string
+		for _, e := range kept {
+			if _, ok := byPhil[e.PhilosopherID]; !ok {
+				order = append(order, e.PhilosopherID)
+			}
+			byPhil[e.PhilosopherID] = append(byPhil[e.PhilosopherID], e)
+		}
+		for _, id := range order {
+			out.Memory = append(out.Memory, exportMemory{PhilosopherID: id, Ledger: toExportEntries(byPhil[id])})
+		}
 	}
 	if cs, err := h.d.Store.Challenges(ctx); err == nil {
 		for _, c := range cs {
@@ -125,6 +153,26 @@ func (h *handler) importProfile(w http.ResponseWriter, r *http.Request) {
 		if _, err := h.d.Roster.Get(c.PhilosopherID); err != nil || c.At < 0 {
 			fail(w, http.StatusBadRequest, "The file holds a finished question that cannot be read.")
 			return
+		}
+	}
+	if len(in.Memory) > maxImportConversations {
+		fail(w, http.StatusBadRequest, "The file holds too much kept memory.")
+		return
+	}
+	for _, m := range in.Memory {
+		if _, err := h.d.Roster.Get(m.PhilosopherID); err != nil {
+			fail(w, http.StatusBadRequest, "The file names a philosopher this version does not know.")
+			return
+		}
+		if len(m.Ledger) > store.MaxLedgerSize {
+			fail(w, http.StatusBadRequest, "The file holds too many memory entries.")
+			return
+		}
+		for _, e := range m.Ledger {
+			if !validEntry(m.Ledger, e) {
+				fail(w, http.StatusBadRequest, "The file holds a memory entry that cannot be read.")
+				return
+			}
 		}
 	}
 	total := 0
@@ -219,39 +267,13 @@ func importAll(ctx context.Context, o *store.Ops, in exportFile) error {
 				return err
 			}
 		}
-		ids := make([]string, len(c.Ledger))
-		for i, e := range c.Ledger { // claims and terms first, so that a tension can point at them
-			if e.Kind == store.KindTension {
-				continue
-			}
-			added, err := o.AddEntry(ctx, store.Entry{PhilosopherID: c.PhilosopherID, ConversationID: conv.ID, Kind: e.Kind, Text: e.Text, Detail: e.Detail, Quote: e.Quote, Suggested: e.Suggested, Examined: e.Examined})
-			if err != nil {
-				return err
-			}
-			ids[i] = added.ID
-			if e.Status != store.StatusActive {
-				if err := o.ReviseEntry(ctx, added.ID, e.Text, e.Detail, e.Status); err != nil {
-					return err
-				}
-			}
+		if err := importEntries(ctx, o, c.PhilosopherID, conv.ID, c.Ledger); err != nil {
+			return err
 		}
-		for i, e := range c.Ledger {
-			if e.Kind != store.KindTension {
-				continue
-			}
-			if e.A == 0 || e.B == 0 {
-				continue // a tension whose claims were learnt elsewhere cannot be rebuilt
-			}
-			added, err := o.AddEntry(ctx, store.Entry{PhilosopherID: c.PhilosopherID, ConversationID: conv.ID, Kind: store.KindTension, Text: e.Text, Quote: e.Quote, Suggested: e.Suggested, Examined: e.Examined, A: ids[e.A-1], B: ids[e.B-1]})
-			if err != nil {
-				return err
-			}
-			ids[i] = added.ID
-			if e.Status != store.StatusActive {
-				if err := o.ReviseEntry(ctx, added.ID, e.Text, "", e.Status); err != nil {
-					return err
-				}
-			}
+	}
+	for _, m := range in.Memory {
+		if err := importEntries(ctx, o, m.PhilosopherID, "", m.Ledger); err != nil {
+			return err
 		}
 	}
 	for _, c := range in.Challenges {
@@ -281,4 +303,44 @@ func (h *handler) deleteProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// importEntries adds a list of exported entries for a philosopher, tied to a conversation or (empty id) to none. Claims, terms and facts
+// go first so that a tension can point at them.
+func importEntries(ctx context.Context, o *store.Ops, philosopherID, conversationID string, list []exportEntry) error {
+	ids := make([]string, len(list))
+	for i, e := range list { // claims and terms first, so that a tension can point at them
+		if e.Kind == store.KindTension {
+			continue
+		}
+		added, err := o.AddEntry(ctx, store.Entry{PhilosopherID: philosopherID, ConversationID: conversationID, Kind: e.Kind, Text: e.Text, Detail: e.Detail, Quote: e.Quote, Suggested: e.Suggested, Examined: e.Examined})
+		if err != nil {
+			return err
+		}
+		ids[i] = added.ID
+		if e.Status != store.StatusActive {
+			if err := o.ReviseEntry(ctx, added.ID, e.Text, e.Detail, e.Status); err != nil {
+				return err
+			}
+		}
+	}
+	for i, e := range list {
+		if e.Kind != store.KindTension {
+			continue
+		}
+		if e.A == 0 || e.B == 0 {
+			continue // a tension whose claims were learnt elsewhere cannot be rebuilt
+		}
+		added, err := o.AddEntry(ctx, store.Entry{PhilosopherID: philosopherID, ConversationID: conversationID, Kind: store.KindTension, Text: e.Text, Quote: e.Quote, Suggested: e.Suggested, Examined: e.Examined, A: ids[e.A-1], B: ids[e.B-1]})
+		if err != nil {
+			return err
+		}
+		ids[i] = added.ID
+		if e.Status != store.StatusActive {
+			if err := o.ReviseEntry(ctx, added.ID, e.Text, "", e.Status); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

@@ -304,7 +304,7 @@ func TestOnlyThreeChallengesCountInADayAndTheFourthIsCountedOnALaterDay(t *testi
 func TestAFinishedChallengeSurvivesTheConversationItWasWonIn(t *testing.T) {
 	e := newEnv(t, turnSteps(5)...)
 	finish(t, e)
-	if err := e.svc.Delete(bg, e.conv.ID); err != nil {
+	if err := e.svc.Delete(bg, e.conv.ID, false); err != nil {
 		t.Fatal(err)
 	}
 	if counts(t, e)["socrates"] != 1 {

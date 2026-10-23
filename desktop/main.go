@@ -13,12 +13,16 @@ import (
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v2/pkg/options/linux"
 
 	"socrates-desktop/shell"
 )
 
 //go:embed all:frontend/dist
 var assets embed.FS
+
+//go:embed icon.png
+var icon []byte
 
 func enginePath() string {
 	if p := os.Getenv("SOCRATES_ENGINE"); p != "" {
@@ -52,6 +56,7 @@ func main() {
 		MinWidth:    420,
 		MinHeight:   520,
 		AssetServer: &assetserver.Options{Assets: assets, Handler: eng.Proxy(nil)},
+		Linux:       &linux.Options{Icon: icon},
 	})
 	if err != nil {
 		log.Fatal(err)

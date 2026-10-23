@@ -158,8 +158,11 @@ async function afterReady() {
   return home();
 }
 
+// The logo is a fixed file of the app, not anything an engine or a model sent.
+const logo = () => el("img", { class: "logo", src: "mark.png", alt: "Socrates AI" });
+
 function ageScreen() {
-  mount(...screen("Welcome to Socrates", el("div", { class: "card stack" },
+  mount(...screen("Welcome to Socrates", el("div", { class: "card stack" }, logo(),
     el("p", {}, "Socrates is a conversation with artificial philosophers, made from what was written about them. They ask hard questions and do not give verdicts."),
     el("p", {}, AGE_TEXT),
     el("button", { class: "primary", onclick: async () => { await api("POST", "/api/profile/age"); boot(); } }, "I am 16 or older"))));
@@ -293,6 +296,22 @@ async function openChat(id) {
         el("div", { class: "row" }, el("button", { class: "link", type: "button", onclick: () => challengeStep("/challenge", who.name + " is thinking of a question…") }, "Hear it")));
     } else { challengeBar.replaceChildren(); challengeBar.hidden = true; }
   };
+  // Deleting a conversation asks, when the philosopher learnt something in it, whether he should forget that too (forgetting is the default).
+  const learned = r.data.learned || 0;
+  const deleteBox = el("div", { class: "help", hidden: true });
+  const removeConversation = async (keep) => {
+    await api("DELETE", "/api/conversations/" + encodeURIComponent(id) + (keep ? "?keep=memory" : ""));
+    unwind(); home();
+  };
+  const hideDelete = () => { deleteBox.replaceChildren(); deleteBox.hidden = true; };
+  const showDelete = () => {
+    deleteBox.hidden = false;
+    deleteBox.replaceChildren(el("div", { class: "muted" }, learned > 0 ? "Also forget what " + who.name + " learned in this conversation?" : "Delete this conversation?"),
+      el("div", { class: "row" },
+        el("button", { class: "danger", type: "button", onclick: () => removeConversation(false) }, learned > 0 ? "Delete and forget it" : "Delete"),
+        learned > 0 ? el("button", { class: "link", type: "button", onclick: () => removeConversation(true) }, "Delete, but let him keep it") : null,
+        el("button", { class: "link", type: "button", onclick: hideDelete }, "Cancel")));
+  };
   const refreshHelp = () => { helpBtn.hidden = !canHelp(); if (helpBtn.hidden) helpBox.hidden = true; showOffer(); };
   const showSuggestions = async () => {
     helpBtn.disabled = true; helpBox.hidden = false;
@@ -351,8 +370,8 @@ async function openChat(id) {
   const form = el("form", { class: "composer", onsubmit: submit }, input, send);
   mount(el("header", {}, el("button", { class: "link", onclick: back }, "← Back"), el("h1", {}, who.name),
     el("button", { class: "link", onclick: () => show(() => memory(who)) }, "Memory"),
-    confirmButton("Delete", "link", "Sure?", async () => { await api("DELETE", "/api/conversations/" + encodeURIComponent(id)); unwind(); home(); })),
-    main, err, helpBox, challengeBar, el("div", { class: "helpbar" }, helpBtn, challengeBtn), form);
+    el("button", { class: "link", onclick: showDelete }, "Delete")),
+    main, err, helpBox, challengeBar, deleteBox, el("div", { class: "helpbar" }, helpBtn, challengeBtn), form);
   refreshHelp(); main.scrollTop = main.scrollHeight; input.focus();
 }
 
@@ -424,7 +443,7 @@ async function settings() {
     el("div", { class: "row" }, box, el("label", { for: "memory-on", style: "margin:0" }, "The philosophers remember what I tell them")),
     el("p", { class: "muted" }, "Each keeps short notes with your own words, only for himself, stored encrypted on this computer. Turning this off stops new notes and stops him using the old ones; it does not delete them. You can see and delete them from the Memory button inside a conversation.")));
   const st = await api("GET", "/api/status");
-  body.append(el("div", { class: "card stack" }, el("h2", {}, "About"),
+  body.append(el("div", { class: "card stack" }, el("h2", {}, "About"), logo(),
     el("p", { class: "muted" }, "The philosophers are artificial characters made from what was written about them. They are not real people, and they are not a source of medical, legal or other professional advice."),
     el("p", { class: "muted" }, "If you are thinking of hurting yourself, please call your local emergency number or a crisis line, or tell someone you trust."),
     el("p", { class: "muted" }, "For people aged 16 and over. " + (st.data.version ? "Version " + st.data.version + "." : ""))));

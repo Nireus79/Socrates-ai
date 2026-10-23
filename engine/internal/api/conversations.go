@@ -140,11 +140,12 @@ func (h *handler) getConversation(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusInternalServerError, "the conversation could not be read")
 		return
 	}
-	transport.WriteJSON(w, http.StatusOK, map[string]any{"conversation": toJSON(c), "messages": msgs, "offer": h.conv.OfferState(r.Context(), c.ID)})
+	transport.WriteJSON(w, http.StatusOK, map[string]any{"conversation": toJSON(c), "messages": msgs, "offer": h.conv.OfferState(r.Context(), c.ID), "learned": h.conv.Learned(r.Context(), c.ID)})
 }
 
 func (h *handler) deleteConversation(w http.ResponseWriter, r *http.Request) {
-	err := h.conv.Delete(r.Context(), r.PathValue("id"))
+	// by default what the philosophers learnt in it goes too; ?keep=memory lets them keep it
+	err := h.conv.Delete(r.Context(), r.PathValue("id"), r.URL.Query().Get("keep") == "memory")
 	switch {
 	case errors.Is(err, store.ErrNotFound):
 		fail(w, http.StatusNotFound, "There is no such conversation.")

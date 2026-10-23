@@ -57,6 +57,13 @@ test("a new user confirms the age, then connects a provider, then sees the philo
   assert.ok(p.root.querySelector("input[type=password]") === null, "the key field is gone");
 });
 
+test("the welcome screen shows the logo from the app's own file", async () => {
+  const p = page(ready({ "GET /api/profile": [200, { ageConfirmed: false, hasProvider: false }] }));
+  p.app.start(p.root); await settle();
+  const img = p.root.querySelector("img.logo");
+  assert.ok(img && img.getAttribute("src") === "mark.png" && img.getAttribute("alt") === "Socrates AI");
+});
+
 test("a locked database asks for the passphrase and a wrong one shows the engine's message", async () => {
   const p = page({
     "GET /api/status": [423, {}],
@@ -315,6 +322,39 @@ test("a failed challenge shows the plain sentence and the person can try again",
   assert.ok(!buttonWith(p.root, "Put a question to me").hidden);
 });
 
+test("deleting a conversation in which something was learnt asks whether to forget it, forgets by default, and can keep it", async () => {
+  const calls = [];
+  const p = page(ready({
+    "GET /api/conversations/c1": [200, { conversation: { id: "c1", philosopherId: "socrates", title: "" }, messages: [], learned: 3 }],
+    "DELETE /api/conversations/c1": [204, {}],
+    "DELETE /api/conversations/c1?keep=memory": [204, {}],
+  }));
+  p.app.start(p.root); await settle();
+  click(p.root.querySelector(".card.click")); await settle();
+  const btn = (label) => [...p.root.querySelectorAll("button")].find((b) => b.textContent === label);
+  click(btn("Delete")); await settle();
+  assert.match(text(p.root), /Also forget what Socrates learned in this conversation\?/);
+  assert.ok(!p.calls.some((c) => c.key.startsWith("DELETE /api/conversations")), "asking must not delete");
+  click(btn("Cancel")); await settle();
+  assert.ok(!/Also forget/.test(text(p.root)));
+  click(btn("Delete")); await settle();
+  click(btn("Delete, but let him keep it")); await settle(10);
+  assert.ok(p.calls.some((c) => c.key === "DELETE /api/conversations/c1?keep=memory"));
+  assert.ok(!p.calls.some((c) => c.key === "DELETE /api/conversations/c1"), "keeping must not also ask to forget");
+  assert.match(text(p.root), /Talk with/);
+  const q = page(ready({
+    "GET /api/conversations/c1": [200, { conversation: { id: "c1", philosopherId: "socrates", title: "" }, messages: [], learned: 3 }],
+    "DELETE /api/conversations/c1": [204, {}],
+  }));
+  q.app.start(q.root); await settle();
+  click(q.root.querySelector(".card.click")); await settle();
+  const b2 = (label) => [...q.root.querySelectorAll("button")].find((b) => b.textContent === label);
+  click(b2("Delete")); await settle();
+  click(b2("Delete and forget it")); await settle(10);
+  assert.ok(q.calls.some((c) => c.key === "DELETE /api/conversations/c1"), "forgetting is the default route");
+  void calls;
+});
+
 const key = (el, k) => el.dispatchEvent(new global.window.KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true }));
 
 test("each new screen takes the focus on its heading", async () => {
@@ -563,8 +603,9 @@ test("after deleting a conversation the steps are forgotten and Back does not br
   const p = page(ready({ "DELETE /api/conversations/c1": [204, {}] }));
   p.app.start(p.root); await settle();
   click(p.root.querySelector(".card.click")); await settle();
-  const del = [...p.root.querySelectorAll("button")].find((b) => b.textContent === "Delete");
-  click(del); click(del); await settle(10);
+  const deletes = () => [...p.root.querySelectorAll("button")].filter((b) => b.textContent === "Delete");
+  click(deletes()[0]); await settle();
+  click(deletes()[deletes().length - 1]); await settle(10); // the one in the question that appeared
   assert.match(text(p.root), /Talk with/);
   assert.equal(pressBack(p), false);
   assert.ok(!p.root.querySelector("textarea"));

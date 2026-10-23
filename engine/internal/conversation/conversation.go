@@ -182,14 +182,27 @@ func (s *Service) History(ctx context.Context, id string) (store.Conversation, [
 	return c, out, nil
 }
 
-func (s *Service) Delete(ctx context.Context, id string) error {
+// Delete removes a conversation. By default everything the philosopher learnt in it goes too; with keepMemory the entries stay with him,
+// no longer tied to the conversation, until the person deletes them on the Memory screen.
+func (s *Service) Delete(ctx context.Context, id string, keepMemory bool) error {
 	unlock := s.lock(id)
-	err := s.st.DeleteConversation(ctx, id)
+	var err error
+	if keepMemory {
+		err = s.st.DeleteConversationKeepingMemory(ctx, id)
+	} else {
+		err = s.st.DeleteConversation(ctx, id)
+	}
 	unlock()
 	if err == nil {
 		s.forget(id)
 	}
 	return err
+}
+
+// Learned is how many things the philosophers learnt in a conversation (the screens ask whether to keep them when it is deleted).
+func (s *Service) Learned(ctx context.Context, id string) int {
+	n, _ := s.st.CountEntriesForConversation(ctx, id)
+	return n
 }
 
 // ---- the turn

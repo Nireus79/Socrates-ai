@@ -17,6 +17,7 @@ button { background: var(--panel); border: 1px solid var(--line); border-radius:
 button:hover { border-color: var(--accent); }
 button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 button.danger { color: var(--danger); border-color: var(--danger); }
+.logo { display: block; width: 160px; max-width: 60%; margin: 0 auto 4px; border-radius: 14px; }
 button.link { border: none; background: none; color: var(--muted); padding: 4px 8px; }
 button:disabled { opacity: .5; cursor: default; }
 input, select, textarea { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%; }

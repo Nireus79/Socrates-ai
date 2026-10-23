@@ -4,7 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 rm -rf www && mkdir -p www
-cp ../app/style.css ../app/app.js shim.js www/
+cp ../app/style.css ../app/app.js ../app/icon.png ../app/mark.png shim.js www/
 python3 - <<'PY'
 import re
 html = open("../app/index.html", encoding="utf-8").read()

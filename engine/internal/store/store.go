@@ -159,6 +159,33 @@ var migrations = []string{
 		created_at      INTEGER NOT NULL
 	);
 	CREATE INDEX offer_by_conversation ON offer(conversation_id, created_at);`,
+	// 6: what a philosopher learned may outlive the conversation it was learnt in, when the person chooses so at the moment of deleting it:
+	// the ledger's link to its conversation becomes optional (cleared, not cascaded). The table is rebuilt once more, saving the links
+	// to inquiries as before. The ordinary deletion of a conversation still removes its entries (see DeleteConversation).
+	`CREATE TABLE ie_save AS SELECT inquiry_id, entry_id FROM inquiry_entry;
+	CREATE TABLE ledger_new (
+		id              TEXT PRIMARY KEY,
+		philosopher_id  TEXT NOT NULL,
+		conversation_id TEXT REFERENCES conversations(id) ON DELETE SET NULL,
+		kind            TEXT NOT NULL CHECK (kind IN ('claim', 'term', 'tension', 'fact')),
+		text            BLOB NOT NULL,
+		detail          BLOB,
+		quote           BLOB NOT NULL,
+		suggested       INTEGER NOT NULL DEFAULT 0 CHECK (suggested IN (0, 1)),
+		status          TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'retracted', 'resolved')),
+		a_id            TEXT,
+		b_id            TEXT,
+		created_at      INTEGER NOT NULL,
+		updated_at      INTEGER NOT NULL,
+		examined        INTEGER NOT NULL DEFAULT 0 CHECK (examined IN (0, 1, 2))
+	);
+	INSERT INTO ledger_new(id, philosopher_id, conversation_id, kind, text, detail, quote, suggested, status, a_id, b_id, created_at, updated_at, examined)
+		SELECT id, philosopher_id, conversation_id, kind, text, detail, quote, suggested, status, a_id, b_id, created_at, updated_at, examined FROM ledger;
+	DROP TABLE ledger;
+	ALTER TABLE ledger_new RENAME TO ledger;
+	CREATE INDEX ledger_by_philosopher ON ledger(philosopher_id, created_at);
+	INSERT INTO inquiry_entry(inquiry_id, entry_id) SELECT inquiry_id, entry_id FROM ie_save;
+	DROP TABLE ie_save;`,
 }
 
 // dbtx is what both *sql.DB and *sql.Tx offer.
@@ -397,8 +424,18 @@ func (o *Ops) SetTitle(ctx context.Context, id, title string) error {
 	return affected(res, err)
 }
 
-// DeleteConversation removes a conversation with its messages, summary and safety state.
+// DeleteConversation removes a conversation with its messages, summary, safety state and everything the philosophers learnt in it.
 func (o *Ops) DeleteConversation(ctx context.Context, id string) error {
+	if _, err := o.q.ExecContext(ctx, "DELETE FROM ledger WHERE conversation_id = ?", id); err != nil {
+		return err
+	}
+	res, err := o.q.ExecContext(ctx, "DELETE FROM conversations WHERE id = ?", id)
+	return affected(res, err)
+}
+
+// DeleteConversationKeepingMemory removes a conversation but leaves what was learnt in it: the entries stay with their philosopher, no
+// longer tied to any conversation, until the person deletes them.
+func (o *Ops) DeleteConversationKeepingMemory(ctx context.Context, id string) error {
 	res, err := o.q.ExecContext(ctx, "DELETE FROM conversations WHERE id = ?", id)
 	return affected(res, err)
 }
