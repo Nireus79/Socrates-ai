@@ -42,7 +42,14 @@ function confirmButton(label, cls, armed, action) {
   return b;
 }
 
-function mount(...nodes) { S.root.replaceChildren(...nodes); }
+// A new screen takes the focus on its heading, so that a keyboard or screen-reader user starts at the top of what is new.
+function mount(...nodes) {
+  S.root.replaceChildren(...nodes);
+  const h = S.root.querySelector("h1");
+  if (h) { h.setAttribute("tabindex", "-1"); h.focus({ preventScroll: true }); }
+}
+// A card that acts like a button answers Enter and Space.
+function activate(fn) { return (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fn(); } }; }
 function screen(title, body, actions) {
   return [el("header", {}, el("h1", {}, title), actions || null), el("main", {}, body)];
 }
@@ -145,7 +152,7 @@ async function home() {
       body.append(el("div", { class: "card locked", "aria-disabled": "true" }, el("h2", {}, p.name), el("div", { class: "muted" }, p.era + " · Locked")));
       continue;
     }
-    body.append(el("div", { class: "card click", role: "button", tabindex: "0", onclick: () => startWith(p), onkeydown: (e) => { if (e.key === "Enter") startWith(p); } },
+    body.append(el("div", { class: "card click", role: "button", tabindex: "0", onclick: () => startWith(p), onkeydown: activate(() => startWith(p)) },
       el("h2", {}, p.name), el("div", { class: "muted" }, p.era)));
   }
   const list = c.data.conversations || [];
@@ -153,7 +160,7 @@ async function home() {
     body.append(el("h2", { class: "muted" }, "Earlier conversations"));
     for (const k of list) {
       const who = (byId[k.philosopherId] || {}).name || k.philosopherId;
-      body.append(el("div", { class: "card click", role: "button", tabindex: "0", onclick: () => openChat(k.id), onkeydown: (e) => { if (e.key === "Enter") openChat(k.id); } },
+      body.append(el("div", { class: "card click", role: "button", tabindex: "0", onclick: () => openChat(k.id), onkeydown: activate(() => openChat(k.id)) },
         el("h2", {}, k.title || "New conversation"), el("div", { class: "muted" }, who)));
     }
   }

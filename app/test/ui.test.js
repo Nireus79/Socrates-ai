@@ -238,3 +238,40 @@ test("a locked philosopher is shown as locked and cannot be opened", async () =>
   click(locked); await settle();
   assert.ok(!p.calls.some((c) => c.key === "POST /api/conversations"), "a locked card must not start a conversation");
 });
+
+const key = (el, k) => el.dispatchEvent(new global.window.KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true }));
+
+test("each new screen takes the focus on its heading", async () => {
+  const p = page(ready());
+  p.app.start(p.root); await settle();
+  assert.equal(p.dom.window.document.activeElement.tagName, "H1");
+  assert.match(p.dom.window.document.activeElement.textContent, /Socrates/);
+});
+
+test("a card answers Enter and Space like a button, and other keys do nothing", async () => {
+  const p = page(ready());
+  p.app.start(p.root); await settle();
+  const card = p.root.querySelector(".card.click");
+  assert.equal(card.getAttribute("role"), "button");
+  assert.equal(card.getAttribute("tabindex"), "0");
+  key(card, "a"); await settle();
+  assert.ok(!p.calls.some((c) => c.key === "POST /api/conversations"));
+  key(card, " "); await settle();
+  assert.equal(p.calls.filter((c) => c.key === "POST /api/conversations").length, 1);
+  const q = page(ready());
+  q.app.start(q.root); await settle();
+  key(q.root.querySelector(".card.click"), "Enter"); await settle();
+  assert.equal(q.calls.filter((c) => c.key === "POST /api/conversations").length, 1);
+});
+
+test("fields have names a screen reader can read, and replies are announced", async () => {
+  const p = page(ready());
+  p.app.start(p.root); await settle();
+  click(p.root.querySelector(".card.click")); await settle();
+  assert.equal(p.root.querySelector("textarea").getAttribute("aria-label"), "Your message");
+  assert.equal(p.root.querySelector(".msgs").getAttribute("aria-live"), "polite");
+  assert.equal(p.root.querySelector("p.error").getAttribute("role"), "alert");
+  const gate = page({ "GET /api/status": [423, {}], "GET /api/keystore/status": [200, { state: "locked" }] });
+  gate.app.start(gate.root); await settle();
+  assert.equal(gate.root.querySelector("input[type=password]").getAttribute("aria-label"), "Passphrase");
+});
