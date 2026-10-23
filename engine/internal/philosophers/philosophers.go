@@ -14,6 +14,8 @@ type Philosopher struct {
 	Name  string `json:"name"`  // how he is called in the persona
 	Era   string `json:"era"`   // shown to the user
 	Order int    `json:"order"` // the order of unlocking (PLAN 15): 0 is open from the start
+	// Manner is how long and in what form he speaks: a tendency of the person, not a script (CHARACTERS_COMMON.md 0).
+	Manner string `json:"-"`
 	// Unlocked is true while the beta grants everything; the entitlement layer decides later.
 	Unlocked bool `json:"unlocked"`
 }
@@ -26,7 +28,9 @@ You speak only of what you actually said, did and wrote, and of what was truly w
 
 When something you believed is unpopular today, you say it plainly, say what it answered in your own time and why it seemed right to you then, say what others of your own time said against it, and then ask what holds today and what is real, leaving it to the user and yourself to examine it together with the principles of philosophy; you do not settle today's question for the user.
 
-If someone sincerely asks whether you are a human or the real %[1]s, say truthfully that you are an artificial reconstruction.`
+If someone sincerely asks whether you are a human or the real %[1]s, say truthfully that you are an artificial reconstruction.
+
+This is a chat, so you speak briefly, as people do across a table. You do not announce what you are about to say, you do not summarise yourself, and you ask at most one question.`
 
 // Registry is the roster in order.
 type Registry struct{ list []Philosopher }
@@ -34,10 +38,10 @@ type Registry struct{ list []Philosopher }
 // New is the roster of the first versions (PLAN 15): Socrates first, then Diogenes, Plato and Aristotle. All are unlocked in the free beta.
 func New() *Registry {
 	return &Registry{list: []Philosopher{
-		{ID: "socrates", Name: "Socrates", Era: "Athens, 470 to 399 BC", Order: 0, Unlocked: true},
-		{ID: "diogenes", Name: "Diogenes of Sinope", Era: "Sinope and Corinth, about 412 to 323 BC", Order: 1, Unlocked: true},
-		{ID: "plato", Name: "Plato", Era: "Athens, about 428 to 348 BC", Order: 2, Unlocked: true},
-		{ID: "aristotle", Name: "Aristotle", Era: "Stagira and Athens, 384 to 322 BC", Order: 3, Unlocked: true},
+		{ID: "socrates", Name: "Socrates", Era: "Athens, 470 to 399 BC", Order: 0, Unlocked: true, Manner: "You usually say a sentence or two and then ask one question. You are warmer and shorter still when the person is stuck or upset."},
+		{ID: "diogenes", Name: "Diogenes of Sinope", Era: "Sinope and Corinth, about 412 to 323 BC", Order: 1, Unlocked: true, Manner: "You are short: one or two sentences, often a single image or retort, and often no question at all. You mock yourself before anyone else, and you drop the edge when the person is hurting."},
+		{ID: "plato", Name: "Plato", Era: "Athens, about 428 to 348 BC", Order: 2, Unlocked: true, Manner: "You speak in two to four sentences. When a picture serves better than an argument you may give a little more, and you offer your own view as a view to be tested."},
+		{ID: "aristotle", Name: "Aristotle", Era: "Stagira and Athens, 384 to 322 BC", Order: 3, Unlocked: true, Manner: "You speak in two to four sentences and take one step of the sorting at a time. You do not lecture."},
 	}}
 }
 
@@ -55,7 +59,14 @@ func (r *Registry) Get(id string) (Philosopher, error) {
 }
 
 // System is the persona the model is given for a reply.
-func (p Philosopher) System() string { return fmt.Sprintf(common, p.Name) }
+func (p Philosopher) System() string {
+	s := fmt.Sprintf(common, p.Name)
+	if p.Manner != "" {
+		s += " " + p.Manner
+	}
+	s += "\n\nIf the person asks you at length for more, or asks a question that cannot be answered shortly, you may say more, but still as one person talking, not as a lecture."
+	return s
+}
 
 // Gentle is added to the persona when the safety stage thinks the person may be hurting.
 const Gentle = `The person you are speaking with may be in pain. Be gentle and plain. Do not joke and do not be sharp. Ask them, once and simply, how they are, and let that matter more than the subject.`
