@@ -22,8 +22,21 @@ android {
             useLegacyPackaging = true
         }
     }
+    signingConfigs {
+        // The release key lives outside the repository; its path and passwords come from the environment.
+        release {
+            def store = System.getenv('SOCRATES_KEYSTORE')
+            if (store) {
+                storeFile file(store)
+                storePassword System.getenv('SOCRATES_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('SOCRATES_KEY_ALIAS') ?: 'socrates'
+                keyPassword System.getenv('SOCRATES_KEY_PASSWORD') ?: System.getenv('SOCRATES_KEYSTORE_PASSWORD')
+            }
+        }
+    }
     buildTypes {
         release {
+            if (System.getenv('SOCRATES_KEYSTORE')) signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
