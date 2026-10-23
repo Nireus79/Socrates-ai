@@ -1,0 +1,476 @@
+// Package store is the engine's memory: conversations, messages, summaries, settings and the safety state, in one SQLite file.
+//
+// The file is a plain SQLite database (a pure-Go driver, no C code) whose content is encrypted field by field (see cipher.go). It lives
+// in a private folder (mode 0700, file 0600), uses a write-ahead log, enforces foreign keys, overwrites deleted data
+// (secure_delete) and syncs to disk on every commit. A turn is written in one transaction, so a turn that fails keeps nothing.
+package store
+
+import (
+	"context"
+	"crypto/rand"
+	"database/sql"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"net/url"
+	"os"
+	"path/filepath"
+	"time"
+
+	_ "modernc.org/sqlite"
+)
+
+const keyCheckValue = "socrates-key-check-v1"
+
+var (
+	ErrNotFound = errors.New("not found")
+	// ErrNewerSchema is returned when the file was written by a newer version of Socrates: it is left untouched.
+	ErrNewerSchema = errors.New("this data was made by a newer version of Socrates")
+)
+
+// migrations are applied in order; PRAGMA user_version says how many have been applied. Never edit one that has shipped: add a new one.
+var migrations = []string{
+	`CREATE TABLE meta (
+		key   TEXT PRIMARY KEY,
+		value BLOB NOT NULL
+	);
+	CREATE TABLE conversations (
+		id            TEXT PRIMARY KEY,
+		philosopher_id TEXT NOT NULL,
+		title         BLOB,
+		created_at    INTEGER NOT NULL,
+		updated_at    INTEGER NOT NULL
+	);
+	CREATE INDEX conversations_updated ON conversations(updated_at DESC);
+	CREATE TABLE messages (
+		id              TEXT PRIMARY KEY,
+		conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+		seq             INTEGER NOT NULL,
+		role            TEXT NOT NULL CHECK (role IN ('user', 'philosopher')),
+		content         BLOB NOT NULL,
+		created_at      INTEGER NOT NULL,
+		UNIQUE (conversation_id, seq)
+	);
+	CREATE TABLE summaries (
+		conversation_id TEXT PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
+		text            BLOB NOT NULL,
+		through_seq     INTEGER NOT NULL,
+		updated_at      INTEGER NOT NULL
+	);
+	CREATE TABLE settings (
+		key        TEXT PRIMARY KEY,
+		value      BLOB NOT NULL,
+		updated_at INTEGER NOT NULL
+	);
+	CREATE TABLE safety_state (
+		conversation_id TEXT PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
+		pending_checkin INTEGER NOT NULL DEFAULT 0 CHECK (pending_checkin IN (0, 1)),
+		updated_at      INTEGER NOT NULL
+	);`,
+}
+
+// dbtx is what both *sql.DB and *sql.Tx offer.
+type dbtx interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+// Ops are the operations on the store. On a Store each one is its own transaction; inside Update they share one.
+type Ops struct {
+	q   dbtx
+	c   *fieldCipher
+	now func() time.Time
+}
+
+// Store is an open database.
+type Store struct {
+	Ops
+	db   *sql.DB
+	path string
+}
+
+// Open opens (and, when new, creates) the database at path with the 32-byte database key from the keystore. A wrong key gives
+// ErrWrongKey and changes nothing; a file from a newer version gives ErrNewerSchema and changes nothing.
+func Open(path string, key []byte) (*Store, error) {
+	c, err := newFieldCipher(key)
+	if err != nil {
+		return nil, err
+	}
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil, err
+	}
+	os.Chmod(dir, 0o700)
+	if f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0o600); err != nil { // create it private before SQLite does
+		return nil, err
+	} else {
+		f.Close()
+	}
+	q := url.Values{}
+	for _, p := range []string{"journal_mode(WAL)", "foreign_keys(1)", "busy_timeout(5000)", "secure_delete(1)", "synchronous(FULL)", "trusted_schema(0)"} {
+		q.Add("_pragma", p)
+	}
+	q.Set("_txlock", "immediate")
+	db, err := sql.Open("sqlite", (&url.URL{Scheme: "file", Opaque: filepath.ToSlash(path), RawQuery: q.Encode()}).String())
+	if err != nil {
+		return nil, err
+	}
+	db.SetMaxOpenConns(4)
+	s := &Store{db: db, path: path, Ops: Ops{q: db, c: c, now: time.Now}}
+	if err := s.prepare(context.Background()); err != nil {
+		db.Close()
+		return nil, err
+	}
+	return s, nil
+}
+
+func (s *Store) prepare(ctx context.Context) error {
+	var version int
+	if err := s.db.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
+		return fmt.Errorf("cannot read the schema version: %w", err)
+	}
+	if version > len(migrations) {
+		return ErrNewerSchema
+	}
+	if version > 0 {
+		if err := s.checkKey(ctx); err != nil {
+			return err
+		}
+	}
+	for v := version; v < len(migrations); v++ {
+		err := s.Update(ctx, func(o *Ops) error {
+			if _, err := o.q.ExecContext(ctx, migrations[v]); err != nil {
+				return err
+			}
+			if v == 0 {
+				blob, err := o.c.seal("meta", "value", "key_check", []byte(keyCheckValue))
+				if err != nil {
+					return err
+				}
+				if _, err := o.q.ExecContext(ctx, "INSERT INTO meta(key, value) VALUES ('key_check', ?)", blob); err != nil {
+					return err
+				}
+			}
+			_, err := o.q.ExecContext(ctx, fmt.Sprintf("PRAGMA user_version = %d", v+1))
+			return err
+		})
+		if err != nil {
+			return fmt.Errorf("cannot prepare the database (step %d): %w", v+1, err)
+		}
+	}
+	return nil
+}
+
+func (s *Store) checkKey(ctx context.Context) error {
+	var blob []byte
+	if err := s.db.QueryRowContext(ctx, "SELECT value FROM meta WHERE key = 'key_check'").Scan(&blob); err != nil {
+		return ErrWrongKey
+	}
+	plain, err := s.c.open("meta", "value", "key_check", blob)
+	if err != nil || string(plain) != keyCheckValue {
+		return ErrWrongKey
+	}
+	return nil
+}
+
+// Path is the database file.
+func (s *Store) Path() string { return s.path }
+
+// Close closes the database after folding the log into it.
+func (s *Store) Close() error {
+	s.db.Exec("PRAGMA wal_checkpoint(TRUNCATE)")
+	return s.db.Close()
+}
+
+// Update runs fn in one transaction: it commits when fn returns nil and rolls everything back otherwise.
+func (s *Store) Update(ctx context.Context, fn func(*Ops) error) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	if err := fn(&Ops{q: tx, c: s.c, now: s.now}); err != nil {
+		tx.Rollback()
+		return err
+	}
+	return tx.Commit()
+}
+
+// Wipe removes everything the store holds: every row is deleted, the write-ahead log is folded in and the file is compacted, so the
+// freed space does not keep old data. The caller deletes the file and the key as well when a profile is deleted.
+func (s *Store) Wipe(ctx context.Context) error {
+	err := s.Update(ctx, func(o *Ops) error {
+		for _, t := range []string{"safety_state", "summaries", "messages", "conversations", "settings"} {
+			if _, err := o.q.ExecContext(ctx, "DELETE FROM "+t); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if _, err := s.db.ExecContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx, "VACUUM")
+	return err
+}
+
+func newID() string {
+	b := make([]byte, 16)
+	rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
+func (o *Ops) stamp() int64 { return o.now().Unix() }
+
+// ---- conversations
+
+type Conversation struct {
+	ID            string
+	PhilosopherID string
+	Title         string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
+func (o *Ops) CreateConversation(ctx context.Context, philosopherID string) (Conversation, error) {
+	if philosopherID == "" {
+		return Conversation{}, errors.New("a conversation needs a philosopher")
+	}
+	id, now := newID(), o.stamp()
+	if _, err := o.q.ExecContext(ctx, "INSERT INTO conversations(id, philosopher_id, created_at, updated_at) VALUES (?, ?, ?, ?)", id, philosopherID, now, now); err != nil {
+		return Conversation{}, err
+	}
+	return Conversation{ID: id, PhilosopherID: philosopherID, CreatedAt: time.Unix(now, 0), UpdatedAt: time.Unix(now, 0)}, nil
+}
+
+func (o *Ops) scanConversation(sc interface{ Scan(...any) error }) (Conversation, error) {
+	var c Conversation
+	var title []byte
+	var created, updated int64
+	if err := sc.Scan(&c.ID, &c.PhilosopherID, &title, &created, &updated); err != nil {
+		return Conversation{}, err
+	}
+	c.CreatedAt, c.UpdatedAt = time.Unix(created, 0), time.Unix(updated, 0)
+	if title != nil {
+		plain, err := o.c.open("conversations", "title", c.ID, title)
+		if err != nil {
+			return Conversation{}, fmt.Errorf("conversation %s: %w", c.ID, err)
+		}
+		c.Title = string(plain)
+	}
+	return c, nil
+}
+
+func (o *Ops) Conversation(ctx context.Context, id string) (Conversation, error) {
+	c, err := o.scanConversation(o.q.QueryRowContext(ctx, "SELECT id, philosopher_id, title, created_at, updated_at FROM conversations WHERE id = ?", id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return Conversation{}, ErrNotFound
+	}
+	return c, err
+}
+
+// Conversations lists them, the most recently active first.
+func (o *Ops) Conversations(ctx context.Context) ([]Conversation, error) {
+	rows, err := o.q.QueryContext(ctx, "SELECT id, philosopher_id, title, created_at, updated_at FROM conversations ORDER BY updated_at DESC, id")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Conversation
+	for rows.Next() {
+		c, err := o.scanConversation(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+func (o *Ops) SetTitle(ctx context.Context, id, title string) error {
+	blob, err := o.c.seal("conversations", "title", id, []byte(title))
+	if err != nil {
+		return err
+	}
+	res, err := o.q.ExecContext(ctx, "UPDATE conversations SET title = ? WHERE id = ?", blob, id)
+	return affected(res, err)
+}
+
+// DeleteConversation removes a conversation with its messages, summary and safety state.
+func (o *Ops) DeleteConversation(ctx context.Context, id string) error {
+	res, err := o.q.ExecContext(ctx, "DELETE FROM conversations WHERE id = ?", id)
+	return affected(res, err)
+}
+
+func affected(res sql.Result, err error) error {
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// ---- messages
+
+type Message struct {
+	ID             string
+	ConversationID string
+	Seq            int
+	Role           string // "user" or "philosopher"
+	Content        string
+	CreatedAt      time.Time
+}
+
+// AppendMessage adds a message at the end of the conversation.
+func (o *Ops) AppendMessage(ctx context.Context, conversationID, role, content string) (Message, error) {
+	if role != "user" && role != "philosopher" {
+		return Message{}, fmt.Errorf("unknown role %q", role)
+	}
+	id, now := newID(), o.stamp()
+	blob, err := o.c.seal("messages", "content", id, []byte(content))
+	if err != nil {
+		return Message{}, err
+	}
+	// The sequence number is chosen inside the INSERT, so two writers can never take the same one.
+	var seq int
+	err = o.q.QueryRowContext(ctx, `INSERT INTO messages(id, conversation_id, seq, role, content, created_at)
+		VALUES (?, ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM messages WHERE conversation_id = ?), ?, ?, ?) RETURNING seq`,
+		id, conversationID, conversationID, role, blob, now).Scan(&seq)
+	if err != nil {
+		return Message{}, err
+	}
+	if res, err := o.q.ExecContext(ctx, "UPDATE conversations SET updated_at = ? WHERE id = ?", now, conversationID); affected(res, err) != nil {
+		return Message{}, affected(res, err)
+	}
+	return Message{ID: id, ConversationID: conversationID, Seq: seq, Role: role, Content: content, CreatedAt: time.Unix(now, 0)}, nil
+}
+
+func (o *Ops) scanMessages(rows *sql.Rows) ([]Message, error) {
+	defer rows.Close()
+	var out []Message
+	for rows.Next() {
+		var m Message
+		var blob []byte
+		var created int64
+		if err := rows.Scan(&m.ID, &m.ConversationID, &m.Seq, &m.Role, &blob, &created); err != nil {
+			return nil, err
+		}
+		plain, err := o.c.open("messages", "content", m.ID, blob)
+		if err != nil {
+			return nil, fmt.Errorf("message %s: %w", m.ID, err)
+		}
+		m.Content, m.CreatedAt = string(plain), time.Unix(created, 0)
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+// Messages returns the whole conversation in order.
+func (o *Ops) Messages(ctx context.Context, conversationID string) ([]Message, error) {
+	rows, err := o.q.QueryContext(ctx, "SELECT id, conversation_id, seq, role, content, created_at FROM messages WHERE conversation_id = ? ORDER BY seq", conversationID)
+	if err != nil {
+		return nil, err
+	}
+	return o.scanMessages(rows)
+}
+
+// RecentMessages returns the last n messages, in order.
+func (o *Ops) RecentMessages(ctx context.Context, conversationID string, n int) ([]Message, error) {
+	rows, err := o.q.QueryContext(ctx, "SELECT id, conversation_id, seq, role, content, created_at FROM (SELECT * FROM messages WHERE conversation_id = ? ORDER BY seq DESC LIMIT ?) ORDER BY seq", conversationID, n)
+	if err != nil {
+		return nil, err
+	}
+	return o.scanMessages(rows)
+}
+
+// ---- summaries
+
+// SetSummary keeps the running summary of a conversation, written after message throughSeq.
+func (o *Ops) SetSummary(ctx context.Context, conversationID, text string, throughSeq int) error {
+	blob, err := o.c.seal("summaries", "text", conversationID, []byte(text))
+	if err != nil {
+		return err
+	}
+	_, err = o.q.ExecContext(ctx, `INSERT INTO summaries(conversation_id, text, through_seq, updated_at) VALUES (?, ?, ?, ?)
+		ON CONFLICT(conversation_id) DO UPDATE SET text = excluded.text, through_seq = excluded.through_seq, updated_at = excluded.updated_at`,
+		conversationID, blob, throughSeq, o.stamp())
+	return err
+}
+
+// Summary returns the summary and the message it runs up to; ok is false when there is none yet.
+func (o *Ops) Summary(ctx context.Context, conversationID string) (text string, throughSeq int, ok bool, err error) {
+	var blob []byte
+	err = o.q.QueryRowContext(ctx, "SELECT text, through_seq FROM summaries WHERE conversation_id = ?", conversationID).Scan(&blob, &throughSeq)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", 0, false, nil
+	}
+	if err != nil {
+		return "", 0, false, err
+	}
+	plain, err := o.c.open("summaries", "text", conversationID, blob)
+	if err != nil {
+		return "", 0, false, fmt.Errorf("summary of %s: %w", conversationID, err)
+	}
+	return string(plain), throughSeq, true, nil
+}
+
+// ---- settings (provider choice, model roles, credentials: all encrypted)
+
+func (o *Ops) SetSetting(ctx context.Context, key, value string) error {
+	blob, err := o.c.seal("settings", "value", key, []byte(value))
+	if err != nil {
+		return err
+	}
+	_, err = o.q.ExecContext(ctx, `INSERT INTO settings(key, value, updated_at) VALUES (?, ?, ?)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`, key, blob, o.stamp())
+	return err
+}
+
+func (o *Ops) Setting(ctx context.Context, key string) (value string, ok bool, err error) {
+	var blob []byte
+	err = o.q.QueryRowContext(ctx, "SELECT value FROM settings WHERE key = ?", key).Scan(&blob)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	plain, err := o.c.open("settings", "value", key, blob)
+	if err != nil {
+		return "", false, fmt.Errorf("setting %s: %w", key, err)
+	}
+	return string(plain), true, nil
+}
+
+func (o *Ops) DeleteSetting(ctx context.Context, key string) error {
+	_, err := o.q.ExecContext(ctx, "DELETE FROM settings WHERE key = ?", key)
+	return err
+}
+
+// ---- safety state
+
+// SetPendingCheckin marks that the next turn of the conversation must open with the fixed check-in (after a crisis refusal).
+func (o *Ops) SetPendingCheckin(ctx context.Context, conversationID string, pending bool) error {
+	v := 0
+	if pending {
+		v = 1
+	}
+	_, err := o.q.ExecContext(ctx, `INSERT INTO safety_state(conversation_id, pending_checkin, updated_at) VALUES (?, ?, ?)
+		ON CONFLICT(conversation_id) DO UPDATE SET pending_checkin = excluded.pending_checkin, updated_at = excluded.updated_at`,
+		conversationID, v, o.stamp())
+	return err
+}
+
+func (o *Ops) PendingCheckin(ctx context.Context, conversationID string) (bool, error) {
+	var v int
+	err := o.q.QueryRowContext(ctx, "SELECT pending_checkin FROM safety_state WHERE conversation_id = ?", conversationID).Scan(&v)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return v == 1, err
+}
