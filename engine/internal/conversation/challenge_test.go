@@ -319,3 +319,42 @@ func TestAnEndedConversationOfAMinorLeavesNothingEvenThoughKeepingExists(t *test
 		t.Fatal("the ordinary deletion kept entries")
 	}
 }
+
+func TestAReportedReplyIsNeverReadAgainByTheModelsOrKeptInTheSummary(t *testing.T) {
+	e := newEnv(t, append(turnSteps(1), llm.Say(judgeOK), llm.Say("Another reply."), llm.Say(gateOK))...)
+	res := e.send(t, "I keep wondering whether I was right to forgive him.")
+	reply := res.Added[1]
+	if err := e.st.SetSummary(bg, e.conv.ID, "He said something offensive about forgiveness.", 2); err != nil {
+		t.Fatal(err)
+	}
+	text, err := e.svc.Report(bg, e.conv.ID, reply.ID)
+	if err != nil || text != "A reply." {
+		t.Fatalf("%q %v", text, err)
+	}
+	if _, _, ok, _ := e.st.Summary(bg, e.conv.ID); ok {
+		t.Fatal("the summary, which may repeat the reply, was kept")
+	}
+	e.send(t, "Why did you say that?")
+	var asked []llm.Request
+	for _, r := range e.mock.Requests {
+		if r.Role == llm.RoleReply && len(r.Messages) > 0 && strings.Contains(r.Messages[len(r.Messages)-1].Content, "Why did you say that?") {
+			asked = append(asked, r)
+		}
+	}
+	if len(asked) == 0 {
+		t.Fatal("the second turn's reply was not found")
+	}
+	for _, r := range asked {
+		for _, m := range r.Messages {
+			if strings.Contains(m.Content, "A reply.") {
+				t.Fatalf("a reported reply was read again: %+v", r.Messages)
+			}
+		}
+		if strings.Contains(r.System, "offensive") {
+			t.Fatalf("the summary was read again: %s", r.System)
+		}
+	}
+	if _, err := e.svc.Report(bg, e.conv.ID, reply.ID); err == nil {
+		t.Fatal("reported twice")
+	}
+}

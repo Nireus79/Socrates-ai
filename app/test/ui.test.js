@@ -355,6 +355,33 @@ test("deleting a conversation in which something was learnt asks whether to forg
   void calls;
 });
 
+test("a reply can be reported: the reason is asked, the reply is replaced by a notice, and a copy of the report is offered and kept only if the person says so", async () => {
+  let copied = null;
+  const p = page(ready({
+    "GET /api/conversations/c1": [200, { conversation: { id: "c1", philosopherId: "socrates", title: "" }, messages: [{ id: "m1", role: "user", text: "Hm." }, { id: "m2", role: "philosopher", text: "An offensive reply." }] }],
+    "POST /api/conversations/c1/messages/m2/report": (b) => { assert.equal(b.category, "harmful"); return [200, { category: "harmful", reply: "An offensive reply.", marker: "You reported this reply, and it has been taken out of the conversation." }]; },
+  }));
+  Object.defineProperty(p.dom.window.navigator, "clipboard", { value: { writeText: async (t) => { copied = t; } } });
+  p.app.start(p.root); await settle();
+  click(p.root.querySelector(".card.click")); await settle();
+  const btn = (label) => [...p.root.querySelectorAll("button")].find((b) => b.textContent === label);
+  click(btn("Report")); await settle();
+  assert.match(text(p.root), /Why are you reporting this reply\?/);
+  assert.ok(!p.calls.some((c) => c.key.includes("/report")), "asking for the reason must not report");
+  click(btn("Cancel")); await settle();
+  assert.ok(!/Why are you reporting/.test(text(p.root)));
+  click(btn("Report")); await settle();
+  click(btn("It was harmful")); await settle();
+  assert.match(text(p.root), /You reported this reply, and it has been taken out of the conversation\./);
+  assert.ok(!/An offensive reply\./.test(p.root.querySelector(".msgs").textContent.replace(/Keep a copy[\s\S]*/, "")), "the reply is gone from the page");
+  assert.match(text(p.root), /Keep a copy of the report/);
+  click(btn("Copy without it")); await settle();
+  assert.match(copied, /Philosopher: Socrates/);
+  assert.match(copied, /Reason: It was harmful/);
+  assert.ok(!/offensive/.test(copied), "without the reply means without it");
+  assert.match(text(p.root), /nothing was sent from here/);
+});
+
 const key = (el, k) => el.dispatchEvent(new global.window.KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true }));
 
 test("each new screen takes the focus on its heading", async () => {

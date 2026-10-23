@@ -18,6 +18,7 @@ const (
 	TextRefuseMinor     = "I can't help with that, and I won't continue with this subject."
 	TextEndForAge       = "This is for people aged 16 and over, so I have to end our conversation here. Nothing from it has been kept. Thank you for understanding."
 	TextUnavailable     = "I cannot answer right now. Nothing was sent or saved; please try again in a moment."
+	TextReported        = "You reported this reply, and it has been taken out of the conversation."
 	TextGateFallback    = "I would rather stop here and say this differently. Could you tell me more about what you are thinking?"
 	TextAgeConfirmation = "This is for people aged 16 and over."
 )
@@ -37,6 +38,8 @@ const (
 	MarkerAskBeforeRefusal MarkerKind = "question_before_refusal"
 	// MarkerGateFallback stands for a reply that was held back twice by the check before the user saw it.
 	MarkerGateFallback MarkerKind = "gate_fallback"
+	// MarkerReported stands for a reply the person reported: its words are gone from the conversation and from what anyone is told.
+	MarkerReported MarkerKind = "reported"
 )
 
 // TextFor is the fixed text a marker stands for.
@@ -56,6 +59,8 @@ func TextFor(k MarkerKind) string {
 		return TextEndForAge
 	case MarkerGateFallback:
 		return TextGateFallback
+	case MarkerReported:
+		return TextReported
 	}
 	return ""
 }

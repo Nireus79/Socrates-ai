@@ -421,3 +421,86 @@ func TestADatabaseFromBeforeKeptMemoryIsUpgradedWithItsLinksIntact(t *testing.T)
 		t.Fatal("the upgraded table cannot keep entries")
 	}
 }
+
+func TestGrantsAreReplacedPerSourceAndPassesExpireWithoutTouchingStandingOnes(t *testing.T) {
+	s, _, _ := open(t)
+	now := time.Now()
+	s.ReplaceGrants(ctx, "play", []string{"a", "b"})
+	s.ReplaceGrants(ctx, "itch", []string{"b", "c"})
+	s.AddPass(ctx, "ads", "p", now.Add(time.Hour))
+	got, _ := s.ActiveGrants(ctx, now)
+	if len(got) != 4 || got[0] != "a" || got[3] != "p" {
+		t.Fatalf("%v", got)
+	}
+	s.ReplaceGrants(ctx, "play", []string{"a"})
+	if got, _ := s.ActiveGrants(ctx, now); len(got) != 4 { // a, b (still from itch), c, p
+		t.Fatalf("%v", got)
+	}
+	s.AddPass(ctx, "ads", "p", now.Add(48*time.Hour)) // moves the end
+	if got, _ := s.ActiveGrants(ctx, now.Add(25*time.Hour)); len(got) != 4 {
+		t.Fatalf("the pass should last: %v", got)
+	}
+	if got, _ := s.ActiveGrants(ctx, now.Add(49*time.Hour)); len(got) != 3 {
+		t.Fatalf("the pass should be gone: %v", got)
+	}
+	// a pass cannot turn a standing grant of the same source into a temporary one
+	s.AddPass(ctx, "play", "a", now.Add(-time.Hour))
+	if got, _ := s.ActiveGrants(ctx, now); len(got) == 0 || got[0] != "a" {
+		t.Fatalf("a standing grant was turned into a pass: %v", got)
+	}
+	s.ReplaceGrants(ctx, "ads", []string{"z"})
+	s.AddPass(ctx, "ads", "p2", now.Add(time.Hour))
+	s.ReplaceGrants(ctx, "ads", nil) // standing ones of the source go, its passes stay
+	if got, _ := s.ActiveGrants(ctx, now); !contains(got, "p2") || contains(got, "z") {
+		t.Fatalf("%v", got)
+	}
+	if err := s.ReplaceGrants(ctx, "", nil); err == nil {
+		t.Fatal("an empty source")
+	}
+	if err := s.ReplaceGrants(ctx, "x", []string{""}); err == nil {
+		t.Fatal("an empty product")
+	}
+	s.Wipe(ctx)
+	if got, _ := s.ActiveGrants(ctx, now); len(got) != 0 {
+		t.Fatal("a wipe left grants")
+	}
+}
+
+func contains(l []string, v string) bool {
+	for _, x := range l {
+		if x == v {
+			return true
+		}
+	}
+	return false
+}
+
+func TestAReportedReplyLosesItsWordsAndBecomesAMarkerAndNothingElseCanBeReported(t *testing.T) {
+	s, path, _ := open(t)
+	c := mustConv(t, &s.Ops, "socrates")
+	u, _ := s.AppendMessage(ctx, c.ID, "user", "a question from me")
+	r, _ := s.AppendMessage(ctx, c.ID, "philosopher", "an offensive thing the model said")
+	if _, err := s.ReportMessage(ctx, c.ID, u.ID); err != ErrNotAReply {
+		t.Fatalf("a user's message was reportable: %v", err)
+	}
+	if _, err := s.ReportMessage(ctx, c.ID, "none"); err != ErrNotFound {
+		t.Fatalf("%v", err)
+	}
+	other := mustConv(t, &s.Ops, "socrates")
+	if _, err := s.ReportMessage(ctx, other.ID, r.ID); err != ErrNotFound {
+		t.Fatalf("a reply of another conversation was reachable: %v", err)
+	}
+	text, err := s.ReportMessage(ctx, c.ID, r.ID)
+	if err != nil || text != "an offensive thing the model said" {
+		t.Fatalf("%q %v", text, err)
+	}
+	msgs, _ := s.Messages(ctx, c.ID)
+	if len(msgs) != 2 || msgs[1].Role != "marker" || msgs[1].Content != "reported" || msgs[1].Seq != r.Seq {
+		t.Fatalf("%+v", msgs)
+	}
+	s.Close()
+	raw, _ := os.ReadFile(path)
+	if strings.Contains(string(raw), "offensive thing") {
+		t.Fatal("the words are still on disk")
+	}
+}

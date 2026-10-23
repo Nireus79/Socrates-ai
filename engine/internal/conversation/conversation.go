@@ -199,6 +199,26 @@ func (s *Service) Delete(ctx context.Context, id string, keepMemory bool) error 
 	return err
 }
 
+// ReportedText is the sentence that stands in a conversation where a reply was taken out.
+const ReportedText = safety.TextReported
+
+// Report takes a reply the person found offensive or wrong out of the conversation. Nothing leaves the device: the reply's words are removed
+// from the store, from what the philosopher reads and from the running summary (which is written again from what remains); they are returned
+// once so that the person can keep a copy of the report if they choose.
+func (s *Service) Report(ctx context.Context, conversationID, messageID string) (string, error) {
+	defer s.lock(conversationID)()
+	var text string
+	err := s.st.Update(ctx, func(o *store.Ops) error {
+		t, err := o.ReportMessage(ctx, conversationID, messageID)
+		if err != nil {
+			return err
+		}
+		text = t
+		return o.ClearSummary(ctx, conversationID)
+	})
+	return text, err
+}
+
 // Learned is how many things the philosophers learnt in a conversation (the screens ask whether to keep them when it is deleted).
 func (s *Service) Learned(ctx context.Context, id string) int {
 	n, _ := s.st.CountEntriesForConversation(ctx, id)

@@ -11,6 +11,8 @@ type Feature string
 const (
 	// Suggestions is "Help me answer".
 	Suggestions Feature = "suggestions"
+	// Supporter is what a supporter gets that costs nothing to run: no sponsor card, themes and the like.
+	Supporter Feature = "supporter"
 )
 
 // Philosopher is the feature of talking with one philosopher.
@@ -30,3 +32,21 @@ func (Beta) Allowed(context.Context, Feature) (bool, error) { return true, nil }
 type Static map[Feature]bool
 
 func (s Static) Allowed(_ context.Context, f Feature) (bool, error) { return s[f], nil }
+
+// Any allows a feature when any of its sources does: earning, buying and the beta's bypass are separate sources of one answer. A source that
+// errors counts as no; if none says yes and one errored, the error is returned (callers treat it as no).
+type Any []Source
+
+func (a Any) Allowed(ctx context.Context, f Feature) (bool, error) {
+	var first error
+	for _, s := range a {
+		ok, err := s.Allowed(ctx, f)
+		if ok && err == nil {
+			return true, nil
+		}
+		if err != nil && first == nil {
+			first = err
+		}
+	}
+	return false, first
+}

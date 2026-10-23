@@ -186,6 +186,13 @@ var migrations = []string{
 	CREATE INDEX ledger_by_philosopher ON ledger(philosopher_id, created_at);
 	INSERT INTO inquiry_entry(inquiry_id, entry_id) SELECT inquiry_id, entry_id FROM ie_save;
 	DROP TABLE ie_save;`,
+	// 7: what the person has bought, been given or earned by a pass, as product ids from a source (a store, a licence, an ad); a grant may expire.
+	`CREATE TABLE grants (
+		product_id TEXT NOT NULL,
+		source     TEXT NOT NULL,
+		expires_at INTEGER,
+		PRIMARY KEY (product_id, source)
+	);`,
 }
 
 // dbtx is what both *sql.DB and *sql.Tx offer.
@@ -325,7 +332,7 @@ func (s *Store) Update(ctx context.Context, fn func(*Ops) error) error {
 // freed space does not keep old data. The caller deletes the file and the key as well when a profile is deleted.
 func (s *Store) Wipe(ctx context.Context) error {
 	err := s.Update(ctx, func(o *Ops) error {
-		for _, t := range []string{"offer", "challenge", "inquiry_entry", "inquiry", "ledger", "safety_state", "summaries", "messages", "conversations", "settings"} {
+		for _, t := range []string{"grants", "offer", "challenge", "inquiry_entry", "inquiry", "ledger", "safety_state", "summaries", "messages", "conversations", "settings"} {
 			if _, err := o.q.ExecContext(ctx, "DELETE FROM "+t); err != nil {
 				return err
 			}
@@ -649,4 +656,37 @@ func (o *Ops) SafetyState(ctx context.Context, conversationID string) (SafetySta
 		return SafetyState{}, nil
 	}
 	return SafetyState{PendingCheckin: p == 1, ReflectiveQuestionAsked: r == 1}, err
+}
+
+// ClearSummary forgets the running summary of a conversation (it is written again from what remains when it is next due).
+func (o *Ops) ClearSummary(ctx context.Context, conversationID string) error {
+	_, err := o.q.ExecContext(ctx, "DELETE FROM summaries WHERE conversation_id = ?", conversationID)
+	return err
+}
+
+// ErrNotAReply is returned when something other than a philosopher's reply is reported.
+var ErrNotAReply = errors.New("only a philosopher's reply can be reported")
+
+// ReportMessage takes a philosopher's reply out of a conversation: it becomes a marker of the kind "reported" and its words are gone from the
+// store. The words are returned once, so that the person can keep a copy of the report if they choose.
+func (o *Ops) ReportMessage(ctx context.Context, conversationID, messageID string) (string, error) {
+	msgs, err := o.Messages(ctx, conversationID)
+	if err != nil {
+		return "", err
+	}
+	for _, m := range msgs {
+		if m.ID != messageID {
+			continue
+		}
+		if m.Role != "philosopher" {
+			return "", ErrNotAReply
+		}
+		blob, err := o.c.seal("messages", "content", m.ID, []byte("reported"))
+		if err != nil {
+			return "", err
+		}
+		res, err := o.q.ExecContext(ctx, "UPDATE messages SET role = 'marker', content = ? WHERE id = ? AND conversation_id = ?", blob, m.ID, conversationID)
+		return m.Content, affected(res, err)
+	}
+	return "", ErrNotFound
 }

@@ -94,14 +94,20 @@ sells the person's words. Wording follows the rule that nothing sounds like a sp
 - **Ads:** a native SDK in the Android layer only (never in the web page, whose security policy forbids any outside address), consent, no ad when the engine reports a safety state.
 - **Documents:** THREAT_MODEL (purchase checks are local and bypassable), a privacy page that names every third party in use, store listings.
 
-## 6. Decisions needed from the founder
-1. Which package for the first freemium release on Android, and on desktop (section 3)?
-2. Ads at all (an SDK on Android only, removable by a purchase), or only the sponsor card?
-3. Philosophers: per philosopher, as a bundle, or both?
-4. Prices and the wording of the supporter product (the current house rule is "no sport or game words").
-5. Desktop: itch.io first, Steam, a merchant of record, or all in that order? And the identity route for the payout (a driving licence was accepted by Google).
-6. Tips: yes or no.
-7. Whether hosted credits (K) are ever to be considered.
+## 6. Decisions
+**Decided by the founder (2026-10-23, later):** after the beta every option is open to the person, wherever the release platform can offer it: a totally free use with ads, small payments everywhere, tips paid with money or by watching an ad, philosophers unlocked by earning, buying or a pass, supporter products, sponsors, and GitHub Sponsors. The beta stays entirely free (the bypass in `internal/entitlements`). Prices belong to the platform that sells each product (a store price, an itch.io page), so none is fixed here.
+
+**Built the same day (platform-neutral):** `internal/catalog` (what each product unlocks: `philosopher.<id>`, `philosophers.all`, `supporter`, and the time-limited `pass.<id>`), a `grants` table, `entitlements.Any` (earning, buying and passes are separate sources of one answer), `PUT /api/entitlements/grants` (a source's standing products, replaced as a whole so that a refund removes one), `POST /api/entitlements/pass` (an expiring pass, at most 72 hours, from an ad), `GET /api/entitlements`, and the **"Report this reply"** action Play's AI-content policy requires (the reply is taken out of the conversation, the summary and what the models read, and the person may keep a copy of the report to send to the developer; nothing is sent from the app).
+
+**Still to decide or to build per platform:** the Play Billing and rewarded-ad code in the Android layer (needs Play Console products and a build uploaded to test), the consent screens and the privacy page naming every third party, the supporter benefits (themes and the like), the sponsor card, GitHub Sponsors and tip links (the shell needs a way to open an address in the browser), desktop routes (itch.io, Steam, a merchant of record), the contact address reports are to be sent to, and the roster of "Support" screens per platform (a screen shows only what its platform can offer).
+
+**Hosted credits** (option K), explained: today the person brings their own key and pays the AI provider directly. With hosted credits the person would pay us instead, and we would pay the provider on their behalf from a server of ours that holds our own key, meters each person's use and checks who they are. It would remove the biggest barrier (most people have no API key), but it needs a server and money up front, makes their words pass through us, makes us answerable for abuse, and is a different business. Not planned; the founder had not met the term.
+
+## 7. Open questions still for the founder
+1. Which philosophers' products to define first in the stores (per philosopher, as a bundle, or both).
+2. The supporter benefits, in the house voice (no sport or game words).
+3. The address reports are to be sent to.
+4. Ads: which network, and which screens may carry them (never a chat, never after a crisis).
 
 ## Sources (searched 2026-10-23, third-party unless marked)
 - Google Play fees and policy changes: appbot.co, pricepush.app, launchshots.app, bluethrone.io, coda.co (blogs); check Play Console.

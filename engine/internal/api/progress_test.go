@@ -247,3 +247,102 @@ func TestDeletingAConversationOverHTTPForgetsWhatWasLearntUnlessToldToKeepItAndT
 		t.Fatalf("%d", code)
 	}
 }
+
+func TestReportingAReplyTakesItOutEverywhereAndGivesItsWordsBackOnce(t *testing.T) {
+	a := newApp(t, newScript(t, okJudge, "An offensive reply.", okGate, "On courage", okLedger))
+	a.setUp(t)
+	_, conv := a.do(t, "POST", "/api/conversations", `{"philosopherId":"socrates"}`)
+	id := conv["id"].(string)
+	_, res := a.do(t, "POST", "/api/conversations/"+id+"/messages", `{"text":"What is courage?"}`)
+	a.svc.Wait()
+	added := res["added"].([]any)
+	userMsg, reply := added[0].(map[string]any), added[1].(map[string]any)
+	path := "/api/conversations/" + id + "/messages/" + reply["id"].(string) + "/report"
+	if code, _ := a.do(t, "POST", path, `{"category":"nonsense"}`); code != 400 {
+		t.Fatalf("an unknown reason: %d", code)
+	}
+	if code, _ := a.do(t, "POST", "/api/conversations/"+id+"/messages/"+userMsg["id"].(string)+"/report", `{"category":"other"}`); code != 400 {
+		t.Fatalf("a person's own message cannot be reported: %d", code)
+	}
+	if code, _ := a.do(t, "POST", "/api/conversations/"+id+"/messages/none/report", `{"category":"other"}`); code != 404 {
+		t.Fatalf("%d", code)
+	}
+	code, r := a.do(t, "POST", path, `{"category":"harmful"}`)
+	if code != 200 || r["reply"] != "An offensive reply." || r["category"] != "harmful" || !strings.Contains(r["marker"].(string), "You reported this reply") {
+		t.Fatalf("%d %v", code, r)
+	}
+	_, h := a.do(t, "GET", "/api/conversations/"+id, "")
+	raw := mustJSON(h)
+	msgs := h["messages"].([]any)
+	last := msgs[len(msgs)-1].(map[string]any)
+	if strings.Contains(raw, "offensive reply") || last["role"] != "marker" || last["kind"] != "reported" || !strings.Contains(last["text"].(string), "taken out of the conversation") {
+		t.Fatalf("the reply is still in the conversation: %s", raw)
+	}
+	if code, _ := a.do(t, "POST", path, `{"category":"harmful"}`); code != 400 {
+		t.Fatalf("a reply cannot be reported twice: %d", code)
+	}
+	_, ex := a.do(t, "GET", "/api/profile/export", "")
+	if strings.Contains(mustJSON(ex), "offensive reply") {
+		t.Fatal("the export holds the reported words")
+	}
+	b := newApp(t, newScript(t))
+	b.setUp(t)
+	if code, res := b.do(t, "POST", "/api/profile/import", mustJSON(ex)); code != 200 {
+		t.Fatalf("a conversation with a reported reply must import: %d %v", code, res)
+	}
+}
+
+func TestWhatTheShellReportsBoughtUnlocksThePhilosopherAndAPassEndsAndBadInputIsRefused(t *testing.T) {
+	a := newAppEnforcing(t, newScript(t), true)
+	a.setUp(t)
+	if code, _ := a.do(t, "POST", "/api/conversations", `{"philosopherId":"plato"}`); code != 403 {
+		t.Fatalf("%d", code)
+	}
+	for name, body := range map[string]string{
+		"unknown source":     `{"source":"somewhere","products":["supporter"]}`,
+		"unknown product":    `{"source":"play","products":["philosopher.zeno"]}`,
+		"a pass as standing": `{"source":"play","products":["pass.plato"]}`,
+		"too many":           `{"source":"play","products":[` + strings.Repeat(`"supporter",`, 60) + `"supporter"]}`,
+	} {
+		if code, _ := a.do(t, "PUT", "/api/entitlements/grants", body); code != 400 {
+			t.Errorf("%s: %d", name, code)
+		}
+	}
+	if code, _ := a.do(t, "PUT", "/api/entitlements/grants", `{"source":"play","products":["philosopher.plato","supporter"]}`); code != 204 {
+		t.Fatalf("%d", code)
+	}
+	_, r := a.do(t, "GET", "/api/philosophers", "")
+	if find(t, r, "plato")["unlocked"] != true || find(t, r, "plato")["earned"] != false || find(t, r, "aristotle")["unlocked"] != false {
+		t.Fatalf("%v", r)
+	}
+	if code, _ := a.do(t, "POST", "/api/conversations", `{"philosopherId":"plato"}`); code != 201 {
+		t.Fatalf("%d", code)
+	}
+	_, g := a.do(t, "GET", "/api/entitlements", "")
+	if l := g["products"].([]any); len(l) != 2 || l[0] != "philosopher.plato" {
+		t.Fatalf("%v", g)
+	}
+	for name, body := range map[string]string{
+		"not a pass":     `{"source":"ads","product":"philosopher.plato","hours":24}`,
+		"too long":       `{"source":"ads","product":"pass.plato","hours":73}`,
+		"no time":        `{"source":"ads","product":"pass.plato","hours":0}`,
+		"unknown source": `{"source":"x","product":"pass.plato","hours":1}`,
+		"unknown person": `{"source":"ads","product":"pass.nobody","hours":1}`,
+	} {
+		if code, _ := a.do(t, "POST", "/api/entitlements/pass", body); code != 400 {
+			t.Errorf("%s: %d", name, code)
+		}
+	}
+	code, p := a.do(t, "POST", "/api/entitlements/pass", `{"source":"ads","product":"pass.aristotle","hours":24}`)
+	if code != 200 || p["until"] == nil {
+		t.Fatalf("%d %v", code, p)
+	}
+	if code, _ := a.do(t, "POST", "/api/conversations", `{"philosopherId":"aristotle"}`); code != 201 {
+		t.Fatalf("a pass should open him: %d", code)
+	}
+	// a refund: the store's next list no longer has Plato
+	a.do(t, "PUT", "/api/entitlements/grants", `{"source":"play","products":["supporter"]}`)
+	if code, _ := a.do(t, "POST", "/api/conversations", `{"philosopherId":"plato"}`); code != 403 {
+		t.Fatalf("a refunded product still unlocks: %d", code)
+	}
+}

@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 
+	"socrates/internal/catalog"
 	"socrates/internal/conversation"
 	"socrates/internal/entitlements"
 	"socrates/internal/llm"
@@ -38,7 +39,8 @@ func New(d Deps) (*http.ServeMux, *conversation.Service) {
 	h := &handler{d: d}
 	h.conv = conversation.New(d.Store, h.models, d.Roster)
 	if d.Rights == nil && d.EnforceUnlocks {
-		d.Rights = progress.Source{St: d.Store, Roster: d.Roster}
+		// earning and what was bought or granted are two sources of one answer
+		d.Rights = entitlements.Any{progress.Source{St: d.Store, Roster: d.Roster}, catalog.Granted{St: d.Store, Roster: d.Roster}}
 	}
 	if d.Rights != nil {
 		h.conv.SetEntitlements(d.Rights)
@@ -66,6 +68,10 @@ func New(d Deps) (*http.ServeMux, *conversation.Service) {
 	mux.HandleFunc("DELETE /api/conversations/{id}", h.deleteConversation)
 	mux.HandleFunc("POST /api/conversations/{id}/messages", h.sendMessage)
 	mux.HandleFunc("POST /api/conversations/{id}/suggestions", h.suggestions)
+	mux.HandleFunc("POST /api/conversations/{id}/messages/{messageId}/report", h.reportReply)
+	mux.HandleFunc("GET /api/entitlements", h.getGrants)
+	mux.HandleFunc("PUT /api/entitlements/grants", h.putGrants)
+	mux.HandleFunc("POST /api/entitlements/pass", h.addPass)
 	mux.HandleFunc("POST /api/conversations/{id}/challenge", h.challenge)
 	mux.HandleFunc("POST /api/conversations/{id}/challenge/accept", h.acceptChallenge)
 	mux.HandleFunc("POST /api/conversations/{id}/challenge/decline", h.declineChallenge)

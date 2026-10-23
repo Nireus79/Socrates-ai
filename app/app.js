@@ -239,7 +239,39 @@ async function openChat(id) {
   const list = el("div", { class: "msgs", "aria-live": "polite" });
   const main = el("main", {}, list);
   if (!msgs.length && who.opening) list.append(el("div", { class: "msg opening" }, who.opening));
-  const add = (m) => list.append(el("div", { class: "msg " + (m.role === "user" ? "user" : m.role === "marker" ? "notice" : "philosopher") }, m.text));
+  const REASONS = { harmful: "It was harmful", hateful: "It was hateful or insulting", sexual: "It was sexual", untrue: "It was untrue about the real world", other: "Something else" };
+  // Reporting takes the reply out of the conversation (nothing is sent anywhere); the person may keep a copy of the report to send to the developer.
+  const report = (m, bubble) => {
+    const choose = el("div", { class: "help" }, el("div", { class: "muted" }, "Why are you reporting this reply?"),
+      ...Object.keys(REASONS).map((k) => el("button", { class: "chip", type: "button", onclick: () => send(k) }, REASONS[k])),
+      el("button", { class: "link", type: "button", onclick: () => choose.remove() }, "Cancel"));
+    const send = async (category) => {
+      choose.replaceChildren(el("span", { class: "muted" }, "One moment…"));
+      const res = await api("POST", "/api/conversations/" + encodeURIComponent(id) + "/messages/" + encodeURIComponent(m.id) + "/report", { category });
+      if (res.status !== 200) { choose.replaceChildren(errorLine(res.data.error || "That did not work.")); return; }
+      bubble.className = "msg notice"; bubble.replaceChildren(res.data.marker);
+      const copy = (withReply) => {
+        const text = ["Socrates AI: report of a reply", "Philosopher: " + who.name, "Reason: " + REASONS[category]].concat(withReply ? ["Reply: " + res.data.reply] : []).join("\n");
+        const done = (msg) => keep.replaceChildren(el("span", { class: "muted" }, msg));
+        const clip = window.navigator && window.navigator.clipboard;
+        if (clip && clip.writeText) clip.writeText(text).then(() => done("Copied. Send it to the developer (Hermes Software) as you like; nothing was sent from here."), () => manual(text));
+        else manual(text);
+      };
+      const manual = (text) => keep.replaceChildren(el("div", { class: "muted" }, "Copy this yourself:"), el("textarea", { readonly: "", rows: "4", "aria-label": "Report text" }, text));
+      const keep = el("div", { class: "help" }, el("div", { class: "muted" }, "Keep a copy of the report to send to the developer?"),
+        el("div", { class: "row" }, el("button", { class: "chip", type: "button", onclick: () => copy(true) }, "Copy with the reply"), el("button", { class: "chip", type: "button", onclick: () => copy(false) }, "Copy without it"), el("button", { class: "link", type: "button", onclick: () => keep.remove() }, "No, thanks")));
+      choose.replaceWith(keep);
+    };
+    bubble.after(choose);
+  };
+  const add = (m) => {
+    if (m.role === "philosopher" && m.id) {
+      const bubble = el("div", { class: "msg philosopher" }, m.text, " ", el("button", { class: "link small", type: "button", "aria-label": "Report this reply", onclick: () => { if (!bubble.nextSibling || !bubble.nextSibling.classList || !bubble.nextSibling.classList.contains("help")) report(m, bubble); } }, "Report"));
+      list.append(bubble);
+      return;
+    }
+    list.append(el("div", { class: "msg " + (m.role === "user" ? "user" : m.role === "marker" ? "notice" : "philosopher") }, m.text));
+  };
   msgs.forEach(add);
   const input = el("textarea", { rows: "1", placeholder: "Say something…", "aria-label": "Your message", maxlength: "6000" });
   const helpBox = el("div", { class: "help", hidden: true });
