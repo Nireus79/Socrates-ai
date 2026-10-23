@@ -46,8 +46,34 @@ Reply with one JSON object and nothing else:
 {"flagged": true|false, "category": "<one of the categories, or none>", "reason": "<one short sentence>"}`
 
 // CheckReply judges a draft before it is shown. A failed call or an unreadable answer gives ErrUnavailable: a draft that could not be
-// checked is not shown.
+// checked is not shown. A draft longer than one call can read is checked in overlapping pieces, so that no part of it goes unread; the
+// first piece that is flagged decides.
 func CheckReply(ctx context.Context, c Completer, recent []llm.Message, draft string) (GateVerdict, error) {
+	runes := []rune(draft)
+	if len(runes) <= maxNewestChars {
+		return checkPiece(ctx, c, recent, draft)
+	}
+	var last GateVerdict
+	for start := 0; start < len(runes); start += maxNewestChars - pieceOverlap {
+		end := start + maxNewestChars
+		if end > len(runes) {
+			end = len(runes)
+		}
+		v, err := checkPiece(ctx, c, recent, string(runes[start:end]))
+		if err != nil || v.Flagged {
+			return v, err
+		}
+		last = v
+		if end == len(runes) {
+			break
+		}
+	}
+	return last, nil
+}
+
+const pieceOverlap = 500
+
+func checkPiece(ctx context.Context, c Completer, recent []llm.Message, draft string) (GateVerdict, error) {
 	clean := func(s string) string {
 		s = strings.ReplaceAll(s, "<<<DRAFT", "<<<​DRAFT")
 		return strings.ReplaceAll(s, "DRAFT>>>", "DRAFT​>>>")

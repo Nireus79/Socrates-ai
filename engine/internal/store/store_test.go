@@ -450,3 +450,26 @@ func TestADatabaseFromBeforeTheSuggestedMarkIsUpgradedWithItsMessagesIntact(t *t
 		t.Fatal(err)
 	}
 }
+
+func TestMessagesAfterAndFirstMessagesReadOnlyWhatIsAskedFor(t *testing.T) {
+	s, _, _ := open(t)
+	c := mustConv(t, &s.Ops, "socrates")
+	for i := 0; i < 6; i++ {
+		role := "user"
+		if i%2 == 1 {
+			role = "philosopher"
+		}
+		s.AppendMessage(ctx, c.ID, role, fmt.Sprintf("m%d", i+1))
+	}
+	after, err := s.MessagesAfter(ctx, c.ID, 4)
+	if err != nil || len(after) != 2 || after[0].Content != "m5" || after[1].Seq != 6 {
+		t.Fatalf("%+v %v", after, err)
+	}
+	if none, _ := s.MessagesAfter(ctx, c.ID, 6); len(none) != 0 {
+		t.Fatal("nothing is after the last message")
+	}
+	first, _ := s.FirstMessages(ctx, c.ID, 3)
+	if len(first) != 3 || first[0].Content != "m1" || first[2].Content != "m3" {
+		t.Fatalf("%+v", first)
+	}
+}

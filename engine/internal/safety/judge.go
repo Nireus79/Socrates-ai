@@ -119,7 +119,8 @@ func parseVerdict(text string, userTexts []string) (Verdict, error) {
 	}
 	v := Verdict{Label: label, Confidence: conf, Evidence: truncate(strings.TrimSpace(raw.Evidence), maxEvidenceLen), Reason: truncate(strings.TrimSpace(raw.Reason), 300)}
 	if label != LabelOK && label != LabelHardTopic {
-		ev := normalize(v.Evidence)
+		// the whole quotation is matched against the user's words; only the copy that is kept is shortened
+		ev := normalize(strings.TrimSpace(raw.Evidence))
 		if len([]rune(ev)) < 3 {
 			return Verdict{}, errors.New("a verdict that acts on the user needs the user's own words as evidence")
 		}

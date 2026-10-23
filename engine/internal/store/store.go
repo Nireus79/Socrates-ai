@@ -423,6 +423,24 @@ func (o *Ops) RecentMessages(ctx context.Context, conversationID string, n int) 
 	return o.scanMessages(rows)
 }
 
+// MessagesAfter returns the messages with a sequence number above afterSeq, in order (what a summary has not yet covered).
+func (o *Ops) MessagesAfter(ctx context.Context, conversationID string, afterSeq int) ([]Message, error) {
+	rows, err := o.q.QueryContext(ctx, "SELECT id, conversation_id, seq, role, content, created_at, suggested FROM messages WHERE conversation_id = ? AND seq > ? ORDER BY seq", conversationID, afterSeq)
+	if err != nil {
+		return nil, err
+	}
+	return o.scanMessages(rows)
+}
+
+// FirstMessages returns the first n messages of a conversation, in order.
+func (o *Ops) FirstMessages(ctx context.Context, conversationID string, n int) ([]Message, error) {
+	rows, err := o.q.QueryContext(ctx, "SELECT id, conversation_id, seq, role, content, created_at, suggested FROM messages WHERE conversation_id = ? ORDER BY seq LIMIT ?", conversationID, n)
+	if err != nil {
+		return nil, err
+	}
+	return o.scanMessages(rows)
+}
+
 // ---- summaries
 
 // SetSummary keeps the running summary of a conversation, written after message throughSeq.

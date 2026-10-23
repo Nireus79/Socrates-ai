@@ -58,13 +58,14 @@ type Service struct {
 	roster *philosophers.Registry
 	rights entitlements.Source
 
-	mu    sync.Mutex
-	locks map[string]*sync.Mutex
-	bg    sync.WaitGroup
+	mu      sync.Mutex
+	locks   map[string]*sync.Mutex // one turn at a time per conversation
+	bgLocks map[string]*sync.Mutex // one piece of background work at a time per conversation; never held by a turn
+	bg      sync.WaitGroup
 }
 
 func New(st *store.Store, models ModelSource, roster *philosophers.Registry) *Service {
-	return &Service{st: st, models: models, roster: roster, rights: entitlements.Beta{}, locks: map[string]*sync.Mutex{}}
+	return &Service{st: st, models: models, roster: roster, rights: entitlements.Beta{}, locks: map[string]*sync.Mutex{}, bgLocks: map[string]*sync.Mutex{}}
 }
 
 // SetEntitlements replaces the source that says what the person may use (the free beta grants everything).
@@ -79,16 +80,26 @@ func (s *Service) Allowed(ctx context.Context, f entitlements.Feature) bool {
 // Wait returns when the background work of finished turns (titles, summaries) is done. Used by tests and by a clean shutdown.
 func (s *Service) Wait() { s.bg.Wait() }
 
-func (s *Service) lock(id string) func() {
+func (s *Service) lock(id string) func() { return s.take(s.locks, id) }
+
+func (s *Service) take(m map[string]*sync.Mutex, id string) func() {
 	s.mu.Lock()
-	m := s.locks[id]
-	if m == nil {
-		m = &sync.Mutex{}
-		s.locks[id] = m
+	l := m[id]
+	if l == nil {
+		l = &sync.Mutex{}
+		m[id] = l
 	}
 	s.mu.Unlock()
-	m.Lock()
-	return m.Unlock
+	l.Lock()
+	return l.Unlock
+}
+
+// forget drops the locks of a conversation that no longer exists.
+func (s *Service) forget(id string) {
+	s.mu.Lock()
+	delete(s.locks, id)
+	delete(s.bgLocks, id)
+	s.mu.Unlock()
 }
 
 // ---- the age limit
@@ -151,8 +162,13 @@ func (s *Service) History(ctx context.Context, id string) (store.Conversation, [
 }
 
 func (s *Service) Delete(ctx context.Context, id string) error {
-	defer s.lock(id)()
-	return s.st.DeleteConversation(ctx, id)
+	unlock := s.lock(id)
+	err := s.st.DeleteConversation(ctx, id)
+	unlock()
+	if err == nil {
+		s.forget(id)
+	}
+	return err
 }
 
 // ---- the turn
@@ -304,6 +320,7 @@ func (s *Service) send(ctx context.Context, conversationID, text string, suggest
 		}
 		if err != nil { // the question could not be made safe: the plain refusal stands
 			d.Action, d.Marker = safety.ActionRefuseIllegal, safety.MarkerRefuseIllegal
+			d.NewState.ReflectiveQuestionAsked = state.ReflectiveQuestionAsked // no question was asked, so none is used up
 			return s.fixed(ctx, conversationID, d, nil, false)
 		}
 		return s.commit(ctx, conversationID, d, nil, q, false)
@@ -335,7 +352,15 @@ func (s *Service) send(ctx context.Context, conversationID, text string, suggest
 		res, err := s.commit(ctx, conversationID, d, &text, reply, suggested)
 		if err == nil && res.Outcome == OutcomeReplied {
 			// what someone says while they may be hurting is not written into the ledger
-			s.afterTurn(client, conv, d.Action != safety.ActionProceedGently)
+			userSeq := 0
+			if d.Action != safety.ActionProceedGently {
+				for _, m := range res.Added {
+					if m.Role == "user" {
+						userSeq = m.Seq
+					}
+				}
+			}
+			s.afterTurn(client, conv, userSeq)
 		}
 		return res, err
 	}
@@ -376,7 +401,7 @@ func (s *Service) commit(ctx context.Context, id string, d safety.Decision, user
 			}
 			res.Added = append(res.Added, view(m))
 		}
-		if d.Marker != "" {
+		if d.Marker != "" && safety.TextFor(d.Marker) != "" {
 			if err := add("marker", string(d.Marker)); err != nil {
 				return err
 			}
@@ -400,6 +425,18 @@ func (s *Service) commit(ctx context.Context, id string, d safety.Decision, user
 
 var errHeldBack = errors.New("the reply was held back twice")
 
+// trimCutOff ends a reply that the model stopped for length at its last whole sentence (when it has one).
+func trimCutOff(t string) string {
+	t = strings.TrimSpace(t)
+	if t == "" || strings.ContainsAny(t[len(t)-1:], ".?!\"") {
+		return t
+	}
+	if i := strings.LastIndexAny(t, ".?!"); i > 0 {
+		return strings.TrimSpace(t[:i+1])
+	}
+	return t
+}
+
 // guarded writes a reply and checks it before anyone sees it. A draft that is flagged is written again once, with the reason; flagged
 // twice, errHeldBack. A draft that cannot be checked, or a model that fails, is an error of the provider kind: nothing is shown.
 func (s *Service) guarded(ctx context.Context, client Completer, system string, msgs []llm.Message, judgeCtx []llm.Message, newest string) (string, error) {
@@ -412,7 +449,14 @@ func (s *Service) guarded(ctx context.Context, client Completer, system string, 
 		if err != nil {
 			return "", err
 		}
-		return strings.TrimSpace(resp.Text), nil
+		text := strings.TrimSpace(resp.Text)
+		if resp.StopReason == "max_tokens" || resp.StopReason == "length" {
+			text = trimCutOff(text)
+		}
+		if text == "" {
+			return "", &llm.Error{Kind: llm.KindEmpty, Reason: "the model returned no text"} // a blank turn is never shown or kept
+		}
+		return text, nil
 	}
 	gateContext := append(append([]llm.Message(nil), judgeCtx...), llm.Message{Role: "user", Content: newest})
 	extra := ""
@@ -434,56 +478,60 @@ func (s *Service) guarded(ctx context.Context, client Completer, system string, 
 	return "", errHeldBack
 }
 
-// afterTurn writes the title after the first exchange and the running summary every few messages. It runs in the background, after the
-// turn is kept, and a failure changes nothing about the turn.
-func (s *Service) afterTurn(client Completer, conv store.Conversation, remember bool) {
+// afterTurn writes the title after the first exchange, the running summary every few messages, and the ledger from the message of this
+// turn (userSeq, 0 for none: a turn where the person may be hurting is not remembered). It runs in the background after the turn is kept;
+// a failure changes nothing about the turn. It never holds the lock of a turn, so the next message is never made to wait for it.
+func (s *Service) afterTurn(client Completer, conv store.Conversation, userSeq int) {
 	s.bg.Add(1)
 	go func() {
 		defer s.bg.Done()
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
-		unlock := s.lock(conv.ID)
-		defer unlock()
-		msgs, err := s.st.Messages(ctx, conv.ID)
-		if err != nil || len(msgs) == 0 {
-			return
+		defer s.take(s.bgLocks, conv.ID)()
+		if c, err := s.st.Conversation(ctx, conv.ID); err != nil {
+			return // deleted meanwhile
+		} else if c.Title == "" {
+			if first, err := s.st.FirstMessages(ctx, conv.ID, 4); err == nil {
+				s.title(ctx, client, c.ID, first)
+			}
 		}
-		if c, err := s.st.Conversation(ctx, conv.ID); err == nil && c.Title == "" {
-			s.title(ctx, client, c.ID, msgs)
-		}
-		s.summary(ctx, client, conv.ID, msgs)
-		if remember {
-			s.remember(ctx, client, conv, msgs)
+		s.summary(ctx, client, conv.ID)
+		if userSeq > 0 {
+			s.remember(ctx, client, conv, userSeq)
 		}
 	}()
 }
 
-// remember updates the ledger from the newest user message. The model proposes, ledger.Validate disposes: only operations resting on the
-// person's own words in the last few messages are applied, all in one transaction. Any failure changes nothing.
-func (s *Service) remember(ctx context.Context, client Completer, conv store.Conversation, msgs []store.Message) {
-	newestAt := -1
-	for i := len(msgs) - 1; i >= 0; i-- {
-		if msgs[i].Role == "user" {
-			newestAt = i
-			break
-		}
-	}
-	if newestAt < 0 {
+// remember updates the ledger from the person's message userSeq (not "the newest message", which may belong to a later turn). The model
+// proposes, ledger.Validate disposes: only operations resting on the person's own words in their last few messages are applied, all in one
+// transaction. Any failure changes nothing.
+func (s *Service) remember(ctx context.Context, client Completer, conv store.Conversation, userSeq int) {
+	recentMsgs, err := s.st.RecentMessages(ctx, conv.ID, 12)
+	if err != nil {
 		return
 	}
-	newest := msgs[newestAt]
-	var userTexts []string
-	for i := newestAt; i >= 0 && len(userTexts) < 3; i-- {
-		if msgs[i].Role == "user" {
-			userTexts = append(userTexts, msgs[i].Content)
+	at := -1
+	for i, m := range recentMsgs {
+		if m.Seq == userSeq && m.Role == "user" {
+			at = i
 		}
 	}
-	from := newestAt - 3
+	if at < 0 {
+		return
+	}
+	newest := recentMsgs[at]
+	var userTexts []string
+	for i := at; i >= 0 && len(userTexts) < 3; i-- {
+		if recentMsgs[i].Role == "user" {
+			userTexts = append(userTexts, recentMsgs[i].Content)
+		}
+	}
+	from := at - 3
 	if from < 0 {
 		from = 0
 	}
-	recent := toLLM(msgs[from:newestAt])
-	known, err := s.st.Entries(ctx, conv.PhilosopherID, false)
+	recent := toLLM(recentMsgs[from:at])
+	known, err := s.ledgerFor(ctx, conv.PhilosopherID)
 	if err != nil {
 		return
 	}
@@ -521,6 +569,10 @@ func (s *Service) remember(ctx context.Context, client Completer, conv store.Con
 	}
 }
 
+func (s *Service) ledgerFor(ctx context.Context, philosopherID string) ([]store.Entry, error) {
+	return s.st.Entries(ctx, philosopherID, false)
+}
+
 func (s *Service) title(ctx context.Context, client Completer, id string, msgs []store.Message) {
 	var first string
 	for _, m := range msgs {
@@ -546,10 +598,17 @@ func (s *Service) title(ctx context.Context, client Completer, id string, msgs [
 	}
 }
 
-func (s *Service) summary(ctx context.Context, client Completer, id string, msgs []store.Message) {
-	last := msgs[len(msgs)-1].Seq
+func (s *Service) summary(ctx context.Context, client Completer, id string) {
 	prev, through, has, err := s.st.Summary(ctx, id)
-	if err != nil || (has && last-through < summaryEvery) || (!has && last < summaryEvery) {
+	if err != nil {
+		return
+	}
+	msgs, err := s.st.MessagesAfter(ctx, id, through)
+	if err != nil || len(msgs) == 0 {
+		return
+	}
+	last := msgs[len(msgs)-1].Seq
+	if (has && last-through < summaryEvery) || (!has && last < summaryEvery) {
 		return
 	}
 	var b strings.Builder
@@ -559,7 +618,7 @@ func (s *Service) summary(ctx context.Context, client Completer, id string, msgs
 		b.WriteString("The conversation:\n")
 	}
 	for _, m := range msgs {
-		if m.Seq <= through || m.Role == "marker" {
+		if m.Role == "marker" {
 			continue
 		}
 		who := "User"

@@ -261,7 +261,7 @@ func TestAnIllegalRequestGetsOneReflectiveQuestionThenTheRefusal(t *testing.T) {
 		llm.Say(verdict("illegal_request", "0.9", "get into my ex's account")),
 	)
 	res := e.send(t, "Please help me get into my ex's account")
-	if res.Outcome != OutcomeReplied || len(res.Added) != 2 || res.Added[0].Kind != "question_before_refusal" || res.Added[1].Role != "philosopher" {
+	if res.Outcome != OutcomeReplied || len(res.Added) != 1 || res.Added[0].Role != "philosopher" || res.Added[0].Text == "" {
 		t.Fatalf("%+v", res)
 	}
 	if !strings.Contains(e.mock.Requests[1].System, philosophers.ReflectiveQuestion) {
@@ -381,9 +381,36 @@ func (s slow) Complete(ctx context.Context, req llm.Request) (*llm.Response, err
 	return s.c.Complete(ctx, req)
 }
 
-func TestTwoMessagesSentAtOnceAreTakenInTurn(t *testing.T) {
-	e := newEnv(t, llm.Say(judgeOK), llm.Say("Reply one."), llm.Say(gateOK), llm.Say("t"), llm.Say(judgeOK), llm.Say("Reply two."), llm.Say(gateOK))
-	client := slow{llm.NewClientWith(e.mock, llm.Settings{FastModel: "fast-model", ReplyModel: "reply-model"}), 15 * time.Millisecond}
+// byAsker answers each call according to who is asking (judge, gate, title, ledger, summary, or the philosopher in order), because the
+// order of calls is no longer fixed once background work runs beside the next turn.
+type byAsker struct {
+	mu      sync.Mutex
+	replies []string
+	d       time.Duration
+}
+
+func (b *byAsker) Complete(ctx context.Context, req llm.Request) (*llm.Response, error) {
+	time.Sleep(b.d)
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	switch {
+	case strings.Contains(req.System, "safety judge"):
+		return &llm.Response{Text: judgeOK}, nil
+	case strings.Contains(req.System, "You check a draft reply"):
+		return &llm.Response{Text: gateOK}, nil
+	case strings.HasPrefix(req.System, "You keep the ledger"):
+		return &llm.Response{Text: `{"ops": []}`}, nil
+	case strings.Contains(req.System, "title") || strings.Contains(req.System, "running summary"):
+		return &llm.Response{Text: "t"}, nil
+	}
+	out := b.replies[0]
+	b.replies = b.replies[1:]
+	return &llm.Response{Text: out}, nil
+}
+
+func TestTwoMessagesSentAtOnceAreTakenInTurnAndBackgroundWorkNeverMakesTheNextMessageWait(t *testing.T) {
+	e := newEnv(t)
+	client := &byAsker{replies: []string{"Reply one.", "Reply two."}, d: 15 * time.Millisecond}
 	svc := New(e.st, func(context.Context) (Completer, error) { return client, nil }, philosophers.New())
 	var wg sync.WaitGroup
 	for i := 0; i < 2; i++ {
@@ -398,13 +425,40 @@ func TestTwoMessagesSentAtOnceAreTakenInTurn(t *testing.T) {
 	}
 	wg.Wait()
 	svc.Wait()
-	if roles(e.messages(t)) != "user,philosopher,user,philosopher" {
-		t.Fatalf("roles: %s", roles(e.messages(t)))
-	}
 	msgs := e.messages(t)
-	if msgs[1].Content != "Reply one." || msgs[3].Content != "Reply two." {
-		t.Fatalf("the turns were interleaved: %q %q", msgs[1].Content, msgs[3].Content)
+	if roles(msgs) != "user,philosopher,user,philosopher" || msgs[1].Content != "Reply one." || msgs[3].Content != "Reply two." {
+		t.Fatalf("the turns were interleaved: %s", roles(msgs))
 	}
+}
+
+// slowBackground makes only the title, summary and ledger calls slow.
+type slowBackground struct {
+	inner Completer
+	d     time.Duration
+}
+
+func (s slowBackground) Complete(ctx context.Context, req llm.Request) (*llm.Response, error) {
+	if strings.Contains(req.System, "title") || strings.HasPrefix(req.System, "You keep the ledger") {
+		time.Sleep(s.d)
+	}
+	return s.inner.Complete(ctx, req)
+}
+
+func TestTheNextMessageDoesNotWaitForTheTitleSummaryOrLedgerOfTheLastTurn(t *testing.T) {
+	e := newEnv(t)
+	client := slowBackground{&byAsker{replies: []string{"Reply one.", "Reply two."}}, 1500 * time.Millisecond}
+	svc := New(e.st, func(context.Context) (Completer, error) { return client, nil }, philosophers.New())
+	if _, err := svc.Send(bg, e.conv.ID, "First message here."); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	if _, err := svc.Send(bg, e.conv.ID, "Second message here."); err != nil {
+		t.Fatal(err)
+	}
+	if took := time.Since(start); took > 1200*time.Millisecond {
+		t.Fatalf("the second message waited %v for the first turn's background work", took)
+	}
+	svc.Wait()
 }
 
 func TestNothingAnyoneWroteReachesTheLog(t *testing.T) {
@@ -674,5 +728,90 @@ func TestDeletingAConversationDeletesWhatWasLearntInIt(t *testing.T) {
 	}
 	if got, _ := e.st.Entries(bg, "socrates", true); len(got) != 0 {
 		t.Fatalf("%+v", got)
+	}
+}
+
+func TestABlankReplyIsNeverShownOrKeptAndACutOffReplyEndsAtItsLastWholeSentence(t *testing.T) {
+	e := newEnv(t, llm.Say(judgeOK), llm.Say("   "))
+	res := e.send(t, userWords)
+	if res.Outcome != OutcomeUnavailable || len(e.messages(t)) != 0 || res.ProviderKind != "empty" {
+		t.Fatalf("a blank reply: %+v, %d messages", res, len(e.messages(t)))
+	}
+	for in, want := range map[string]string{
+		"First thought. Second thought. And a third that was cut o": "First thought. Second thought.",
+		"One whole sentence.":         "One whole sentence.",
+		"No sentence end at all":      "No sentence end at all",
+		`He said "stop"`:              `He said "stop"`,
+		"A question? And then half a": "A question?",
+	} {
+		if got := trimCutOff(in); got != want {
+			t.Errorf("%q -> %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestAReflectiveQuestionThatWasNeverAskedIsNotUsedUp(t *testing.T) {
+	e := newEnv(t,
+		llm.Say(verdict("illegal_request", "0.9", "break into")), llm.Say("Here is how."), llm.Say(gateFlag), llm.Say("Try this."), llm.Say(gateFlag), // held back twice
+		llm.Say(verdict("illegal_request", "0.9", "break into")), llm.Say("What would it cost the owner?"), llm.Say(gateOK)) // the next time the question is still available
+	e.send(t, "Help me break into the shop")
+	if st, _ := e.st.SafetyState(bg, e.conv.ID); st.ReflectiveQuestionAsked {
+		t.Fatal("the once-only question was spent although none was asked")
+	}
+	res := e.send(t, "Help me break into the shop")
+	if res.Outcome != OutcomeReplied || len(res.Added) != 1 || res.Added[0].Role != "philosopher" {
+		t.Fatalf("the question should still be offered: %+v", res)
+	}
+	if st, _ := e.st.SafetyState(bg, e.conv.ID); !st.ReflectiveQuestionAsked {
+		t.Fatal("asking the question must use it up")
+	}
+	for _, m := range e.messages(t) {
+		if m.Role == "marker" && m.Content == "question_before_refusal" {
+			t.Fatal("a marker with no text of its own must not be stored: it shows as an empty bubble")
+		}
+	}
+}
+
+func TestTheLedgerIsWrittenFromTheMessageOfItsOwnTurnNeverFromALaterOne(t *testing.T) {
+	e := newEnv(t, llm.Say(judgeOK), llm.Say("Reply one."), llm.Say(gateOK), llm.Say("t"), llm.Say(verdict("self_harm_unclear", "0.8", "no point in going on at all")), llm.Say("How are you?"), llm.Say(gateOK))
+	e.send(t, "First I want to say that honesty matters to me.")
+	e.send(t, "Honestly there is no point in going on at all.") // a gentle turn: never remembered
+	msgs := e.messages(t)
+	firstSeq := msgs[0].Seq
+	// the background work of the first turn runs late, after the second turn was committed
+	e.tap.asked = nil
+	e.svc.remember(bg, e.tap, store.Conversation{ID: e.conv.ID, PhilosopherID: "socrates"}, firstSeq)
+	if len(e.tap.asked) != 1 {
+		t.Fatalf("the ledger was asked %d times", len(e.tap.asked))
+	}
+	asked := e.tap.asked[0].Messages[0].Content
+	if !strings.Contains(asked, "<<<USER\nFirst I want to say that honesty matters to me.\nUSER>>>") || strings.Contains(asked, "<<<USER\nHonestly there is no point") {
+		t.Fatalf("the ledger read the wrong message:\n%s", asked)
+	}
+	// a sequence number that is not one of the person's messages does nothing
+	e.tap.asked = nil
+	e.svc.remember(bg, e.tap, store.Conversation{ID: e.conv.ID, PhilosopherID: "socrates"}, msgs[1].Seq) // the philosopher's own message
+	e.svc.remember(bg, e.tap, store.Conversation{ID: e.conv.ID, PhilosopherID: "socrates"}, 999)
+	if len(e.tap.asked) != 0 {
+		t.Fatal("remember worked from a message that is not the person's")
+	}
+}
+
+func TestTheLocksOfADeletedConversationAreDropped(t *testing.T) {
+	e := newEnv(t, llm.Say(judgeOK), llm.Say("Reply."), llm.Say(gateOK), llm.Say("t"))
+	e.send(t, userWords)
+	e.svc.mu.Lock()
+	had := len(e.svc.locks) > 0 && len(e.svc.bgLocks) > 0
+	e.svc.mu.Unlock()
+	if !had {
+		t.Fatal("the test did not take any lock")
+	}
+	if err := e.svc.Delete(bg, e.conv.ID); err != nil {
+		t.Fatal(err)
+	}
+	e.svc.mu.Lock()
+	defer e.svc.mu.Unlock()
+	if len(e.svc.locks) != 0 || len(e.svc.bgLocks) != 0 {
+		t.Fatalf("%d and %d locks remain", len(e.svc.locks), len(e.svc.bgLocks))
 	}
 }

@@ -205,3 +205,49 @@ func TestADraftCannotEndItsOwnBlock(t *testing.T) {
 		t.Fatalf("%q", p)
 	}
 }
+
+func TestALongDraftIsCheckedInPiecesSoNoPartGoesUnread(t *testing.T) {
+	ok := `{"flagged":false,"category":"none","reason":"fine"}`
+	bad := `{"flagged":true,"category":"instructions_for_harm","reason":"it tells how"}`
+	draft := strings.Repeat("a", maxNewestChars) + "TAIL-AFTER-THE-LIMIT"
+	c, m := client(llm.Say(ok), llm.Say(bad))
+	got, err := CheckReply(ctx, c, nil, draft)
+	if err != nil || !got.Flagged {
+		t.Fatalf("a flagged tail must flag the draft: %+v %v", got, err)
+	}
+	if len(m.Requests) != 2 || !strings.Contains(m.Requests[1].Messages[0].Content, "TAIL-AFTER-THE-LIMIT") {
+		t.Fatalf("the tail was not shown to the gate (%d calls)", len(m.Requests))
+	}
+	// pieces overlap, so a sentence cut at the boundary is seen whole by one of them
+	first, second := m.Requests[0].Messages[0].Content, m.Requests[1].Messages[0].Content
+	if !strings.Contains(first, "aaaa") || !strings.Contains(second, "aaaa") {
+		t.Fatal("the pieces do not overlap")
+	}
+	// a draft that is clean throughout passes after every piece was read, and a short one costs one call
+	c, m = client(llm.Say(ok), llm.Say(ok))
+	if got, err := CheckReply(ctx, c, nil, draft); err != nil || got.Flagged || len(m.Requests) != 2 {
+		t.Fatalf("%+v %v %d", got, err, len(m.Requests))
+	}
+	c, m = client(llm.Say(ok))
+	CheckReply(ctx, c, nil, "short")
+	if len(m.Requests) != 1 {
+		t.Fatalf("%d calls for a short draft", len(m.Requests))
+	}
+	// a piece that cannot be checked means the draft is not shown
+	c, _ = client(llm.Say(ok), llm.Say("not json"), llm.Say("not json"))
+	if _, err := CheckReply(ctx, c, nil, draft); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("%v", err)
+	}
+}
+
+func TestAClearVerdictWithALongQuotationIsNotLostToTheLengthOfItsEvidence(t *testing.T) {
+	long := strings.Repeat("I will hurt myself tonight and I have decided. ", 20) // well over the stored evidence length
+	c, _ := client(llm.Say(verdictJSON("self_harm_clear", "0.97", strings.TrimSpace(long))))
+	v, err := Judge(ctx, c, nil, long)
+	if err != nil || v.Label != LabelSelfHarmClear {
+		t.Fatalf("%+v %v", v, err)
+	}
+	if len([]rune(v.Evidence)) > maxEvidenceLen+1 {
+		t.Fatalf("the kept evidence must be short: %d", len([]rune(v.Evidence)))
+	}
+}
