@@ -77,6 +77,30 @@ function mount(...nodes) {
 }
 // A card that acts like a button answers Enter and Space.
 function activate(fn) { return (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fn(); } }; }
+// Navigation. A screen reached from another is a step in the browser's history, so the phone's Back button (and the window's, if any) goes to
+// the screen before it instead of leaving the app. nav.stack holds how to draw each step.
+const nav = { stack: [], silent: false };
+function show(render) {
+  nav.stack.push(render);
+  try { window.history.pushState({ n: nav.stack.length }, ""); } catch (_) { /* no history: the Back buttons still work */ }
+  return render();
+}
+function back() { if (nav.stack.length) window.history.back(); else home(); }
+// Back to the first screen, forgetting every step; the history is rewound quietly, without drawing the steps it passes.
+function unwind() {
+  const k = nav.stack.length;
+  nav.stack = [];
+  if (!k) return;
+  nav.silent = true;
+  try { window.history.go(-k); } catch (_) { nav.silent = false; }
+}
+function onPop(e) {
+  if (nav.silent) { nav.silent = false; return; }
+  const n = e.state && e.state.n ? e.state.n : 0;
+  nav.stack = nav.stack.slice(0, n);
+  return n ? nav.stack[n - 1]() : home();
+}
+
 function screen(title, body, actions) {
   return [el("header", {}, el("h1", {}, title), actions || null), el("main", {}, body)];
 }
@@ -85,6 +109,7 @@ function errorLine(text) { return el("p", { class: "error", role: "alert" }, tex
 // ---- start: the engine, the key, the age, the provider
 
 async function boot() {
+  unwind();
   mount(...screen("Socrates", el("p", { class: "muted" }, "Starting…")));
   for (let i = 0; i < 120; i++) {
     const r = await api("GET", "/api/status");
@@ -187,16 +212,16 @@ async function home() {
     body.append(el("h2", { class: "muted" }, "Earlier conversations"));
     for (const k of list) {
       const who = (byId[k.philosopherId] || {}).name || k.philosopherId;
-      body.append(el("div", { class: "card click", role: "button", tabindex: "0", onclick: () => openChat(k.id), onkeydown: activate(() => openChat(k.id)) },
+      body.append(el("div", { class: "card click", role: "button", tabindex: "0", onclick: () => show(() => openChat(k.id)), onkeydown: activate(() => show(() => openChat(k.id))) },
         el("h2", {}, k.title || "New conversation"), el("div", { class: "muted" }, who)));
     }
   }
-  mount(...screen("Socrates", body, el("button", { class: "link", onclick: settings }, "Settings")));
+  mount(...screen("Socrates", body, el("button", { class: "link", onclick: () => show(settings) }, "Settings")));
 }
 
 async function startWith(p) {
   const r = await api("POST", "/api/conversations", { philosopherId: p.id });
-  if (r.status === 201) return openChat(r.data.id);
+  if (r.status === 201) return show(() => openChat(r.data.id));
   S.notice = r.data.error || "The conversation could not be started.";
   home();
 }
@@ -277,16 +302,16 @@ async function openChat(id) {
   };
   input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) submit(e); });
   const form = el("form", { class: "composer", onsubmit: submit }, input, send);
-  mount(el("header", {}, el("button", { class: "link", onclick: home }, "← Back"), el("h1", {}, who.name),
-    el("button", { class: "link", onclick: () => memory(who, () => openChat(id)) }, "Memory"),
-    confirmButton("Delete", "link", "Sure?", async () => { await api("DELETE", "/api/conversations/" + encodeURIComponent(id)); home(); })),
+  mount(el("header", {}, el("button", { class: "link", onclick: back }, "← Back"), el("h1", {}, who.name),
+    el("button", { class: "link", onclick: () => show(() => memory(who)) }, "Memory"),
+    confirmButton("Delete", "link", "Sure?", async () => { await api("DELETE", "/api/conversations/" + encodeURIComponent(id)); unwind(); home(); })),
     main, err, helpBox, el("div", { class: "helpbar" }, helpBtn), form);
   refreshHelp(); main.scrollTop = main.scrollHeight; input.focus();
 }
 
 // ---- what a philosopher remembers about the person
 
-async function memory(who, back) {
+async function memory(who) {
   const r = await api("GET", "/api/ledger?philosopherId=" + encodeURIComponent(who.id));
   const entries = r.data.entries || [];
   const body = el("div", { class: "stack" });
@@ -294,7 +319,7 @@ async function memory(who, back) {
   body.append(el("p", { class: "muted" }, `${who.name} keeps short notes of what you tell him, with your own words. They are stored encrypted on this computer, are used only in your conversations with ${who.name}, and are deleted with the conversation they came from. You can delete any of them.`), err);
   const remove = async (id) => {
     const d = await api("DELETE", "/api/ledger/" + encodeURIComponent(id));
-    if (d.status === 204 || d.status === 404) return memory(who, back);
+    if (d.status === 204 || d.status === 404) return memory(who);
     err.textContent = d.data.error || "That did not work.";
   };
   const label = { claim: "Something you said", term: "A word you used", tension: "Things that did not fit together" };
@@ -308,14 +333,14 @@ async function memory(who, back) {
   }
   if (entries.length) body.append(confirmButton(`Forget everything ${who.name} knows about me`, "danger", "Click again to forget it all", async () => {
     const d = await api("DELETE", "/api/ledger?philosopherId=" + encodeURIComponent(who.id));
-    if (d.status === 204) return memory(who, back);
+    if (d.status === 204) return memory(who);
     err.textContent = d.data.error || "That did not work.";
   }));
   mount(...screen(`What ${who.name} remembers`, body, el("button", { class: "link", onclick: back }, "Back")));
 }
 
 function ended(text) {
-  mount(...screen("Socrates", el("div", { class: "card stack" }, el("p", {}, text), el("button", { class: "primary", onclick: home }, "OK"))));
+  mount(...screen("Socrates", el("div", { class: "card stack" }, el("p", {}, text), el("button", { class: "primary", onclick: () => { unwind(); home(); } }, "OK"))));
 }
 
 // ---- settings
@@ -326,7 +351,7 @@ async function settings() {
   const p = await api("GET", "/api/settings/llm");
   body.append(el("div", { class: "card stack" }, el("h2", {}, "AI provider"),
     el("p", { class: "muted" }, p.data.provider ? `${p.data.provider}, models ${p.data.fastModel} and ${p.data.replyModel}` : "Not set up."),
-    el("button", { onclick: () => providerScreen(false, settings) }, "Change provider or key")));
+    el("button", { onclick: () => show(() => providerScreen(false, back)) }, "Change provider or key")));
   body.append(el("div", { class: "card stack" }, el("h2", {}, "Your data"),
     el("p", { class: "muted" }, "Conversations are stored encrypted on this computer only. An export holds your conversations and never your key."),
     el("div", { class: "row" },
@@ -362,7 +387,7 @@ async function settings() {
       const r = await api("DELETE", "/api/profile", { confirm: "delete" });
       if (r.status === 204) boot(); else err.textContent = r.data.error || "That did not work.";
     })));
-  mount(...screen("Settings", body, el("button", { class: "link", onclick: home }, "Done")));
+  mount(...screen("Settings", body, el("button", { class: "link", onclick: back }, "Done")));
 }
 
 async function exportData() {
@@ -375,6 +400,6 @@ async function exportData() {
   document.body.append(a); a.click(); a.remove();
 }
 
-function start(root) { S.root = root || document.getElementById("root"); return boot(); }
+function start(root) { S.root = root || document.getElementById("root"); window.addEventListener("popstate", onPop); return boot(); }
 if (typeof module !== "undefined") module.exports = { start, el, api, S };
 else window.addEventListener("DOMContentLoaded", () => start());

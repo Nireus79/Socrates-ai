@@ -24,6 +24,8 @@ function page(routes) {
 }
 const tick = () => new Promise((r) => setImmediate(r));
 async function settle(n = 6) { for (let i = 0; i < n; i++) await tick(); }
+// history moves are asynchronous in a browser (and in jsdom): give them a moment
+const later = (ms = 30) => new Promise((r) => setTimeout(r, ms));
 const text = (root) => root.textContent;
 const click = (el) => el.dispatchEvent(new global.window.Event("click", { bubbles: true }));
 
@@ -328,7 +330,7 @@ test("what is noted is shown as text, never as markup, and Back returns to the c
   await openMemory(p);
   assert.equal(p.root.querySelectorAll("img").length, 0);
   assert.ok(text(p.root).includes(evil));
-  click([...p.root.querySelectorAll("button")].find((b) => b.textContent === "Back")); await settle();
+  click([...p.root.querySelectorAll("button")].find((b) => b.textContent === "Back")); await later(); await settle();
   assert.ok(p.root.querySelector("textarea"), "back to the chat");
 });
 
@@ -447,4 +449,68 @@ test("the memory switch shows the current state, changes it, and goes back if th
   box.checked = true; box.dispatchEvent(new p.dom.window.Event("change")); await settle(); // the engine refuses
   assert.equal(box.checked, false, "a failed change must not look as if it worked");
   assert.match(text(p.root), /could not save/);
+});
+
+
+const hist = (p) => p.dom.window.history;
+
+test("each screen reached from another is a history step, and the Back button of the phone goes one screen back", async () => {
+  const p = page(ready({
+    "GET /api/settings/llm": [200, { provider: "claude", fastModel: "a", replyModel: "b" }],
+    "GET /api/ledger?philosopherId=socrates": [200, { entries: [] }],
+  }));
+  p.app.start(p.root); await settle();
+  assert.equal(hist(p).length, 1);
+  click(p.root.querySelector(".card.click")); await settle();            // home -> chat
+  click([...p.root.querySelectorAll("button")].find((b) => b.textContent === "Memory")); await settle();   // chat -> memory
+  assert.equal(hist(p).length, 3);
+  assert.match(text(p.root), /What Socrates remembers/);
+  hist(p).back(); await later();                                         // the phone's Back button
+  assert.ok(p.root.querySelector("textarea"), "memory -> chat");
+  hist(p).back(); await later();
+  assert.match(text(p.root), /Talk with/);                               // chat -> home
+  assert.equal(p.root.querySelector("textarea"), null);
+  click([...p.root.querySelectorAll("button")].find((b) => b.textContent === "Settings")); await settle();
+  assert.match(text(p.root), /AI provider/);
+  hist(p).back(); await later();
+  assert.match(text(p.root), /Talk with/);
+});
+
+test("the on-screen Back and Done buttons use the same steps, so the history does not pile up", async () => {
+  const p = page(ready({ "GET /api/settings/llm": [200, { provider: "claude", fastModel: "a", replyModel: "b" }] }));
+  p.app.start(p.root); await settle();
+  for (let i = 0; i < 3; i++) {
+    click([...p.root.querySelectorAll("button")].find((b) => b.textContent === "Settings")); await settle();
+    click([...p.root.querySelectorAll("button")].find((b) => b.textContent === "Done")); await later(); await settle();
+    assert.match(text(p.root), /Talk with/);
+  }
+  assert.equal(hist(p).length, 2, "settings was entered and left three times: one forward step may remain, the rest were replaced");
+});
+
+test("after deleting a conversation the history is rewound to the first screen without drawing the steps in between", async () => {
+  const p = page(ready({ "DELETE /api/conversations/c1": [204, {}] }));
+  p.app.start(p.root); await settle();
+  click(p.root.querySelector(".card.click")); await settle();
+  const del = [...p.root.querySelectorAll("button")].find((b) => b.textContent === "Delete");
+  click(del); click(del); await later(); await settle();
+  assert.match(text(p.root), /Talk with/);
+  assert.equal(hist(p).state, null, "the history is back at its first entry");
+  // pressing Back now must not bring the deleted chat back
+  hist(p).back(); await later();
+  assert.ok(!p.root.querySelector("textarea"));
+});
+
+test("a rewind of the history does not draw a screen over the one that was chosen: deleting everything lands on the welcome screen and stays there", async () => {
+  let wiped = false;
+  const p = page(ready({
+    "GET /api/profile": () => [200, wiped ? { ageConfirmed: false, hasProvider: false } : { ageConfirmed: true, hasProvider: true }],
+    "GET /api/settings/llm": [200, { provider: "claude", fastModel: "a", replyModel: "b" }],
+    "DELETE /api/profile": () => { wiped = true; return [204, {}]; },
+  }));
+  p.app.start(p.root); await settle();
+  click([...p.root.querySelectorAll("button")].find((b) => b.textContent === "Settings")); await settle();
+  const del = [...p.root.querySelectorAll("button")].find((b) => b.textContent === "Delete everything");
+  click(del); click(del); await later(); await settle(10); await later();
+  assert.match(text(p.root), /16 or older/, "the welcome screen must stay");
+  assert.ok(!/Talk with/.test(text(p.root)));
 });
