@@ -52,7 +52,7 @@ The turn is one reply call to the model (persona, conversation, running summary)
 
 ### Status of M0 (2026-10-23)
 Done and committed in `engine/` (`make check` green): secrets, keystore, privacy, the transport door, the encrypted store, the LLM layer, the settings API, the engine program with an end-to-end test of the real binary. Moly's safety evaluator was read and **will not be ported**; the safety stage is redesigned in `SAFETY_DESIGN.md` and waits for the founder's decisions (section 5 there).
-Still open in M0: profile export, import and delete (`userdata`), the test that fails if user text reaches a log (needs the conversation, M1), the safety stage itself.
+M0 is complete: the safety stage, the turn, profile export, import and delete, and the test that fails if user text reaches a log are done (SESSION_2026-10-23 sections 33 to 35). Next: M1 (the UI shell and the Wails window; live checks of the turn with real models).
 
 ## 5. How we work
 - Safety and privacy tests come first and gate every merge: `go vet ./... && go test -count=1 ./...` and the UI tests must be green.
