@@ -243,19 +243,19 @@ test("a locked philosopher is shown as locked and cannot be opened", async () =>
 
 test("a locked philosopher says what to finish, and a finished challenge is told once as a plain sentence", async () => {
   const needs = [{ id: "socrates", name: "Socrates", done: 2, required: 5 }];
-  const answers = [[200, { outcome: "replied", milestone: "You finished a challenge with Socrates: you took one question a real way through.", added: [{ role: "user", text: "Hm." }, { role: "philosopher", text: "And then?" }] }]];
+  const answers = [[200, { outcome: "replied", milestone: "You and Socrates thought one question all the way through.", added: [{ role: "user", text: "Hm." }, { role: "philosopher", text: "And then?" }] }]];
   const p = page(ready({
     "GET /api/philosophers": [200, { philosophers: [{ id: "socrates", name: "Socrates", era: "Athens", unlocked: true, challenges: 2 }, { id: "diogenes", name: "Diogenes", era: "Corinth", unlocked: false, needs }] }],
     "POST /api/conversations/c1/messages": () => answers.shift(),
   }));
   p.app.start(p.root); await settle();
   const locked = p.root.querySelector(".card.locked");
-  assert.match(locked.textContent, /Finish 5 challenges with Socrates \(2 so far\) to meet him/);
-  assert.match(p.root.querySelector(".card.click").textContent, /2 challenges finished/);
+  assert.match(locked.textContent, /Think 5 questions through with Socrates \(2 so far\) to meet him/);
+  assert.match(p.root.querySelector(".card.click").textContent, /2 questions thought through/);
   click(p.root.querySelector(".card.click")); await settle();
   const ta = p.root.querySelector("textarea");
   ta.value = "Hm."; p.root.querySelector("form").dispatchEvent(new p.dom.window.Event("submit", { cancelable: true })); await settle();
-  assert.match(text(p.root), /You finished a challenge with Socrates/);
+  assert.match(text(p.root), /You and Socrates thought one question all the way through/);
   assert.ok(p.root.querySelector(".msg.notice"), "shown as a notice, not as the philosopher's words");
   assert.ok(!/\d+%|score|points/i.test(text(p.root)), "no numbers or scores in the chat");
 });
@@ -267,22 +267,22 @@ test("a challenge is asked for, posed in the philosopher's words, taken up or le
   const p = page(ready({
     "GET /api/conversations/c1": () => [200, { conversation: { id: "c1", philosopherId: "socrates", title: "" }, messages: [{ role: "user", text: "Hm." }, { role: "philosopher", text: "And then?" }], offer }],
     "POST /api/conversations/c1/challenge": () => { offer = { state: "pending" }; return [200, { outcome: "replied", added: [{ role: "philosopher", text: "Here is a question for you, and you may leave it." }], offer }]; },
-    "POST /api/conversations/c1/challenge/accept": () => { offer = null; return [200, { outcome: "replied", added: [{ role: "user", text: "I'll take the challenge." }, { role: "philosopher", text: "What do you think is owed?" }] }]; },
+    "POST /api/conversations/c1/challenge/accept": () => { offer = null; return [200, { outcome: "replied", added: [{ role: "user", text: "I'll take up your question." }, { role: "philosopher", text: "What do you think is owed?" }] }]; },
     "POST /api/conversations/c1/challenge/decline": () => { offer = null; return [204, {}]; },
   }));
   p.app.start(p.root); await settle();
   click(p.root.querySelector(".card.click")); await settle();
-  assert.ok(buttonWith(p.root, "Challenge me") && !buttonWith(p.root, "Challenge me").hidden, "the person can always ask for one when the philosopher spoke last");
-  click(buttonWith(p.root, "Challenge me")); await settle();
+  assert.ok(buttonWith(p.root, "Put a question to me") && !buttonWith(p.root, "Put a question to me").hidden, "the person can always ask for one when the philosopher spoke last");
+  click(buttonWith(p.root, "Put a question to me")); await settle();
   assert.match(text(p.root), /Here is a question for you/);
-  assert.match(text(p.root), /Take up Socrates’s challenge\?/);
-  assert.ok(buttonWith(p.root, "Challenge me").hidden, "no second challenge while one waits");
+  assert.match(text(p.root), /Take up Socrates’s question\?/);
+  assert.ok(buttonWith(p.root, "Put a question to me").hidden, "no second challenge while one waits");
   click(buttonWith(p.root, "Not now")); await settle();
   assert.ok(p.calls.some((c) => c.key === "POST /api/conversations/c1/challenge/decline"));
   assert.ok(!/Take up Socrates/.test(text(p.root)));
-  click(buttonWith(p.root, "Challenge me")); await settle();
+  click(buttonWith(p.root, "Put a question to me")); await settle();
   click(buttonWith(p.root, "Take it")); await settle();
-  assert.match(text(p.root), /I'll take the challenge\./);
+  assert.match(text(p.root), /I'll take up your question\./);
   assert.match(text(p.root), /What do you think is owed\?/);
   assert.ok(!/Take up Socrates/.test(text(p.root)), "the question is gone once answered");
 });
@@ -295,7 +295,7 @@ test("a challenge the philosopher has ready is offered as a chip, and the Memory
   }));
   p.app.start(p.root); await settle();
   click(p.root.querySelector(".card.click")); await settle();
-  assert.match(text(p.root), /Socrates has a challenge for you\./);
+  assert.match(text(p.root), /Socrates has a question for you\./);
   click(buttonWith(p.root, "Hear it")); await settle();
   assert.match(text(p.root), /A question\./);
   click(buttonWith(p.root, "Memory")); await settle(10);
@@ -310,9 +310,9 @@ test("a failed challenge shows the plain sentence and the person can try again",
   }));
   p.app.start(p.root); await settle();
   click(p.root.querySelector(".card.click")); await settle();
-  click(buttonWith(p.root, "Challenge me")); await settle();
+  click(buttonWith(p.root, "Put a question to me")); await settle();
   assert.match(text(p.root), /Nothing was sent or saved/);
-  assert.ok(!buttonWith(p.root, "Challenge me").hidden);
+  assert.ok(!buttonWith(p.root, "Put a question to me").hidden);
 });
 
 const key = (el, k) => el.dispatchEvent(new global.window.KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true }));

@@ -395,7 +395,7 @@ func (s *Service) send(ctx context.Context, conversationID, text string, suggest
 			s.afterTurn(client, conv, userSeq)
 			res.Offer = s.OfferState(ctx, conv.ID)
 			if n, err := s.st.TakeAnnouncements(ctx, conv.ID); err == nil && n > 0 {
-				res.Milestone = "You finished a challenge with " + ph.Name + ": you took one question a real way through."
+				res.Milestone = "You and " + ph.Name + " thought one question all the way through."
 			}
 		}
 		return res, err

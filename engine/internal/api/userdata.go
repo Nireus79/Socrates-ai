@@ -118,12 +118,12 @@ func (h *handler) importProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(in.Challenges) > maxImportChallenges {
-		fail(w, http.StatusBadRequest, "The file holds too many challenges.")
+		fail(w, http.StatusBadRequest, "The file holds too many finished questions.")
 		return
 	}
 	for _, c := range in.Challenges {
 		if _, err := h.d.Roster.Get(c.PhilosopherID); err != nil || c.At < 0 {
-			fail(w, http.StatusBadRequest, "The file holds a challenge that cannot be read.")
+			fail(w, http.StatusBadRequest, "The file holds a finished question that cannot be read.")
 			return
 		}
 	}

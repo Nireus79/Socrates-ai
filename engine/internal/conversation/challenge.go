@@ -19,7 +19,7 @@ import (
 // unlocking the next philosopher.
 
 var (
-	ErrNoOffer = errors.New("there is no challenge waiting")
+	ErrNoOffer = errors.New("there is no question waiting")
 )
 
 // OfferView tells the screens what to show: "ready" (he has a challenge he could pose; the person may ask to hear it) or "pending" (he
@@ -78,7 +78,7 @@ func (s *Service) offerAllowedNow(ctx context.Context, conversationID string) (b
 	return !ss.PendingCheckin && (len(history) == 0 || history[0].Role == "philosopher"), nil
 }
 
-const topicInstruction = `Pose the person one fundamental topic to take up with you: a question at the root of how you think, of the kind you would put to someone you wanted to know better, chosen for this person from what you know of them. It must be a real question, not a task, and not one you have posed before. Answer with one JSON object and nothing else: {"topic": "the question, in plain words, as one sentence"}.`
+const topicInstruction = `Put to the person one fundamental question to take up with you: a question at the root of how you think, of the kind you would put to someone you wanted to know better, chosen for this person from what you know of them. It must be a real question, not a task, and not one you have posed before. Answer with one JSON object and nothing else: {"topic": "the question, in plain words, as one sentence"}.`
 
 // Offer poses a challenge: the model chooses a topic, the philosopher poses it in his own words (through the same output gate as any reply),
 // and the conversation waits for the person to take it or leave it. If one is already waiting, nothing new is made.
@@ -131,7 +131,7 @@ func (s *Service) Offer(ctx context.Context, conversationID string) (*Result, er
 		system += "\n\nWhat has been said earlier in this conversation, in short:\n" + sum
 	}
 	prior, _ := s.st.OfferTopics(ctx, ph.ID, 20)
-	asked := "Pose me a challenge."
+	asked := "Put a question to me."
 	topic, err := s.chooseTopic(ctx, client, system, history, prior, asked)
 	if err != nil {
 		return unavailable(err), nil
@@ -164,11 +164,11 @@ func (s *Service) Offer(ctx context.Context, conversationID string) (*Result, er
 }
 
 func posingNote(topic string) string {
-	return "You are posing the person a challenge now. The topic is " + strconv.Quote(topic) + ". Pose it in your own manner and your own words, briefly, and make clear that they may take it up or leave it. Do not number or label it."
+	return "You are now putting a fundamental question to the person, to take up with you. The question is " + strconv.Quote(topic) + ". Put it in your own manner and your own words, briefly, and make clear that they may take it up or leave it. Do not number or label it."
 }
 
 func acceptNote(topic string) string {
-	return "The person has just taken up the challenge you posed: " + strconv.Quote(topic) + ". Begin it in your own manner with one question, without announcing that it is a challenge."
+	return "The person has just taken up the question you put to them: " + strconv.Quote(topic) + ". Begin it in your own manner with one question, without announcing anything."
 }
 
 func (s *Service) chooseTopic(ctx context.Context, client Completer, system string, history []store.Message, prior []string, asked string) (string, error) {
@@ -231,7 +231,7 @@ func (s *Service) Accept(ctx context.Context, conversationID string) (*Result, e
 	if err != nil {
 		return nil, err
 	}
-	res, err := s.send(ctx, conversationID, "I'll take the challenge.", false, acceptNote(offer.Topic))
+	res, err := s.send(ctx, conversationID, "I'll take up your question.", false, acceptNote(offer.Topic))
 	if err != nil || res.Outcome != OutcomeReplied {
 		// the turn did not happen: put things back as they were
 		_ = s.st.Update(ctx, func(o *store.Ops) error {

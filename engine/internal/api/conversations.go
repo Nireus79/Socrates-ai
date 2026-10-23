@@ -185,9 +185,9 @@ func respondTurn(w http.ResponseWriter, res *conversation.Result, err error) {
 	case errors.Is(err, conversation.ErrLocked):
 		transport.WriteJSON(w, http.StatusForbidden, map[string]string{"error": "This philosopher is not unlocked yet.", "kind": "locked"})
 	case errors.Is(err, conversation.ErrNoOffer):
-		transport.WriteJSON(w, http.StatusConflict, map[string]string{"error": "There is no challenge waiting.", "kind": "no_offer"})
+		transport.WriteJSON(w, http.StatusConflict, map[string]string{"error": "There is no question waiting.", "kind": "no_offer"})
 	case errors.Is(err, conversation.ErrNotNow):
-		transport.WriteJSON(w, http.StatusConflict, map[string]string{"error": "A challenge cannot be posed just now.", "kind": "not_now"})
+		transport.WriteJSON(w, http.StatusConflict, map[string]string{"error": "A question cannot be put just now.", "kind": "not_now"})
 	case errors.Is(err, store.ErrNotFound):
 		fail(w, http.StatusNotFound, "There is no such conversation.")
 	case err != nil:
@@ -214,11 +214,11 @@ func (h *handler) acceptChallenge(w http.ResponseWriter, r *http.Request) {
 func (h *handler) declineChallenge(w http.ResponseWriter, r *http.Request) {
 	switch err := h.conv.Decline(r.Context(), r.PathValue("id")); {
 	case errors.Is(err, conversation.ErrNoOffer):
-		transport.WriteJSON(w, http.StatusConflict, map[string]string{"error": "There is no challenge waiting.", "kind": "no_offer"})
+		transport.WriteJSON(w, http.StatusConflict, map[string]string{"error": "There is no question waiting.", "kind": "no_offer"})
 	case errors.Is(err, store.ErrNotFound):
 		fail(w, http.StatusNotFound, "There is no such conversation.")
 	case err != nil:
-		fail(w, http.StatusInternalServerError, "the challenge could not be left")
+		fail(w, http.StatusInternalServerError, "the question could not be left")
 	default:
 		w.WriteHeader(http.StatusNoContent)
 	}

@@ -41,7 +41,7 @@ func TestAChallengeIsPosedInHisOwnWordsAndWaitsForAnAnswerWithoutPosingAnother(t
 		t.Fatalf("%+v", f)
 	}
 	topicCall := e.mock.Requests[len(e.mock.Requests)-3]
-	if topicCall.Role != llm.RoleReply || !strings.Contains(topicCall.System, "fundamental topic") || !strings.Contains(topicCall.System, "artificial Socrates") {
+	if topicCall.Role != llm.RoleReply || !strings.Contains(topicCall.System, "fundamental question") || !strings.Contains(topicCall.System, "artificial Socrates") {
 		t.Fatalf("the topic is chosen by the philosopher: %s", topicCall.System)
 	}
 	if again := e.offer(t); again.Offer == nil || again.Offer.State != "pending" || len(again.Added) != 0 || e.mock.Remaining() != 0 {
@@ -102,7 +102,7 @@ func TestTakingUpAChallengeMakesItTheInquiryAndTheAcceptanceIsAnOrdinaryTurn(t *
 	e.offer(t)
 	res, err := e.svc.Accept(bg, e.conv.ID)
 	e.svc.Wait()
-	if err != nil || res.Outcome != OutcomeReplied || res.Added[0].Role != "user" || res.Added[0].Text != "I'll take the challenge." || res.Added[1].Text != "What do you think is owed?" {
+	if err != nil || res.Outcome != OutcomeReplied || res.Added[0].Role != "user" || res.Added[0].Text != "I'll take up your question." || res.Added[1].Text != "What do you think is owed?" {
 		t.Fatalf("%+v %v", res, err)
 	}
 	in := e.current(t)
@@ -113,7 +113,7 @@ func TestTakingUpAChallengeMakesItTheInquiryAndTheAcceptanceIsAnOrdinaryTurn(t *
 		t.Fatal("still pending")
 	}
 	reply := e.mock.Requests[len(e.mock.Requests)-2]
-	if !strings.Contains(reply.System, "has just taken up the challenge") || !strings.Contains(reply.System, "What do you owe to someone") {
+	if !strings.Contains(reply.System, "has just taken up the question") || !strings.Contains(reply.System, "What do you owe to someone") {
 		t.Fatalf("the philosopher was not told: %s", reply.System)
 	}
 	asked := e.tap.asked[len(e.tap.asked)-1].Messages[0].Content

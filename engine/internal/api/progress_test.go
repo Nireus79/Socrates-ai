@@ -143,7 +143,7 @@ func TestAChallengeOverHTTPIsPosedTakenUpOrLeftAndTheHistoryShowsWhatWaits(t *te
 	code, res = a.do(t, "POST", "/api/conversations/"+id+"/challenge/accept", "")
 	a.svc.Wait()
 	added, _ := res["added"].([]any)
-	if code != 200 || len(added) != 2 || added[0].(map[string]any)["text"] != "I'll take the challenge." {
+	if code != 200 || len(added) != 2 || added[0].(map[string]any)["text"] != "I'll take up your question." {
 		t.Fatalf("%d %v", code, res)
 	}
 	if code, r := a.do(t, "POST", "/api/conversations/"+id+"/challenge/accept", ""); code != 409 || r["kind"] != "no_offer" {

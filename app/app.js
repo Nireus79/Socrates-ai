@@ -199,11 +199,11 @@ async function home() {
   for (const p of S.philosophers) {
     if (p.unlocked === false) {
       const who = (p.needs || []).map((n) => n.name + " (" + n.done + " so far)").join(" and ");
-      const need = p.needs && p.needs.length ? " Finish " + p.needs[0].required + " challenges with " + who + " to meet him." : "";
+      const need = p.needs && p.needs.length ? " Think " + p.needs[0].required + " questions through with " + who + " to meet him." : "";
       body.append(el("div", { class: "card locked", "aria-disabled": "true" }, el("h2", {}, p.name), el("div", { class: "muted" }, p.era + " · Locked." + need)));
       continue;
     }
-    const done = p.challenges > 0 ? " · " + p.challenges + (p.challenges === 1 ? " challenge" : " challenges") + " finished" : "";
+    const done = p.challenges > 0 ? " · " + p.challenges + (p.challenges === 1 ? " question" : " questions") + " thought through" : "";
     body.append(el("div", { class: "card click", role: "button", tabindex: "0", onclick: () => startWith(p), onkeydown: activate(() => startWith(p)) },
       el("h2", {}, p.name), el("div", { class: "muted" }, p.era + done)));
   }
@@ -251,7 +251,7 @@ async function openChat(id) {
   // A challenge is a fundamental topic the philosopher poses; the person takes it up or leaves it. `offer` is what the engine says waits.
   let offer = r.data.offer || null;
   const challengeBar = el("div", { class: "help", hidden: true });
-  const challengeBtn = el("button", { class: "link", type: "button" }, "Challenge me");
+  const challengeBtn = el("button", { class: "link", type: "button" }, "Put a question to me");
   const canChallenge = () => {
     const k = [...list.children].filter((c) => !c.classList.contains("opening"));
     const l = k[k.length - 1];
@@ -278,19 +278,19 @@ async function openChat(id) {
     if (res.status === 204 || res.data.kind === "no_offer") offer = null; else err.textContent = turnProblem(res);
     refreshHelp();
   };
-  challengeBtn.addEventListener("click", () => challengeStep("/challenge", who.name + " is thinking of a challenge…"));
+  challengeBtn.addEventListener("click", () => challengeStep("/challenge", who.name + " is thinking of a question…"));
   const showOffer = () => {
     const pending = offer && offer.state === "pending", ready = offer && offer.state === "ready";
     challengeBtn.hidden = pending || !canChallenge();
     if (pending) {
       challengeBar.hidden = false;
-      challengeBar.replaceChildren(el("div", { class: "muted" }, "Take up " + who.name + "’s challenge?"),
-        el("div", { class: "row" }, el("button", { class: "primary", type: "button", onclick: () => challengeStep("/challenge/accept", "Starting the challenge…") }, "Take it"),
+      challengeBar.replaceChildren(el("div", { class: "muted" }, "Take up " + who.name + "’s question?"),
+        el("div", { class: "row" }, el("button", { class: "primary", type: "button", onclick: () => challengeStep("/challenge/accept", "One moment…") }, "Take it"),
           el("button", { class: "link", type: "button", onclick: leaveChallenge }, "Not now")));
     } else if (ready && canChallenge()) {
       challengeBar.hidden = false;
-      challengeBar.replaceChildren(el("div", { class: "muted" }, who.name + " has a challenge for you."),
-        el("div", { class: "row" }, el("button", { class: "link", type: "button", onclick: () => challengeStep("/challenge", who.name + " is thinking of a challenge…") }, "Hear it")));
+      challengeBar.replaceChildren(el("div", { class: "muted" }, who.name + " has a question for you."),
+        el("div", { class: "row" }, el("button", { class: "link", type: "button", onclick: () => challengeStep("/challenge", who.name + " is thinking of a question…") }, "Hear it")));
     } else { challengeBar.replaceChildren(); challengeBar.hidden = true; }
   };
   const refreshHelp = () => { helpBtn.hidden = !canHelp(); if (helpBtn.hidden) helpBox.hidden = true; showOffer(); };
