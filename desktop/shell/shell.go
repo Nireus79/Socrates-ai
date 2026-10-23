@@ -38,6 +38,7 @@ func Start(path string, args, env []string, wait time.Duration) (*Engine, error)
 	cmd := exec.Command(path, args...)
 	cmd.Env = append(os.Environ(), env...)
 	cmd.Stderr = os.Stderr
+	hide(cmd)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, err

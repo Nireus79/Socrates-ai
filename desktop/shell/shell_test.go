@@ -1,3 +1,7 @@
+//go:build !windows
+
+// These tests start real unix programs; Windows is checked by compiling (make windows).
+
 package shell
 
 import (
