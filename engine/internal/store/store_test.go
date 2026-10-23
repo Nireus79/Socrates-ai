@@ -87,7 +87,7 @@ func TestReopeningNeedsTheSameKeyAndAWrongKeyChangesNothing(t *testing.T) {
 func TestADatabaseFromANewerVersionIsRefusedAndLeftAlone(t *testing.T) {
 	s, path, key := open(t)
 	s.Close()
-	raw, err := sql.Open("sqlite", "file:"+path)
+	raw, err := sql.Open("sqlite3", "file:"+path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +96,7 @@ func TestADatabaseFromANewerVersionIsRefusedAndLeftAlone(t *testing.T) {
 	if _, err := Open(path, key); !errors.Is(err, ErrNewerSchema) {
 		t.Fatalf("newer schema: %v", err)
 	}
-	raw, _ = sql.Open("sqlite", "file:"+path)
+	raw, _ = sql.Open("sqlite3", "file:"+path)
 	defer raw.Close()
 	var v int
 	raw.QueryRow("PRAGMA user_version").Scan(&v)
@@ -334,7 +334,7 @@ func TestACiphertextMovedOrChangedInTheFileIsNeverReturnedAsText(t *testing.T) {
 	d := mustConv(t, &s.Ops, "plato")
 	s.SetTitle(ctx, c.ID, "title of c")
 	s.SetTitle(ctx, d.ID, "title of d")
-	raw, err := sql.Open("sqlite", "file:"+path+"?_pragma=busy_timeout(5000)")
+	raw, err := sql.Open("sqlite3", "file:"+path+"?_pragma=busy_timeout(5000)")
 	if err != nil {
 		t.Fatal(err)
 	}

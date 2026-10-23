@@ -25,7 +25,16 @@ test("the shim waits for the native plugin, hands the page its address and token
   assert.equal(ok.base, "http://127.0.0.1:4321");
   assert.equal(ok.token, "tok");
   assert.deepEqual(await ok.saveFile("n.json", "{}"), { name: "n.json", text: "{}" });
+  // reconnect: after the engine was stopped and started again, the address and token are the new ones
+  let n = 0;
+  const again = run({ Plugins: { SocratesEngine: { start: async () => ({ port: 5000 + ++n, token: "tok" + n }), saveFile: async () => ({}) } } });
+  await again.ready;
+  assert.equal(again.base, "http://127.0.0.1:5001");
+  await again.reconnect();
+  assert.equal(again.base, "http://127.0.0.1:5002");
+  assert.equal(again.token, "tok2");
   const missing = run(undefined);
+  await assert.rejects(missing.reconnect(), /plugin is missing/);
   await assert.rejects(missing.ready, /plugin is missing/);
 });
 
@@ -40,4 +49,13 @@ test("the Android project keeps nothing in backups and allows cleartext only to 
   assert.equal((net.match(/<domain /g) || []).length, 1, "exactly one cleartext domain");
   assert.ok(!/<base-config[^>]*cleartextTrafficPermitted="true"/.test(net));
   assert.ok(!/ACTION_SEND|android.intent.action.SEND/.test(manifest), "no share target yet");
+});
+
+test("the Android activity asks the page to go back and only leaves when the page says it is at its first screen", () => {
+  const java = fs.readFileSync(path.join(root, "android/app/src/main/java/io/github/nireus79/socrates/MainActivity.java"), "utf8");
+  assert.match(java, /OnBackPressedCallback/);
+  assert.match(java, /evaluateJavascript\([^;]*socratesBack/s);
+  assert.match(java, /!"true"\.equals\(answer\)\) leave\(\)/);
+  assert.match(java, /setEnabled\(false\)/, "at the first screen the key must fall through to the system");
+  assert.ok(!/canGoBack|goBack\(\)/.test(java), "the WebView's own history is not used: it ignores steps made without a touch");
 });

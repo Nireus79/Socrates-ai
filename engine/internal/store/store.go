@@ -17,7 +17,7 @@ import (
 	"path/filepath"
 	"time"
 
-	_ "modernc.org/sqlite"
+	_ "github.com/ncruces/go-sqlite3/driver" // SQLite translated to plain Go: no C library, no raw system calls (Android blocks some), no JIT
 )
 
 const keyCheckValue = "socrates-key-check-v1"
@@ -123,17 +123,23 @@ func Open(path string, key []byte) (*Store, error) {
 		return nil, err
 	}
 	os.Chmod(dir, 0o700)
-	if f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0o600); err != nil { // create it private before SQLite does
-		return nil, err
-	} else {
+	// Create the database, and the shared-memory file that goes beside it, private before SQLite does (the driver gives the shared-memory
+	// file the default mode; the write-ahead log follows the database's mode through the "modeof" option below).
+	for _, p := range []string{path, path + "-shm"} {
+		f, err := os.OpenFile(p, os.O_RDWR|os.O_CREATE, 0o600)
+		if err != nil {
+			return nil, err
+		}
 		f.Close()
+		os.Chmod(p, 0o600)
 	}
 	q := url.Values{}
 	for _, p := range []string{"journal_mode(WAL)", "foreign_keys(1)", "busy_timeout(5000)", "secure_delete(1)", "synchronous(FULL)", "trusted_schema(0)"} {
 		q.Add("_pragma", p)
 	}
 	q.Set("_txlock", "immediate")
-	db, err := sql.Open("sqlite", (&url.URL{Scheme: "file", Opaque: filepath.ToSlash(path), RawQuery: q.Encode()}).String())
+	q.Set("modeof", filepath.ToSlash(path)) // the side files (write-ahead log, shared memory) get the database file's private mode
+	db, err := sql.Open("sqlite3", (&url.URL{Scheme: "file", Opaque: filepath.ToSlash(path), RawQuery: q.Encode()}).String())
 	if err != nil {
 		return nil, err
 	}

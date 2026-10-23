@@ -330,7 +330,7 @@ test("what is noted is shown as text, never as markup, and Back returns to the c
   await openMemory(p);
   assert.equal(p.root.querySelectorAll("img").length, 0);
   assert.ok(text(p.root).includes(evil));
-  click([...p.root.querySelectorAll("button")].find((b) => b.textContent === "Back")); await later(); await settle();
+  click([...p.root.querySelectorAll("button")].find((b) => b.textContent === "Back")); await settle();
   assert.ok(p.root.querySelector("textarea"), "back to the chat");
 });
 
@@ -452,55 +452,51 @@ test("the memory switch shows the current state, changes it, and goes back if th
 });
 
 
-const hist = (p) => p.dom.window.history;
+const pressBack = (p) => p.dom.window.socratesBack();
 
-test("each screen reached from another is a history step, and the Back button of the phone goes one screen back", async () => {
+test("each screen reached from another is a step, and the phone's Back key goes one screen back at a time, however fast it is pressed", async () => {
   const p = page(ready({
     "GET /api/settings/llm": [200, { provider: "claude", fastModel: "a", replyModel: "b" }],
     "GET /api/ledger?philosopherId=socrates": [200, { entries: [] }],
   }));
   p.app.start(p.root); await settle();
-  assert.equal(hist(p).length, 1);
+  assert.equal(pressBack(p), false, "at the first screen the page does not take the key: the app leaves");
   click(p.root.querySelector(".card.click")); await settle();            // home -> chat
   click([...p.root.querySelectorAll("button")].find((b) => b.textContent === "Memory")); await settle();   // chat -> memory
-  assert.equal(hist(p).length, 3);
   assert.match(text(p.root), /What Socrates remembers/);
-  hist(p).back(); await later();                                         // the phone's Back button
-  assert.ok(p.root.querySelector("textarea"), "memory -> chat");
-  hist(p).back(); await later();
-  assert.match(text(p.root), /Talk with/);                               // chat -> home
-  assert.equal(p.root.querySelector("textarea"), null);
+  assert.equal(pressBack(p), true); await settle();                      // two presses with no touch in between
+  assert.equal(pressBack(p), true); await settle();
+  assert.match(text(p.root), /Talk with/, "memory -> chat -> home");
+  assert.equal(pressBack(p), false);
   click([...p.root.querySelectorAll("button")].find((b) => b.textContent === "Settings")); await settle();
   assert.match(text(p.root), /AI provider/);
-  hist(p).back(); await later();
+  assert.equal(pressBack(p), true); await settle();
   assert.match(text(p.root), /Talk with/);
 });
 
-test("the on-screen Back and Done buttons use the same steps, so the history does not pile up", async () => {
+test("the on-screen Back and Done buttons use the same steps", async () => {
   const p = page(ready({ "GET /api/settings/llm": [200, { provider: "claude", fastModel: "a", replyModel: "b" }] }));
   p.app.start(p.root); await settle();
   for (let i = 0; i < 3; i++) {
     click([...p.root.querySelectorAll("button")].find((b) => b.textContent === "Settings")); await settle();
-    click([...p.root.querySelectorAll("button")].find((b) => b.textContent === "Done")); await later(); await settle();
+    click([...p.root.querySelectorAll("button")].find((b) => b.textContent === "Done")); await settle();
     assert.match(text(p.root), /Talk with/);
   }
-  assert.equal(hist(p).length, 2, "settings was entered and left three times: one forward step may remain, the rest were replaced");
+  assert.equal(pressBack(p), false, "the steps did not pile up: after leaving Settings three times we are at the first screen");
 });
 
-test("after deleting a conversation the history is rewound to the first screen without drawing the steps in between", async () => {
+test("after deleting a conversation the steps are forgotten and Back does not bring the chat back", async () => {
   const p = page(ready({ "DELETE /api/conversations/c1": [204, {}] }));
   p.app.start(p.root); await settle();
   click(p.root.querySelector(".card.click")); await settle();
   const del = [...p.root.querySelectorAll("button")].find((b) => b.textContent === "Delete");
-  click(del); click(del); await later(); await settle();
+  click(del); click(del); await settle(10);
   assert.match(text(p.root), /Talk with/);
-  assert.equal(hist(p).state, null, "the history is back at its first entry");
-  // pressing Back now must not bring the deleted chat back
-  hist(p).back(); await later();
+  assert.equal(pressBack(p), false);
   assert.ok(!p.root.querySelector("textarea"));
 });
 
-test("a rewind of the history does not draw a screen over the one that was chosen: deleting everything lands on the welcome screen and stays there", async () => {
+test("choosing a different screen with the steps in place (deleting everything) lands on the welcome screen and stays there", async () => {
   let wiped = false;
   const p = page(ready({
     "GET /api/profile": () => [200, wiped ? { ageConfirmed: false, hasProvider: false } : { ageConfirmed: true, hasProvider: true }],
@@ -510,7 +506,47 @@ test("a rewind of the history does not draw a screen over the one that was chose
   p.app.start(p.root); await settle();
   click([...p.root.querySelectorAll("button")].find((b) => b.textContent === "Settings")); await settle();
   const del = [...p.root.querySelectorAll("button")].find((b) => b.textContent === "Delete everything");
-  click(del); click(del); await later(); await settle(10); await later();
-  assert.match(text(p.root), /16 or older/, "the welcome screen must stay");
-  assert.ok(!/Talk with/.test(text(p.root)));
+  click(del); click(del); await settle(10);
+  assert.match(text(p.root), /16 or older/);
+  assert.equal(pressBack(p), false, "the welcome screen is the first screen");
+});
+
+test("when the phone's engine was stopped while the app was away the page asks for the new address and tries once more", async () => {
+  const p = page({ "GET http://127.0.0.1:2222/api/profile": [200, { ageConfirmed: true, hasProvider: true }] });
+  const shell = { ready: Promise.resolve(), base: "http://127.0.0.1:1111", token: "old", reconnects: 0 };
+  shell.reconnect = async () => { shell.reconnects++; shell.base = "http://127.0.0.1:2222"; shell.token = "new"; };
+  const seen = [];
+  const f = p.dom.window.fetch;
+  global.window.fetch = global.fetch = async (url, init) => { seen.push({ url, token: init.headers["X-Socrates-Token"] }); if (url.startsWith("http://127.0.0.1:1111")) throw new TypeError("connection refused"); return f(url, init); };
+  global.window.socratesShell = shell;
+  const r = await p.app.api("GET", "/api/profile");
+  assert.equal(r.status, 200);
+  assert.equal(shell.reconnects, 1);
+  assert.deepEqual(seen.map((s) => [s.url, s.token]), [["http://127.0.0.1:1111/api/profile", "old"], ["http://127.0.0.1:2222/api/profile", "new"]]);
+  delete global.window.socratesShell;
+});
+
+test("the page gives up plainly when the engine cannot be started again, and does not loop", async () => {
+  const p = page({});
+  const shell = { ready: Promise.resolve(), base: "http://127.0.0.1:1111", token: "old", reconnects: 0 };
+  shell.reconnect = async () => { shell.reconnects++; throw new Error("no engine"); };
+  global.window.fetch = global.fetch = async () => { throw new TypeError("connection refused"); };
+  global.window.socratesShell = shell;
+  const r = await p.app.api("GET", "/api/profile");
+  assert.equal(r.status, 0);
+  assert.match(r.data.error, /does not answer/);
+  assert.equal(shell.reconnects, 1);
+  // a second failure after a successful reconnect is also final: one retry only
+  shell.reconnect = async () => { shell.reconnects++; };
+  const r2 = await p.app.api("GET", "/api/profile");
+  assert.equal(r2.status, 0);
+  assert.equal(shell.reconnects, 2);
+  delete global.window.socratesShell;
+});
+
+test("the desktop page, which has no shell, does not try to reconnect", async () => {
+  const p = page({});
+  global.window.fetch = global.fetch = async () => { throw new TypeError("connection refused"); };
+  const r = await p.app.api("GET", "/api/profile");
+  assert.equal(r.status, 0);
 });

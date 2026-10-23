@@ -8,6 +8,12 @@
   shell.ready = plugin
     ? plugin.start().then(function (r) { shell.base = "http://127.0.0.1:" + r.port; shell.token = r.token; })
     : Promise.reject(new Error("the app's engine plugin is missing"));
+  // The engine may have been stopped while the app was away (it stops itself when idle); starting it again gives a new port and token.
+  shell.reconnect = function () {
+    return plugin
+      ? plugin.start().then(function (r) { shell.base = "http://127.0.0.1:" + r.port; shell.token = r.token; })
+      : Promise.reject(new Error("the app's engine plugin is missing"));
+  };
   // "Export": the system's save-as picker, so the person chooses where the file goes.
   shell.saveFile = function (name, text) { return plugin.saveFile({ name: name, text: text }); };
   window.socratesShell = shell;

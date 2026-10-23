@@ -17,23 +17,28 @@ function el(tag, props, ...kids) {
 }
 
 // A shell that cannot serve /api itself (the phone app: the engine is a separate process on the loopback address) sets window.socratesShell
-// = { ready: Promise, base, token, saveFile? } before this script runs. The desktop window does not: it serves /api on the page's own origin.
+// = { ready: Promise, base, token, reconnect?, saveFile? } before this script runs. The desktop window does not: it serves /api on the page's own origin.
 function shellInfo() { return typeof window !== "undefined" && window.socratesShell ? window.socratesShell : null; }
 
 async function api(method, path, body) {
-  const headers = body ? { "Content-Type": "application/json" } : {};
-  let url = path;
   const sh = shellInfo();
   if (sh) {
     try { await sh.ready; } catch (_) { return { status: 0, data: { error: "The engine does not answer." } }; }
-    url = sh.base + path;
-    headers["X-Socrates-Token"] = sh.token;
   }
+  const send = () => {
+    const headers = body ? { "Content-Type": "application/json" } : {};
+    let url = path;
+    if (sh) { url = sh.base + path; headers["X-Socrates-Token"] = sh.token; }
+    return fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
+  };
   let res;
   try {
-    res = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
+    res = await send();
   } catch (_) {
-    return { status: 0, data: { error: "The engine does not answer." } };
+    // The phone stops the engine when the app has been away a while; it holds a new address and token once started again. Ask for them
+    // and try once more before giving up.
+    if (!(sh && sh.reconnect)) return { status: 0, data: { error: "The engine does not answer." } };
+    try { await sh.reconnect(); res = await send(); } catch (_) { return { status: 0, data: { error: "The engine does not answer." } }; }
   }
   let data = null;
   if (res.status !== 204) { try { data = await res.json(); } catch (_) { data = null; } }
@@ -77,29 +82,21 @@ function mount(...nodes) {
 }
 // A card that acts like a button answers Enter and Space.
 function activate(fn) { return (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fn(); } }; }
-// Navigation. A screen reached from another is a step in the browser's history, so the phone's Back button (and the window's, if any) goes to
-// the screen before it instead of leaving the app. nav.stack holds how to draw each step.
-const nav = { stack: [], silent: false };
-function show(render) {
-  nav.stack.push(render);
-  try { window.history.pushState({ n: nav.stack.length }, ""); } catch (_) { /* no history: the Back buttons still work */ }
-  return render();
+// Navigation. A screen reached from another is a step on a stack of how to draw it, so Back goes to the screen before. The page does not use
+// the browser's history: a WebView ignores history steps that were made without a touch, which would swallow quick presses of the phone's
+// Back button. The phone shell calls window.socratesBack(); it answers whether the page took the key (false at the first screen: the app leaves).
+const nav = { stack: [] };
+function show(render) { nav.stack.push(render); return render(); }
+function goBack() {
+  if (!nav.stack.length) return false;
+  nav.stack.pop();
+  const prev = nav.stack[nav.stack.length - 1];
+  (prev || home)();
+  return true;
 }
-function back() { if (nav.stack.length) window.history.back(); else home(); }
-// Back to the first screen, forgetting every step; the history is rewound quietly, without drawing the steps it passes.
-function unwind() {
-  const k = nav.stack.length;
-  nav.stack = [];
-  if (!k) return;
-  nav.silent = true;
-  try { window.history.go(-k); } catch (_) { nav.silent = false; }
-}
-function onPop(e) {
-  if (nav.silent) { nav.silent = false; return; }
-  const n = e.state && e.state.n ? e.state.n : 0;
-  nav.stack = nav.stack.slice(0, n);
-  return n ? nav.stack[n - 1]() : home();
-}
+function back() { if (!goBack()) home(); }
+// Back to the first screen, forgetting every step.
+function unwind() { nav.stack = []; }
 
 function screen(title, body, actions) {
   return [el("header", {}, el("h1", {}, title), actions || null), el("main", {}, body)];
@@ -400,6 +397,6 @@ async function exportData() {
   document.body.append(a); a.click(); a.remove();
 }
 
-function start(root) { S.root = root || document.getElementById("root"); window.addEventListener("popstate", onPop); return boot(); }
+function start(root) { S.root = root || document.getElementById("root"); window.socratesBack = goBack; return boot(); }
 if (typeof module !== "undefined") module.exports = { start, el, api, S };
 else window.addEventListener("DOMContentLoaded", () => start());
