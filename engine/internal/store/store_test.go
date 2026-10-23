@@ -159,6 +159,9 @@ func TestMessagesGetSequenceNumbersAndComeBackInOrder(t *testing.T) {
 	if _, err := s.AppendMessage(ctx, c.ID, "narrator", "x"); err == nil {
 		t.Fatal("an unknown role was accepted")
 	}
+	if m, err := s.AppendMessage(ctx, c.ID, "marker", "crisis"); err != nil || m.Seq != 6 || m.Role != "marker" {
+		t.Fatalf("a marker takes its place in the order: %+v %v", m, err)
+	}
 	if _, err := s.AppendMessage(ctx, "no-such-conversation", "user", "x"); err == nil {
 		t.Fatal("a message for an unknown conversation was stored")
 	}
@@ -204,7 +207,7 @@ func TestATurnIsOneTransactionAndAFailedTurnKeepsNothing(t *testing.T) {
 			return err
 		}
 		o.SetSummary(ctx, c.ID, "a summary", 1)
-		o.SetPendingCheckin(ctx, c.ID, true)
+		o.SetSafetyState(ctx, c.ID, SafetyState{PendingCheckin: true})
 		return failure
 	})
 	if !errors.Is(err, failure) {
@@ -212,9 +215,9 @@ func TestATurnIsOneTransactionAndAFailedTurnKeepsNothing(t *testing.T) {
 	}
 	msgs, _ := s.Messages(ctx, c.ID)
 	_, _, hasSummary, _ := s.Summary(ctx, c.ID)
-	pending, _ := s.PendingCheckin(ctx, c.ID)
-	if len(msgs) != 0 || hasSummary || pending {
-		t.Fatalf("a failed turn left something: %d messages, summary %v, check-in %v", len(msgs), hasSummary, pending)
+	st, _ := s.SafetyState(ctx, c.ID)
+	if len(msgs) != 0 || hasSummary || st.PendingCheckin {
+		t.Fatalf("a failed turn left something: %d messages, summary %v, check-in %v", len(msgs), hasSummary, st.PendingCheckin)
 	}
 	err = s.Update(ctx, func(o *Ops) error {
 		o.AppendMessage(ctx, c.ID, "user", "a question")
@@ -250,16 +253,16 @@ func TestSummariesSettingsAndTheSafetyState(t *testing.T) {
 	if _, ok, _ := s.Setting(ctx, "provider"); ok {
 		t.Fatal("a deleted setting is still there")
 	}
-	if p, _ := s.PendingCheckin(ctx, c.ID); p {
-		t.Fatal("a check-in is pending by default")
+	if st, _ := s.SafetyState(ctx, c.ID); st.PendingCheckin || st.ReflectiveQuestionAsked {
+		t.Fatalf("a fresh conversation has a safety state: %+v", st)
 	}
-	s.SetPendingCheckin(ctx, c.ID, true)
-	if p, _ := s.PendingCheckin(ctx, c.ID); !p {
-		t.Fatal("the check-in was not recorded")
+	s.SetSafetyState(ctx, c.ID, SafetyState{PendingCheckin: true})
+	if st, _ := s.SafetyState(ctx, c.ID); !st.PendingCheckin || st.ReflectiveQuestionAsked {
+		t.Fatalf("the check-in was not recorded: %+v", st)
 	}
-	s.SetPendingCheckin(ctx, c.ID, false)
-	if p, _ := s.PendingCheckin(ctx, c.ID); p {
-		t.Fatal("the check-in was not cleared")
+	s.SetSafetyState(ctx, c.ID, SafetyState{ReflectiveQuestionAsked: true})
+	if st, _ := s.SafetyState(ctx, c.ID); st.PendingCheckin || !st.ReflectiveQuestionAsked {
+		t.Fatalf("the state was not replaced as a whole: %+v", st)
 	}
 }
 
@@ -269,7 +272,7 @@ func TestDeletingAConversationDeletesEverythingAboutIt(t *testing.T) {
 	for _, c := range []Conversation{a, b} {
 		s.AppendMessage(ctx, c.ID, "user", "hi")
 		s.SetSummary(ctx, c.ID, "s", 1)
-		s.SetPendingCheckin(ctx, c.ID, true)
+		s.SetSafetyState(ctx, c.ID, SafetyState{PendingCheckin: true})
 	}
 	if err := s.DeleteConversation(ctx, a.ID); err != nil {
 		t.Fatal(err)

@@ -46,7 +46,7 @@ var migrations = []string{
 		id              TEXT PRIMARY KEY,
 		conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
 		seq             INTEGER NOT NULL,
-		role            TEXT NOT NULL CHECK (role IN ('user', 'philosopher')),
+		role            TEXT NOT NULL CHECK (role IN ('user', 'philosopher', 'marker')),
 		content         BLOB NOT NULL,
 		created_at      INTEGER NOT NULL,
 		UNIQUE (conversation_id, seq)
@@ -65,6 +65,7 @@ var migrations = []string{
 	CREATE TABLE safety_state (
 		conversation_id TEXT PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
 		pending_checkin INTEGER NOT NULL DEFAULT 0 CHECK (pending_checkin IN (0, 1)),
+		reflective_asked INTEGER NOT NULL DEFAULT 0 CHECK (reflective_asked IN (0, 1)),
 		updated_at      INTEGER NOT NULL
 	);`,
 }
@@ -321,14 +322,14 @@ type Message struct {
 	ID             string
 	ConversationID string
 	Seq            int
-	Role           string // "user" or "philosopher"
+	Role           string // "user", "philosopher", or "marker" (a refusal, a crisis step or an age end: only the kind is kept, never the words)
 	Content        string
 	CreatedAt      time.Time
 }
 
 // AppendMessage adds a message at the end of the conversation.
 func (o *Ops) AppendMessage(ctx context.Context, conversationID, role, content string) (Message, error) {
-	if role != "user" && role != "philosopher" {
+	if role != "user" && role != "philosopher" && role != "marker" {
 		return Message{}, fmt.Errorf("unknown role %q", role)
 	}
 	id, now := newID(), o.stamp()
@@ -454,23 +455,32 @@ func (o *Ops) DeleteSetting(ctx context.Context, key string) error {
 
 // ---- safety state
 
-// SetPendingCheckin marks that the next turn of the conversation must open with the fixed check-in (after a crisis refusal).
-func (o *Ops) SetPendingCheckin(ctx context.Context, conversationID string, pending bool) error {
-	v := 0
-	if pending {
-		v = 1
+// SafetyState is what the safety stage remembers about a conversation.
+type SafetyState struct {
+	PendingCheckin          bool // the next turn must open with the fixed check-in (after a crisis refusal)
+	ReflectiveQuestionAsked bool // the one reflective question before refusing an illegal request has been used
+}
+
+// SetSafetyState records the state of a conversation.
+func (o *Ops) SetSafetyState(ctx context.Context, conversationID string, st SafetyState) error {
+	b := func(v bool) int {
+		if v {
+			return 1
+		}
+		return 0
 	}
-	_, err := o.q.ExecContext(ctx, `INSERT INTO safety_state(conversation_id, pending_checkin, updated_at) VALUES (?, ?, ?)
-		ON CONFLICT(conversation_id) DO UPDATE SET pending_checkin = excluded.pending_checkin, updated_at = excluded.updated_at`,
-		conversationID, v, o.stamp())
+	_, err := o.q.ExecContext(ctx, `INSERT INTO safety_state(conversation_id, pending_checkin, reflective_asked, updated_at) VALUES (?, ?, ?, ?)
+		ON CONFLICT(conversation_id) DO UPDATE SET pending_checkin = excluded.pending_checkin, reflective_asked = excluded.reflective_asked, updated_at = excluded.updated_at`,
+		conversationID, b(st.PendingCheckin), b(st.ReflectiveQuestionAsked), o.stamp())
 	return err
 }
 
-func (o *Ops) PendingCheckin(ctx context.Context, conversationID string) (bool, error) {
-	var v int
-	err := o.q.QueryRowContext(ctx, "SELECT pending_checkin FROM safety_state WHERE conversation_id = ?", conversationID).Scan(&v)
+// SafetyState returns the state of a conversation; a conversation with none recorded has the zero state.
+func (o *Ops) SafetyState(ctx context.Context, conversationID string) (SafetyState, error) {
+	var p, r int
+	err := o.q.QueryRowContext(ctx, "SELECT pending_checkin, reflective_asked FROM safety_state WHERE conversation_id = ?", conversationID).Scan(&p, &r)
 	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
+		return SafetyState{}, nil
 	}
-	return v == 1, err
+	return SafetyState{PendingCheckin: p == 1, ReflectiveQuestionAsked: r == 1}, err
 }
