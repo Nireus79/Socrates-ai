@@ -1,0 +1,6 @@
+{
+  "appId": "io.github.nireus79.socrates",
+  "appName": "Socrates",
+  "webDir": "www",
+  "android": { "allowMixedContent": false }
+}

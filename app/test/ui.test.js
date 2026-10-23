@@ -331,3 +331,44 @@ test("what is noted is shown as text, never as markup, and Back returns to the c
   click([...p.root.querySelectorAll("button")].find((b) => b.textContent === "Back")); await settle();
   assert.ok(p.root.querySelector("textarea"), "back to the chat");
 });
+
+test("with a phone shell the page talks to the engine's own address with the token, and waits for the engine to be ready", async () => {
+  const p = page({
+    "GET http://127.0.0.1:41000/api/status": [200, { status: "ready" }],
+    "GET http://127.0.0.1:41000/api/profile": [200, { ageConfirmed: false, hasProvider: false }],
+  });
+  let release; const ready = new Promise((r) => { release = r; });
+  const seen = [];
+  const f = p.dom.window.fetch;
+  global.window.fetch = global.fetch = async (url, init) => { seen.push({ url, token: (init.headers || {})["X-Socrates-Token"] }); return f(url, init); };
+  global.window.socratesShell = { ready, base: "http://127.0.0.1:41000", token: "phone-token" };
+  p.app.start(p.root); await settle();
+  assert.equal(seen.length, 0, "no request before the engine is ready");
+  release(); await settle(10);
+  assert.ok(seen.length >= 2 && seen.every((s) => s.url.startsWith("http://127.0.0.1:41000/api/") && s.token === "phone-token"), JSON.stringify(seen));
+  assert.match(text(p.root), /16 or older/);
+  delete global.window.socratesShell;
+});
+
+test("with a phone shell whose engine cannot start the page says the engine does not answer", async () => {
+  const p = page({});
+  global.window.socratesShell = { ready: Promise.reject(new Error("no engine")), base: "x", token: "t" };
+  const r = await p.app.api("GET", "/api/status");
+  assert.equal(r.status, 0);
+  assert.match(r.data.error, /does not answer/);
+  delete global.window.socratesShell;
+});
+
+test("on the phone the export goes to the system's save picker instead of a download link", async () => {
+  const saved = [];
+  const p = page(ready({ "GET /api/settings/llm": [200, { provider: "claude", fastModel: "a", replyModel: "b" }], "GET /api/profile/export": [200, { format: "socrates-export-1", conversations: [] }] }));
+  global.window.socratesShell = { ready: Promise.resolve(), base: "", token: "", saveFile: async (name, text) => { saved.push({ name, text }); } };
+  p.app.start(p.root); await settle(10);
+  click([...p.root.querySelectorAll("button")].find((b) => b.textContent === "Settings")); await settle();
+  click([...p.root.querySelectorAll("button")].find((b) => b.textContent === "Export conversations")); await settle();
+  assert.equal(saved.length, 1);
+  assert.equal(saved[0].name, "socrates-export.json");
+  assert.equal(JSON.parse(saved[0].text).format, "socrates-export-1");
+  assert.equal(p.dom.window.document.querySelectorAll("a[download]").length, 0);
+  delete global.window.socratesShell;
+});

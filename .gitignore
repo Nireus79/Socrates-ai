@@ -5,3 +5,11 @@ bin/
 dist/
 private/
 .env
+
+# mobile build output
+mobile/www/
+mobile/android/app/src/main/jniLibs/
+*.so
+*.keystore
+*.jks
+local.properties

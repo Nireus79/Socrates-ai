@@ -187,6 +187,12 @@ func TestTheDoorIsInPlaceAroundTheRealEngine(t *testing.T) {
 	if code, _ := e.get(t, "/api/settings/llm", map[string]string{transport.TokenHeader: e.hs.Token, "Host": "evil.example"}); code != 403 {
 		t.Fatalf("a foreign host: %d", code)
 	}
+	if code, _ := e.get(t, "/internal/idle", nil); code != 401 {
+		t.Fatalf("the idle report without the token: %d", code)
+	}
+	if code, body := e.get(t, "/internal/idle", tok); code != 200 || !strings.Contains(body, `"idleSeconds"`) {
+		t.Fatalf("the idle report with the token: %d %s", code, body)
+	}
 	if code, _ := e.get(t, "/api/nothing-here", tok); code != 404 {
 		t.Fatalf("an unknown route: %d", code)
 	}

@@ -1,0 +1,11 @@
+{
+  "name": "socrates-mobile",
+  "private": true,
+  "version": "0.0.0",
+  "description": "The Android app: the screens of ../app and the engine of ../engine in a Capacitor shell",
+  "dependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/cli": "^8.5.3",
+    "@capacitor/core": "^8.5.3"
+  }
+}

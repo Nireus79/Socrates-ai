@@ -16,10 +16,22 @@ function el(tag, props, ...kids) {
   return e;
 }
 
+// A shell that cannot serve /api itself (the phone app: the engine is a separate process on the loopback address) sets window.socratesShell
+// = { ready: Promise, base, token, saveFile? } before this script runs. The desktop window does not: it serves /api on the page's own origin.
+function shellInfo() { return typeof window !== "undefined" && window.socratesShell ? window.socratesShell : null; }
+
 async function api(method, path, body) {
+  const headers = body ? { "Content-Type": "application/json" } : {};
+  let url = path;
+  const sh = shellInfo();
+  if (sh) {
+    try { await sh.ready; } catch (_) { return { status: 0, data: { error: "The engine does not answer." } }; }
+    url = sh.base + path;
+    headers["X-Socrates-Token"] = sh.token;
+  }
   let res;
   try {
-    res = await fetch(path, { method, headers: body ? { "Content-Type": "application/json" } : {}, body: body ? JSON.stringify(body) : undefined });
+    res = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
   } catch (_) {
     return { status: 0, data: { error: "The engine does not answer." } };
   }
@@ -326,7 +338,10 @@ async function settings() {
 async function exportData() {
   const r = await api("GET", "/api/profile/export");
   if (r.status !== 200) return;
-  const a = el("a", { href: URL.createObjectURL(new Blob([JSON.stringify(r.data, null, 2)], { type: "application/json" })), download: "socrates-export.json" });
+  const text = JSON.stringify(r.data, null, 2);
+  const sh = shellInfo();
+  if (sh && sh.saveFile) { await sh.saveFile("socrates-export.json", text); return; } // the phone: the system's "save as" picker
+  const a = el("a", { href: URL.createObjectURL(new Blob([text], { type: "application/json" })), download: "socrates-export.json" });
   document.body.append(a); a.click(); a.remove();
 }
 

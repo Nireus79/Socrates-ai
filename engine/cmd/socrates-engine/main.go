@@ -125,7 +125,8 @@ func run() error {
 	defer conversations.Wait() // titles and summaries of the last turns are written before the database closes
 	transport.RegisterShutdown(mux, quit)
 	limiter := transport.NewRateLimiter(transport.DefaultLimits)
-	start.Set(transport.Limit(limiter, nil, mux))
+	activity := transport.NewActivity()
+	start.Set(activity.Wrap(transport.Limit(limiter, nil, mux)))
 	log.Printf("[engine] ready on port %d", transport.PortOf(lis))
 	<-quit
 	return nil
