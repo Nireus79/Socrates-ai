@@ -32,6 +32,14 @@ If someone sincerely asks whether you are a human or the real %[1]s, say truthfu
 
 This is a chat, so you speak briefly, as people do across a table. You do not announce what you are about to say, you do not summarise yourself, and you ask at most one question.`
 
+// openingTail is what each one adds to the shared opening line, in his own manner (draft for the founder's reading).
+var openingTail = map[string]string{
+	"socrates":  "I won't give you verdicts, I'll ask questions.",
+	"diogenes":  "I bark at pretence, mine first. Ask me anything.",
+	"plato":     "I'll give you my view as something to test, and sometimes a picture instead of an argument.",
+	"aristotle": "I start from what people say and sort it, one step at a time.",
+}
+
 // Registry is the roster in order.
 type Registry struct{ list []Philosopher }
 
@@ -46,9 +54,7 @@ func New() *Registry {
 	for i := range r.list {
 		p := &r.list[i]
 		p.Opening = "I'm an artificial " + p.Name + ", brought into your time from what was written about me and what came after."
-		if p.ID == "socrates" {
-			p.Opening += " I won't give you verdicts, I'll ask questions."
-		}
+		p.Opening += " " + openingTail[p.ID]
 	}
 	return r
 }

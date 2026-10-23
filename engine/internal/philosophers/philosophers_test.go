@@ -28,3 +28,16 @@ func TestEveryPhilosopherSpeaksBrieflyAndAsHimself(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestEveryoneHasOwnOpening(t *testing.T) {
+	seen := map[string]bool{}
+	for _, p := range New().All() {
+		if !strings.Contains(p.Opening, "artificial") {
+			t.Errorf("%s: opening must say he is artificial: %q", p.ID, p.Opening)
+		}
+		if strings.HasSuffix(p.Opening, " ") || seen[p.Opening] {
+			t.Errorf("%s: opening is empty-tailed or repeated: %q", p.ID, p.Opening)
+		}
+		seen[p.Opening] = true
+	}
+}
