@@ -99,7 +99,9 @@ func WriteJSON(w http.ResponseWriter, code int, v any) {
 	json.NewEncoder(w).Encode(v)
 }
 
-func deny(w http.ResponseWriter, code int, msg string) { WriteJSON(w, code, map[string]string{"error": msg}) }
+func deny(w http.ResponseWriter, code int, msg string) {
+	WriteJSON(w, code, map[string]string{"error": msg})
+}
 
 // ReadBody decodes a JSON body into v and answers 400 or 413 itself when it cannot. It reports whether the caller may go on.
 func ReadBody(w http.ResponseWriter, r *http.Request, v any) bool {

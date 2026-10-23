@@ -121,4 +121,3 @@ func RegisterShutdown(mux *http.ServeMux, quit chan<- struct{}) {
 		}
 	})
 }
-
