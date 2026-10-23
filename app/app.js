@@ -341,6 +341,16 @@ async function settings() {
     if (r.status === 200) home();
   } });
   body.append(importInput);
+  const mem = await api("GET", "/api/settings/memory");
+  const box = el("input", { type: "checkbox", id: "memory-on", style: "width:auto" });
+  box.checked = mem.data.enabled !== false;
+  box.addEventListener("change", async () => {
+    const r = await api("PUT", "/api/settings/memory", { enabled: box.checked });
+    if (r.status !== 200) { box.checked = !box.checked; err.textContent = r.data.error || "That did not work."; }
+  });
+  body.append(el("div", { class: "card stack" }, el("h2", {}, "Memory"),
+    el("div", { class: "row" }, box, el("label", { for: "memory-on", style: "margin:0" }, "The philosophers remember what I tell them")),
+    el("p", { class: "muted" }, "Each keeps short notes with your own words, only for himself, stored encrypted on this computer. Turning this off stops new notes and stops him using the old ones; it does not delete them. You can see and delete them from the Memory button inside a conversation.")));
   const st = await api("GET", "/api/status");
   body.append(el("div", { class: "card stack" }, el("h2", {}, "About"),
     el("p", { class: "muted" }, "The philosophers are artificial characters made from what was written about them. They are not real people, and they are not a source of medical, legal or other professional advice."),

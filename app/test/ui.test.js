@@ -428,3 +428,23 @@ test("settings say what the philosophers are, point to help in a crisis, and sho
   assert.match(t, /aged 16 and over/);
   assert.match(t, /Version 1\.2\.3/);
 });
+
+test("the memory switch shows the current state, changes it, and goes back if the change fails", async () => {
+  let enabled = true; const puts = [];
+  const p = page(ready({
+    "GET /api/settings/llm": [200, { provider: "claude", fastModel: "a", replyModel: "b" }],
+    "GET /api/settings/memory": () => [200, { enabled }],
+    "PUT /api/settings/memory": (b) => { puts.push(b); if (b.enabled === false) { enabled = false; return [200, { enabled }]; } return [500, { error: "could not save" }]; },
+  }));
+  p.app.start(p.root); await settle();
+  click([...p.root.querySelectorAll("button")].find((b) => b.textContent === "Settings")); await settle();
+  const box = p.root.querySelector("#memory-on");
+  assert.equal(box.checked, true);
+  assert.match(p.root.querySelector("label[for=memory-on]").textContent, /remember what I tell them/);
+  box.checked = false; box.dispatchEvent(new p.dom.window.Event("change")); await settle();
+  assert.deepEqual(puts, [{ enabled: false }]);
+  assert.equal(box.checked, false);
+  box.checked = true; box.dispatchEvent(new p.dom.window.Event("change")); await settle(); // the engine refuses
+  assert.equal(box.checked, false, "a failed change must not look as if it worked");
+  assert.match(text(p.root), /could not save/);
+});

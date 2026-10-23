@@ -60,3 +60,25 @@ func (h *handler) clearLedger(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+func (h *handler) getMemory(w http.ResponseWriter, r *http.Request) {
+	transport.WriteJSON(w, http.StatusOK, map[string]bool{"enabled": h.conv.MemoryEnabled(r.Context())})
+}
+
+func (h *handler) putMemory(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Enabled *bool `json:"enabled"`
+	}
+	if !transport.ReadBody(w, r, &body) {
+		return
+	}
+	if body.Enabled == nil {
+		fail(w, http.StatusBadRequest, "Say whether memory should be on or off.")
+		return
+	}
+	if err := h.conv.SetMemoryEnabled(r.Context(), *body.Enabled); err != nil {
+		fail(w, http.StatusInternalServerError, "the setting could not be saved")
+		return
+	}
+	transport.WriteJSON(w, http.StatusOK, map[string]bool{"enabled": *body.Enabled})
+}

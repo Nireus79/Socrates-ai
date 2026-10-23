@@ -47,6 +47,8 @@ func New(d Deps) (*http.ServeMux, *conversation.Service) {
 	mux.HandleFunc("GET /api/profile/export", h.exportProfile)
 	mux.HandleFunc("POST /api/profile/import", h.importProfile)
 	mux.HandleFunc("DELETE /api/profile", h.deleteProfile)
+	mux.HandleFunc("GET /api/settings/memory", h.getMemory)
+	mux.HandleFunc("PUT /api/settings/memory", h.putMemory)
 	mux.HandleFunc("GET /api/ledger", h.ledger)
 	mux.HandleFunc("DELETE /api/ledger/{id}", h.deleteEntry)
 	mux.HandleFunc("DELETE /api/ledger", h.clearLedger)

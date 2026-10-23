@@ -28,6 +28,9 @@ const (
 	contextMessages  = 24   // how many earlier messages the philosopher is given
 	storedForContext = 40   // how many are read from the store to build that context and the judge's
 	summaryEvery     = 8    // new messages before the running summary is written again
+	// MemoryKey is the setting that says whether the philosophers keep a ledger of what the person tells them ("0" turns it off; it is on
+	// unless the person turned it off).
+	MemoryKey = "memory.enabled"
 	// AgeKey is the setting that records the user's one-time confirmation of the age limit.
 	AgeKey = "age.confirmed"
 )
@@ -107,6 +110,22 @@ func (s *Service) forget(id string) {
 func (s *Service) AgeConfirmed(ctx context.Context) (bool, error) {
 	v, ok, err := s.st.Setting(ctx, AgeKey)
 	return ok && v == "1", err
+}
+
+// MemoryEnabled reports whether the ledger is kept. It is on unless the person turned it off, and unreadable counts as off.
+func (s *Service) MemoryEnabled(ctx context.Context) bool {
+	v, ok, err := s.st.Setting(ctx, MemoryKey)
+	return err == nil && (!ok || v != "0")
+}
+
+// SetMemoryEnabled turns the ledger on or off. Turning it off does not delete what is kept (the person does that on the Memory screen),
+// but nothing more is added and nothing kept is told to the philosophers.
+func (s *Service) SetMemoryEnabled(ctx context.Context, on bool) error {
+	v := "1"
+	if !on {
+		v = "0"
+	}
+	return s.st.SetSetting(ctx, MemoryKey, v)
 }
 
 func (s *Service) ConfirmAge(ctx context.Context) error { return s.st.SetSetting(ctx, AgeKey, "1") }
@@ -333,7 +352,7 @@ func (s *Service) send(ctx context.Context, conversationID, text string, suggest
 		if suggested {
 			system += "\n\n" + suggestedNote
 		}
-		if known, err := s.st.Entries(ctx, ph.ID, false); err == nil {
+		if known, err := s.st.Entries(ctx, ph.ID, false); err == nil && s.MemoryEnabled(ctx) {
 			if c := ledger.Context(known); c != "" {
 				system += "\n\n" + c
 			}
@@ -496,7 +515,7 @@ func (s *Service) afterTurn(client Completer, conv store.Conversation, userSeq i
 			}
 		}
 		s.summary(ctx, client, conv.ID)
-		if userSeq > 0 {
+		if userSeq > 0 && s.MemoryEnabled(ctx) {
 			s.remember(ctx, client, conv, userSeq)
 		}
 	}()

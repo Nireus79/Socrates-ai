@@ -815,3 +815,55 @@ func TestTheLocksOfADeletedConversationAreDropped(t *testing.T) {
 		t.Fatalf("%d and %d locks remain", len(e.svc.locks), len(e.svc.bgLocks))
 	}
 }
+
+func TestWithMemoryOffNothingIsRememberedOrToldAndNoLedgerCallIsMade(t *testing.T) {
+	e := newEnv(t, llm.Say(judgeOK), llm.Say("Reply one."), llm.Say(gateOK), llm.Say("t"), llm.Say(judgeOK), llm.Say("Reply two."), llm.Say(gateOK))
+	if !e.svc.MemoryEnabled(bg) {
+		t.Fatal("memory must be on unless the person turned it off")
+	}
+	e.tap.answer = []string{addClaimOp("lying is always wrong", "lying is always wrong")}
+	e.send(t, "I am sure that lying is always wrong.") // remembered while on
+	if got, _ := e.st.Entries(bg, "socrates", false); len(got) != 1 {
+		t.Fatalf("%+v", got)
+	}
+	if err := e.svc.SetMemoryEnabled(bg, false); err != nil {
+		t.Fatal(err)
+	}
+	if e.svc.MemoryEnabled(bg) {
+		t.Fatal("still on")
+	}
+	asked := len(e.tap.asked)
+	e.send(t, "And promises must always be kept, I think.")
+	if len(e.tap.asked) != asked {
+		t.Fatal("the ledger was asked while memory was off")
+	}
+	if got, _ := e.st.Entries(bg, "socrates", false); len(got) != 1 {
+		t.Fatalf("something new was remembered while memory was off: %+v", got)
+	}
+	var reply llm.Request
+	for _, r := range e.mock.Requests {
+		if r.Role == llm.RoleReply {
+			reply = r
+		}
+	}
+	if strings.Contains(reply.System, "lying is always wrong") {
+		t.Fatal("what was kept was told to the philosopher while memory was off")
+	}
+	// what was kept stays until the person deletes it, and comes back into use when memory is turned on again
+	e.svc.SetMemoryEnabled(bg, true)
+	if got, _ := e.st.Entries(bg, "socrates", false); len(got) != 1 {
+		t.Fatal("turning memory off must not delete what was kept")
+	}
+}
+
+func TestAnUnreadableMemorySettingCountsAsOff(t *testing.T) {
+	e := newEnv(t)
+	e.st.SetSetting(bg, MemoryKey, "0")
+	if e.svc.MemoryEnabled(bg) {
+		t.Fatal("0 is off")
+	}
+	e.st.SetSetting(bg, MemoryKey, "1")
+	if !e.svc.MemoryEnabled(bg) {
+		t.Fatal("1 is on")
+	}
+}

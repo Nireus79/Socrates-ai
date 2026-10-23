@@ -155,3 +155,24 @@ func TestAnImportWithABadMemoryEntryIsRefusedAsAWhole(t *testing.T) {
 		t.Fatalf("the refused import left %d conversations", len(list))
 	}
 }
+
+func TestTheMemorySettingCanBeReadAndChangedOverHTTP(t *testing.T) {
+	a := newApp(t, newScript(t))
+	_, r := a.do(t, "GET", "/api/settings/memory", "")
+	if r["enabled"] != true {
+		t.Fatalf("%v", r)
+	}
+	if code, r := a.do(t, "PUT", "/api/settings/memory", `{"enabled":false}`); code != 200 || r["enabled"] != false {
+		t.Fatalf("%d %v", code, r)
+	}
+	_, r = a.do(t, "GET", "/api/settings/memory", "")
+	if r["enabled"] != false {
+		t.Fatalf("%v", r)
+	}
+	if code, _ := a.do(t, "PUT", "/api/settings/memory", `{}`); code != 400 {
+		t.Fatalf("a missing value: %d", code)
+	}
+	if code, _ := a.do(t, "PUT", "/api/settings/memory", `{"enabled":true}`); code != 200 {
+		t.Fatal(code)
+	}
+}
