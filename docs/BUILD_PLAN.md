@@ -1,6 +1,6 @@
 # Build plan
 
-Status: decided by Claude on the founder's delegation, 2026-10-23 ("Moly as an example, totally redesign if better; quality and safety over time and cost"). Supersedes PLAN 4.9 (reuse table) and PLAN 8 (milestones). Nothing is built yet.
+Status: decided by Claude on the founder's delegation, 2026-10-23 ("Moly as an example, totally redesign if better; quality and safety over time and cost"). Supersedes PLAN 4.9 (reuse table) and PLAN 8 (milestones). See the Status section below for what is built.
 Working language of the project from now on: English.
 
 ## 1. The decision: rebuild, with Moly as a parts bin
@@ -50,9 +50,14 @@ The turn is one reply call to the model (persona, conversation, running summary)
 - **M5 Platforms.** Android (engine inside the app, Play Billing and the entitlement layer), desktop packaging and signing, store material; Steam or direct sale decided then. The browser extension stays optional.
 - **M6 Release.** Public beta, then listings.
 
-### Status of M0 (2026-10-23)
-Done and committed in `engine/` (`make check` green): secrets, keystore, privacy, the transport door, the encrypted store, the LLM layer, the settings API, the engine program with an end-to-end test of the real binary. Moly's safety evaluator was read and **will not be ported**; the safety stage is redesigned in `SAFETY_DESIGN.md` and waits for the founder's decisions (section 5 there).
-M0 is complete: the safety stage, the turn, profile export, import and delete, and the test that fails if user text reaches a log are done (SESSION_2026-10-23 sections 33 to 35). Next: M1 (the UI shell and the Wails window; live checks of the turn with real models).
+### Status (2026-10-23, late)
+- **M0 Foundation: done.** Secrets, keystore, privacy, transport door, encrypted store, LLM layer, settings API, the program, safety stage, profile export/import/delete. `make check` green.
+- **M1 The philosopher turn: done.** Philosopher registry and persona (a `Manner` per person), the turn (safety, reply, output gate, one transaction, title and summary), scenario tests on the mock, the screens, the Wails window, whole-journey tests against the real binary, simulated browser runs. Live checks were run twice with the founder's key; from now on all tests are simulated.
+- **M2 Other philosophers and entitlements: done** as far as decided: all four exist as data and are unlocked in the beta; the entitlement layer exists. The unlock rules and numbers are undecided.
+- **M3 Memory and help: done.** The ledger (claims, terms, tensions; quote-validated; per philosopher) and "Help me answer". The maturity score is not built (PLAN 16 unconfirmed).
+- **M4 Safety and quality: not started** beyond unit scenarios and one live smoke check. The batteries need a live run (founder's decision on cost) and an independent review of the safety path.
+- **M5 Platforms: in progress.** Engine compiles for Windows, macOS, Linux arm64, Android; the Android shell is written (`mobile/`); the first APK build is the next check. Not done: Play Billing, signing, store material, Windows/macOS runs and packaging.
+- **M6 Release: not started.**
 
 ## 5. How we work
 - Safety and privacy tests come first and gate every merge: `go vet ./... && go test -count=1 ./...` and the UI tests must be green.

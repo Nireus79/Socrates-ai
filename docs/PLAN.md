@@ -1,6 +1,7 @@
 # Socrates: a philosopher you can ask anything
 
-Status: plan, 2026-10-22, revised the same day after the founder's answers (sections 10 to 12) and again on 2026-10-23 (sections 15 to 17). Nothing is built.
+Status: plan, 2026-10-22, revised the same day after the founder's answers (sections 10 to 12) and again on 2026-10-23 (sections 15 to 18). The engine, screens, desktop window and Android shell are being built (BUILD_PLAN.md).
+Built so far: see BUILD_PLAN.md "Status".
 Where section 12 (the game) and an earlier section disagree, section 12 wins; where sections 15 to 17 disagree with any earlier section, they win.
 Sections 4.4, 4.8 and 6 are marked where they change. Late on 2026-10-23 the corpus and the retrieval of texts were shelved: section 18 wins over section 13 and over the corpus parts of sections 15 to 17. Sections 5, 9, 10, 12 and 14 were corrected on 2026-10-23 to agree with sections 15 to 17.
 

@@ -1,6 +1,6 @@
 # Claude Code guide: Socrates (Socrates-ai)
 
-Read first: `docs/PLAN.md` (architecture, layers, the game, decisions, open questions; sections 15 to 17 are the newest), then the session records of 2026-10-22 and 2026-10-23. Both are imported here:
+Read first: `docs/PLAN.md` (architecture, layers, the game, decisions, open questions; sections 15 to 18 are the newest), `docs/BUILD_PLAN.md`, then the session records of 2026-10-22 and 2026-10-23. They are imported here:
 
 @docs/PLAN.md
 @docs/SESSION_2026-10-22.md
@@ -12,9 +12,14 @@ Read first: `docs/PLAN.md` (architecture, layers, the game, decisions, open ques
 @docs/CHARACTER_PLATO.md
 @docs/CHARACTER_ARISTOTLE.md
 
-## State (2026-10-23)
-Planning only. No code yet. The founder asked on 2026-10-23 (late) to speak English from then on, to keep technical terms clear; reply in English (Greek only if asked), write documents and code in English. The repository was emptied of the old Python project (still in git history). Character sheets: Socrates approved, Diogenes agreed (age limit open), Plato and Aristotle drafted; common rules in CHARACTERS_COMMON.md (philosophers revived in today's world, know what came after, bridge to today). Desktop is a standalone app (engine + screens in a window, no extension, no installers; experiment pending). **No corpus and no retrieval (PLAN 18): the philosophers speak from the model's own knowledge; no invented memories.** One conversation, beta free. Next: M0 per `docs/BUILD_PLAN.md` (rebuild the core; Moly is a parts bin: port its keystore, secrets, privacy, transport security, LLM layer and safety stage with tests after review). Wait for the founder's go before writing code. The base code is Moly at `~/vs_projects/Moly/Moly` (Go backend,
-TypeScript extension, Capacitor Android, installers). Proof of concept: `~/vs_projects/Socrates` (question logic is in the `socratic-agents` package).
+## State (2026-10-23, late)
+M0 and most of M1 to M3 are built, committed and pushed (see `docs/BUILD_PLAN.md` "Status" and the session record, sections 31 to 46). The founder speaks English from now on (Greek only if asked); documents and code are English.
+What exists:
+- `engine/` (Go, module `socrates`, `make check` is the gate): transport door, encrypted store (field-level AES-GCM), keystore, LLM layer (Claude, OpenAI, Ollama), safety stage (judge, pure decision, output gate, fixed texts), the turn (`internal/conversation`), philosophers as data, suggestions ("Help me answer"), the ledger (claims, terms, tensions, per philosopher, quote-validated), entitlements (beta grants everything), profile export/import/delete, idle report.
+- `app/` the screens (plain JS, no build step; `npm test` = jsdom tests). `desktop/` the Wails v2 window (own Go module; `make -C desktop build`). `mobile/` the Android shell (Capacitor; see its README).
+- No corpus and no retrieval (PLAN 18). Replies are brief by a `Manner` sentence per philosopher.
+Open: the maturity score (PLAN 16, unconfirmed), unlock rules and daily numbers, Play Billing, store listing and signing, the live quality batteries (M4), Windows/macOS runs, the logo files (untracked, waiting for the founder).
+**Testing rule (founder, 2026-10-23): all tests are simulated** (scripted mock model, stand-in model servers, jsdom, headless browser). Never use the founder's API key or any paid provider without being asked; the founder does the final manual test. Do not ask permission for every task: proceed through the build plan, and ask only for real product decisions.
 
 ## Rules
 - Do not build ahead of decisions. Answer the question asked and wait for a go.
