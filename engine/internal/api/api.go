@@ -8,7 +8,9 @@ import (
 	"log"
 	"net/http"
 
+	"socrates/internal/conversation"
 	"socrates/internal/llm"
+	"socrates/internal/philosophers"
 	"socrates/internal/store"
 	"socrates/internal/transport"
 )
@@ -16,23 +18,40 @@ import (
 // Deps is what the routes need.
 type Deps struct {
 	Store      *store.Store
+	Roster     *philosophers.Registry // nil: the standard roster
 	Version    string
 	LLMOptions []llm.Option // only tests change these (a stand-in provider, no waiting between retries)
 }
 
 // New builds the routes. The caller adds the shutdown route and puts the door (transport.Policy) and the rate limit in front.
-func New(d Deps) *http.ServeMux {
-	h := &handler{d}
+// It also returns the conversation service, so that the program can wait for its background work (titles and summaries) when it stops.
+func New(d Deps) (*http.ServeMux, *conversation.Service) {
+	if d.Roster == nil {
+		d.Roster = philosophers.New()
+	}
+	h := &handler{d: d}
+	h.conv = conversation.New(d.Store, h.models, d.Roster)
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/status", h.status)
 	mux.HandleFunc("GET /api/settings/llm", h.getLLM)
 	mux.HandleFunc("PUT /api/settings/llm", h.putLLM)
 	mux.HandleFunc("DELETE /api/settings/llm/key", h.deleteKey)
 	mux.HandleFunc("POST /api/settings/llm/test", h.testLLM)
-	return mux
+	mux.HandleFunc("GET /api/profile", h.profile)
+	mux.HandleFunc("POST /api/profile/age", h.confirmAge)
+	mux.HandleFunc("GET /api/philosophers", h.philosophers)
+	mux.HandleFunc("POST /api/conversations", h.startConversation)
+	mux.HandleFunc("GET /api/conversations", h.listConversations)
+	mux.HandleFunc("GET /api/conversations/{id}", h.getConversation)
+	mux.HandleFunc("DELETE /api/conversations/{id}", h.deleteConversation)
+	mux.HandleFunc("POST /api/conversations/{id}/messages", h.sendMessage)
+	return mux, h.conv
 }
 
-type handler struct{ d Deps }
+type handler struct {
+	d    Deps
+	conv *conversation.Service
+}
 
 func (h *handler) status(w http.ResponseWriter, _ *http.Request) {
 	transport.WriteJSON(w, http.StatusOK, map[string]string{"status": "ready", "version": h.d.Version})

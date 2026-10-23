@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
@@ -29,10 +30,12 @@ type LLMSettingsView struct {
 	Tested         bool   `json:"tested"` // both models were measured on the program's batteries
 }
 
-func (h *handler) load(r *http.Request) (llm.Settings, bool, error) {
+func (h *handler) load(r *http.Request) (llm.Settings, bool, error) { return h.loadCtx(r.Context()) }
+
+func (h *handler) loadCtx(ctx context.Context) (llm.Settings, bool, error) {
 	var s llm.Settings
 	get := func(k string) (string, error) {
-		v, _, err := h.d.Store.Setting(r.Context(), k)
+		v, _, err := h.d.Store.Setting(ctx, k)
 		return v, err
 	}
 	var err error

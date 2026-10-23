@@ -146,8 +146,8 @@ func TestAnUnreadableAnswerIsAskedForAgainOnceThenTheTurnFailsClosed(t *testing.
 
 func TestAFailedCallFailsClosedAndAnEmptyMessageNeedsNoCall(t *testing.T) {
 	c, m := client(llm.Fail(&llm.Error{Kind: llm.KindOverloaded, Reason: "busy"}))
-	if _, err := Judge(ctx, c, nil, "hello"); !errors.Is(err, ErrUnavailable) || len(m.Requests) != 1 {
-		t.Fatalf("%v after %d calls", err, len(m.Requests))
+	if _, err := Judge(ctx, c, nil, "hello"); !errors.Is(err, ErrUnavailable) || !errors.Is(err, llm.ErrOverloaded) || len(m.Requests) != 1 {
+		t.Fatalf("%v after %d calls (the provider's kind must stay reachable)", err, len(m.Requests))
 	}
 	c, m = client()
 	got, err := Judge(ctx, c, nil, "  \n ")

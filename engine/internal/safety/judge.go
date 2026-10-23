@@ -161,7 +161,7 @@ func Judge(ctx context.Context, c Completer, recent []llm.Message, newest string
 	for attempt := 0; attempt < judgeAttempts; attempt++ {
 		resp, err := c.Complete(ctx, req)
 		if err != nil {
-			return Verdict{}, fmt.Errorf("%w: %v", ErrUnavailable, err)
+			return Verdict{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
 		}
 		v, err := parseVerdict(resp.Text, userTexts)
 		if err == nil {

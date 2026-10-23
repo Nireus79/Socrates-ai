@@ -75,7 +75,7 @@ func CheckReply(ctx context.Context, c Completer, recent []llm.Message, draft st
 	for attempt := 0; attempt < judgeAttempts; attempt++ {
 		resp, err := c.Complete(ctx, req)
 		if err != nil {
-			return GateVerdict{}, fmt.Errorf("%w: %v", ErrUnavailable, err)
+			return GateVerdict{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
 		}
 		v, err := parseGate(resp.Text)
 		if err == nil {

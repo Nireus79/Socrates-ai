@@ -121,7 +121,8 @@ func run() error {
 	}
 	defer db.Close()
 
-	mux := api.New(api.Deps{Store: db, Version: version})
+	mux, conversations := api.New(api.Deps{Store: db, Version: version})
+	defer conversations.Wait() // titles and summaries of the last turns are written before the database closes
 	transport.RegisterShutdown(mux, quit)
 	limiter := transport.NewRateLimiter(transport.DefaultLimits)
 	start.Set(transport.Limit(limiter, nil, mux))

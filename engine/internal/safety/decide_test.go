@@ -154,7 +154,7 @@ func TestTheFixedTexts(t *testing.T) {
 	if !strings.Contains(TextAgeConfirmation, "16") || !strings.Contains(TextEndForAge, "16") {
 		t.Error("the age texts must name the limit")
 	}
-	for _, k := range []MarkerKind{MarkerCrisis, MarkerCheckIn, MarkerRefuseHarm, MarkerRefuseIllegal, MarkerRefuseMinor, MarkerEndForAge} {
+	for _, k := range []MarkerKind{MarkerCrisis, MarkerCheckIn, MarkerRefuseHarm, MarkerRefuseIllegal, MarkerRefuseMinor, MarkerEndForAge, MarkerGateFallback} {
 		if TextFor(k) == "" {
 			t.Errorf("marker %s has no text", k)
 		}

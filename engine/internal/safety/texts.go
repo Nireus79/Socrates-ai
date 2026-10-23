@@ -35,6 +35,8 @@ const (
 	MarkerEndForAge     MarkerKind = "end_for_age"
 	// MarkerAskBeforeRefusal stands for a request that was not kept; the reflective question that follows is an ordinary message of the philosopher.
 	MarkerAskBeforeRefusal MarkerKind = "question_before_refusal"
+	// MarkerGateFallback stands for a reply that was held back twice by the check before the user saw it.
+	MarkerGateFallback MarkerKind = "gate_fallback"
 )
 
 // TextFor is the fixed text a marker stands for.
@@ -52,6 +54,8 @@ func TextFor(k MarkerKind) string {
 		return TextRefuseMinor
 	case MarkerEndForAge:
 		return TextEndForAge
+	case MarkerGateFallback:
+		return TextGateFallback
 	}
 	return ""
 }

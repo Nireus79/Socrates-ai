@@ -82,7 +82,7 @@ func setup(t *testing.T) *env {
 	}
 	t.Cleanup(func() { st.Close() })
 	prov := newProvider(t)
-	mux := New(Deps{Store: st, Version: "test", LLMOptions: []llm.Option{llm.WithBaseURL(prov.srv.URL), llm.WithSleep(func(context.Context, time.Duration) error { return nil })}})
+	mux, _ := New(Deps{Store: st, Version: "test", LLMOptions: []llm.Option{llm.WithBaseURL(prov.srv.URL), llm.WithSleep(func(context.Context, time.Duration) error { return nil })}})
 	pol, _ := transport.NewPolicy(nil)
 	srv := httptest.NewServer(pol.Middleware(mux))
 	t.Cleanup(srv.Close)
