@@ -151,7 +151,7 @@ The user can ask again for different ones, which excludes the previous set.
 If the user is still stuck after suggestions, Socrates may say what he himself thinks, flagged as one view among others, and the question is
 marked skipped (pending, it returns once), exactly the Moly skip rules.
 
-### 4.9 Reuse from Moly, file by file
+### 4.9 Reuse from Moly, file by file (SUPERSEDED on 2026-10-23 by BUILD_PLAN.md: Moly is a parts bin, the core is rebuilt)
 
 | Keep as is or nearly | Rework | Remove |
 |---|---|---|
@@ -184,7 +184,7 @@ English only at the beginning (decided 2026-10-22). Prompts are English.
 - Privacy tests: user content absent from logs, deletion leaves nothing.
 - Character tests (2026-10-23): a factual-fidelity battery (a philosopher does not assert an episode that did not happen or a work he did not write; checked by hand and by a judge on a fixed list of questions), the output gate on questions, claims of being real or human, and the "bridge to today" being a question; a local battery per philosopher (CHARACTERS_COMMON.md 5).
 
-## 8. Milestones
+## 8. Milestones (SUPERSEDED on 2026-10-23 by BUILD_PLAN.md section 4)
 1. **M0 Fork**: copy Moly into this repository as a starting point (Go module, the screens of the extension as the shared UI, mobile; installers and native host dropped), strip contacts, project-shaped layers
    and the sidebar contacts panel; build a desktop window around engine and screens; green build and tests; renamed identifiers (package `io.github.nireus79.socrates`, app and data names).
 2. **M1 Ledger**: the new entities, operations, store rules, undo, projection to the ledger panel; memory battery.
