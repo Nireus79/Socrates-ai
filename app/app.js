@@ -40,6 +40,21 @@ async function api(method, path, body) {
   return { status: res.status, data: data || {} };
 }
 
+// What a failed provider call means to the person, by the kind the engine reports. Nothing was sent or saved in any of these cases.
+const PROVIDER_PROBLEMS = {
+  auth: "Your AI provider did not accept your key. Check it in Settings, under AI provider.",
+  rate_limit: "Your AI provider says you have reached its limit for now. Try again later, or check your plan with the provider.",
+  overloaded: "Your AI provider is busy right now. Please try again in a moment.",
+  server: "Your AI provider had a problem on its side. Please try again in a moment.",
+  model_gone: "The model you chose is no longer available. Choose the provider again in Settings to pick a current one.",
+  network: "I could not reach your AI provider. Check your connection and try again.",
+  empty: "The model sent back nothing. Please try again.",
+};
+function providerProblem(d) {
+  const base = PROVIDER_PROBLEMS[d && d.providerKind] || (d && (d.text || d.error)) || "I cannot answer right now.";
+  return base + " Nothing was sent or saved.";
+}
+
 const S = { philosophers: [], root: null, current: null };
 
 // A button that asks twice: the first click arms it, the second (within five seconds) does it. No browser dialogs, which not every shell shows.
@@ -215,7 +230,7 @@ async function openChat(id) {
     const r = await api("POST", "/api/conversations/" + encodeURIComponent(id) + "/suggestions", { exclude: offered });
     helpBtn.disabled = false;
     if (r.status !== 200) {
-      helpBox.replaceChildren(el("span", { class: "error" }, r.data.error || "That did not work."), el("button", { class: "link", type: "button", onclick: () => { helpBox.hidden = true; } }, "Close"));
+      helpBox.replaceChildren(el("span", { class: "error" }, r.status === 503 ? providerProblem(r.data).replace(" Nothing was sent or saved.", "") : (r.data.error || "That did not work.")), el("button", { class: "link", type: "button", onclick: () => { helpBox.hidden = true; } }, "Close"));
       return;
     }
     const items = r.data.suggestions || [];
@@ -253,7 +268,7 @@ async function openChat(id) {
       if (d.outcome === "fixed" && !(d.added || []).some((m) => m.role === "marker")) add({ role: "marker", text: d.text });
     } else {
       mine.remove(); input.value = text; fromSuggestion = flag;
-      if (res.status === 503) err.textContent = d.text || "I cannot answer right now. Nothing was sent or saved; please try again in a moment.";
+      if (res.status === 503) err.textContent = providerProblem(d);
       else if (d.kind === "age") err.textContent = AGE_TEXT;
       else if (d.kind === "no_provider") err.textContent = "Set up an AI provider in Settings first.";
       else err.textContent = d.error || "That did not work.";
@@ -326,6 +341,11 @@ async function settings() {
     if (r.status === 200) home();
   } });
   body.append(importInput);
+  const st = await api("GET", "/api/status");
+  body.append(el("div", { class: "card stack" }, el("h2", {}, "About"),
+    el("p", { class: "muted" }, "The philosophers are artificial characters made from what was written about them. They are not real people, and they are not a source of medical, legal or other professional advice."),
+    el("p", { class: "muted" }, "If you are thinking of hurting yourself, please call your local emergency number or a crisis line, or tell someone you trust."),
+    el("p", { class: "muted" }, "For people aged 16 and over. " + (st.data.version ? "Version " + st.data.version + "." : ""))));
   body.append(el("div", { class: "card stack" }, el("h2", {}, "Delete everything"),
     el("p", { class: "muted" }, "Removes every conversation, your provider key and your settings from this computer. It cannot be undone."),
     confirmButton("Delete everything", "danger", "Click again to delete everything", async () => {

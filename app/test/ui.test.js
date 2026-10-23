@@ -372,3 +372,59 @@ test("on the phone the export goes to the system's save picker instead of a down
   assert.equal(p.dom.window.document.querySelectorAll("a[download]").length, 0);
   delete global.window.socratesShell;
 });
+
+test("a failed provider call says what went wrong in plain words, and always that nothing was sent or saved", async () => {
+  const cases = {
+    auth: /did not accept your key.*Settings/,
+    rate_limit: /reached its limit/,
+    overloaded: /busy right now/,
+    server: /problem on its side/,
+    model_gone: /no longer available/,
+    network: /could not reach your AI provider/,
+    empty: /sent back nothing/,
+  };
+  for (const [kind, re] of Object.entries(cases)) {
+    const p = page(ready({ "POST /api/conversations/c1/messages": [503, { outcome: "unavailable", text: "generic", providerKind: kind }] }));
+    p.app.start(p.root); await settle();
+    click(p.root.querySelector(".card.click")); await settle();
+    p.root.querySelector("textarea").value = "hello there";
+    p.root.querySelector("form").dispatchEvent(new p.dom.window.Event("submit", { cancelable: true })); await settle();
+    const shown = p.root.querySelector("p.error").textContent;
+    assert.match(shown, re, kind);
+    assert.match(shown, /Nothing was sent or saved\./, kind);
+    assert.equal(p.root.querySelector("textarea").value, "hello there", kind);
+  }
+  // an unknown kind falls back to the engine's own sentence
+  const q = page(ready({ "POST /api/conversations/c1/messages": [503, { outcome: "unavailable", text: "The engine's own words.", providerKind: "something_new" }] }));
+  q.app.start(q.root); await settle();
+  click(q.root.querySelector(".card.click")); await settle();
+  q.root.querySelector("textarea").value = "hello there";
+  q.root.querySelector("form").dispatchEvent(new q.dom.window.Event("submit", { cancelable: true })); await settle();
+  assert.match(q.root.querySelector("p.error").textContent, /The engine's own words\./);
+});
+
+test("when suggestions fail because of the provider the same plain words are used", async () => {
+  const p = page(withQuestion({
+    "GET /api/conversations": [200, { conversations: [{ id: "c1", philosopherId: "socrates", title: "t" }] }],
+    "POST /api/conversations/c1/suggestions": [503, { error: "x", providerKind: "auth" }],
+  }));
+  await open1(p);
+  click(helpButton(p)); await settle();
+  assert.match(text(p.root), /did not accept your key/);
+  assert.ok(!/Nothing was sent or saved/.test(text(p.root)), "suggestions send nothing, so that sentence does not apply");
+});
+
+test("settings say what the philosophers are, point to help in a crisis, and show the age limit and version", async () => {
+  const p = page(ready({
+    "GET /api/status": [200, { status: "ready", version: "1.2.3" }],
+    "GET /api/settings/llm": [200, { provider: "claude", fastModel: "a", replyModel: "b" }],
+  }));
+  p.app.start(p.root); await settle();
+  click([...p.root.querySelectorAll("button")].find((b) => b.textContent === "Settings")); await settle();
+  const t = text(p.root);
+  assert.match(t, /artificial characters/);
+  assert.match(t, /not a source of medical, legal or other professional advice/);
+  assert.match(t, /local emergency number or a crisis line/);
+  assert.match(t, /aged 16 and over/);
+  assert.match(t, /Version 1\.2\.3/);
+});
