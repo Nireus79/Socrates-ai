@@ -340,3 +340,34 @@ func TestTheModelIsToldTheInquiryAndWhichEntriesBelongToItAndReadsTheInquiryAnsw
 		t.Fatalf("%+v", got)
 	}
 }
+
+func TestFactsAreAddedWithTheirQuoteOnceAndTakenBackOnlyWhenTheyExist(t *testing.T) {
+	es := append(entries(), store.Entry{ID: "id6", Kind: store.KindFact, Text: "works as a nurse", Status: store.StatusActive})
+	say := "I work as a nurse on nights, and I have two sons."
+	v := func(ops []Op) ([]Change, int) {
+		return Validate(ops, es, []string{say}, say, false, "socrates", "conv1")
+	}
+	ch, dropped := v([]Op{
+		{Op: "add_fact", Text: "has two sons", Quote: "I have two sons"},
+		{Op: "add_fact", Text: "Works as a nurse", Quote: "I work as a nurse"},   // already known
+		{Op: "add_fact", Text: "lives in Athens", Quote: "I live in Athens now"}, // not said
+		{Op: "retract_fact", ID: "E6", Quote: "I have two sons"},
+		{Op: "retract_fact", ID: "E1", Quote: "I have two sons"}, // a claim, not a fact
+	})
+	if dropped != 3 || len(ch) != 2 || ch[0].New == nil || ch[0].New.Kind != store.KindFact || ch[0].New.Quote != "I have two sons" || ch[1].Revise == nil || ch[1].Revise.Status != store.StatusRetracted {
+		t.Fatalf("%d dropped, %+v", dropped, ch)
+	}
+	if rd := parse(`{"ops":[],"offer":true}`); !rd.Offer {
+		t.Fatal("the pause was not read")
+	}
+	if rd := parse(`{"ops":[]}`); rd.Offer {
+		t.Fatal("a pause was invented")
+	}
+	p, _ := Prompt(Input{Entries: es, Newest: "x"})
+	if !strings.Contains(p, "E6 fact: works as a nurse") || !strings.Contains(system, "Never record facts about their health") {
+		t.Fatal("facts are not shown to the model, or the limits are not stated")
+	}
+	if c := Context(es); !strings.Contains(c, `They told you about themselves: "works as a nurse"`) {
+		t.Fatal(c)
+	}
+}

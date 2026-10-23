@@ -183,7 +183,7 @@ func validEntry(list []exportEntry, e exportEntry) bool {
 	}
 	linked := e.A != 0 || e.B != 0
 	switch e.Kind {
-	case store.KindClaim, store.KindTerm:
+	case store.KindClaim, store.KindTerm, store.KindFact:
 		return !linked
 	case store.KindTension:
 		if !linked {

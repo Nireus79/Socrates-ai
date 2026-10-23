@@ -118,3 +118,88 @@ func TestAnImportWithAnUnknownPhilosopherOrTooManyChallengesIsRefused(t *testing
 		t.Fatal("a refused file left something behind")
 	}
 }
+
+func TestAChallengeOverHTTPIsPosedTakenUpOrLeftAndTheHistoryShowsWhatWaits(t *testing.T) {
+	a := newApp(t, newScript(t, okJudge, "What do you mean by it?", okGate, "On courage", okLedger,
+		`{"topic":"What is it to be brave when afraid?"}`, "Here is a question for you, take it or leave it.", okGate,
+		okJudge, "Then what is bravery?", okGate, okLedger))
+	a.setUp(t)
+	_, conv := a.do(t, "POST", "/api/conversations", `{"philosopherId":"socrates"}`)
+	id := conv["id"].(string)
+	a.do(t, "POST", "/api/conversations/"+id+"/messages", `{"text":"What is courage?"}`)
+	a.svc.Wait()
+
+	code, res := a.do(t, "POST", "/api/conversations/"+id+"/challenge", "")
+	if code != 200 || res["offer"].(map[string]any)["state"] != "pending" || len(res["added"].([]any)) != 1 {
+		t.Fatalf("%d %v", code, res)
+	}
+	_, h := a.do(t, "GET", "/api/conversations/"+id, "")
+	if h["offer"].(map[string]any)["state"] != "pending" {
+		t.Fatalf("the history does not show what waits: %v", h)
+	}
+	if strings.Contains(mustJSON(h), "brave when afraid") {
+		t.Fatal("the topic itself is not shown, only his words")
+	}
+	code, res = a.do(t, "POST", "/api/conversations/"+id+"/challenge/accept", "")
+	a.svc.Wait()
+	added, _ := res["added"].([]any)
+	if code != 200 || len(added) != 2 || added[0].(map[string]any)["text"] != "I'll take the challenge." {
+		t.Fatalf("%d %v", code, res)
+	}
+	if code, r := a.do(t, "POST", "/api/conversations/"+id+"/challenge/accept", ""); code != 409 || r["kind"] != "no_offer" {
+		t.Fatalf("%d %v", code, r)
+	}
+	if code, r := a.do(t, "POST", "/api/conversations/"+id+"/challenge/decline", ""); code != 409 || r["kind"] != "no_offer" {
+		t.Fatalf("%d %v", code, r)
+	}
+	if code, _ := a.do(t, "POST", "/api/conversations/none/challenge", ""); code != 404 {
+		t.Fatalf("%d", code)
+	}
+}
+
+func TestLeavingAChallengeOverHTTP(t *testing.T) {
+	a := newApp(t, newScript(t, okJudge, "What do you mean by it?", okGate, "On courage", okLedger,
+		`{"topic":"What is it to be brave when afraid?"}`, "Here is a question for you.", okGate))
+	a.setUp(t)
+	_, conv := a.do(t, "POST", "/api/conversations", `{"philosopherId":"socrates"}`)
+	id := conv["id"].(string)
+	a.do(t, "POST", "/api/conversations/"+id+"/messages", `{"text":"What is courage?"}`)
+	a.svc.Wait()
+	a.do(t, "POST", "/api/conversations/"+id+"/challenge", "")
+	if code, _ := a.do(t, "POST", "/api/conversations/"+id+"/challenge/decline", ""); code != 204 {
+		t.Fatalf("%d", code)
+	}
+	_, h := a.do(t, "GET", "/api/conversations/"+id, "")
+	if h["offer"] != nil {
+		t.Fatalf("%v", h["offer"])
+	}
+}
+
+func TestAChallengeFromALockedPhilosopherIsRefusedWhenTheRulesAreEnforced(t *testing.T) {
+	a := newAppEnforcing(t, newScript(t), true)
+	a.setUp(t)
+	conv, _ := a.st.CreateConversation(bg, "plato") // as if it were begun before the rule applied
+	if code, r := a.do(t, "POST", "/api/conversations/"+conv.ID+"/challenge", ""); code != 403 || r["kind"] != "locked" {
+		t.Fatalf("%d %v", code, r)
+	}
+}
+
+func TestFactsTravelInAnExportAndComeBackOnImport(t *testing.T) {
+	a := newApp(t, newScript(t))
+	a.setUp(t)
+	a.seed(t, "socrates", store.Entry{Kind: store.KindFact, Text: "works as a nurse", Quote: "I work as a nurse"})
+	_, ex := a.do(t, "GET", "/api/profile/export", "")
+	raw := mustJSON(ex)
+	if !strings.Contains(raw, `"kind":"fact"`) {
+		t.Fatalf("%s", raw)
+	}
+	b := newApp(t, newScript(t))
+	b.setUp(t)
+	if code, r := b.do(t, "POST", "/api/profile/import", raw); code != 200 {
+		t.Fatalf("%d %v", code, r)
+	}
+	es, _ := b.st.Entries(bg, "socrates", false)
+	if len(es) != 1 || es[0].Kind != store.KindFact || es[0].Text != "works as a nurse" {
+		t.Fatalf("%+v", es)
+	}
+}

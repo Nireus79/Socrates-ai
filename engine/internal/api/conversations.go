@@ -140,7 +140,7 @@ func (h *handler) getConversation(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusInternalServerError, "the conversation could not be read")
 		return
 	}
-	transport.WriteJSON(w, http.StatusOK, map[string]any{"conversation": toJSON(c), "messages": msgs})
+	transport.WriteJSON(w, http.StatusOK, map[string]any{"conversation": toJSON(c), "messages": msgs, "offer": h.conv.OfferState(r.Context(), c.ID)})
 }
 
 func (h *handler) deleteConversation(w http.ResponseWriter, r *http.Request) {
@@ -168,6 +168,11 @@ func (h *handler) sendMessage(w http.ResponseWriter, r *http.Request) {
 		send = h.conv.SendSuggested
 	}
 	res, err := send(r.Context(), r.PathValue("id"), body.Text)
+	respondTurn(w, res, err)
+}
+
+// respondTurn answers a request that ran a turn (a message, or the taking up of a challenge).
+func respondTurn(w http.ResponseWriter, res *conversation.Result, err error) {
 	switch {
 	case errors.Is(err, conversation.ErrEmpty):
 		fail(w, http.StatusBadRequest, "The message is empty.")
@@ -179,6 +184,10 @@ func (h *handler) sendMessage(w http.ResponseWriter, r *http.Request) {
 		transport.WriteJSON(w, http.StatusConflict, map[string]string{"error": "Set up an AI provider first.", "kind": "no_provider"})
 	case errors.Is(err, conversation.ErrLocked):
 		transport.WriteJSON(w, http.StatusForbidden, map[string]string{"error": "This philosopher is not unlocked yet.", "kind": "locked"})
+	case errors.Is(err, conversation.ErrNoOffer):
+		transport.WriteJSON(w, http.StatusConflict, map[string]string{"error": "There is no challenge waiting.", "kind": "no_offer"})
+	case errors.Is(err, conversation.ErrNotNow):
+		transport.WriteJSON(w, http.StatusConflict, map[string]string{"error": "A challenge cannot be posed just now.", "kind": "not_now"})
 	case errors.Is(err, store.ErrNotFound):
 		fail(w, http.StatusNotFound, "There is no such conversation.")
 	case err != nil:
@@ -188,6 +197,30 @@ func (h *handler) sendMessage(w http.ResponseWriter, r *http.Request) {
 		transport.WriteJSON(w, http.StatusServiceUnavailable, res)
 	default:
 		transport.WriteJSON(w, http.StatusOK, res)
+	}
+}
+
+// challenge asks the philosopher to pose a challenge (the person pressed the button, or took up his offer to hear one).
+func (h *handler) challenge(w http.ResponseWriter, r *http.Request) {
+	res, err := h.conv.Offer(r.Context(), r.PathValue("id"))
+	respondTurn(w, res, err)
+}
+
+func (h *handler) acceptChallenge(w http.ResponseWriter, r *http.Request) {
+	res, err := h.conv.Accept(r.Context(), r.PathValue("id"))
+	respondTurn(w, res, err)
+}
+
+func (h *handler) declineChallenge(w http.ResponseWriter, r *http.Request) {
+	switch err := h.conv.Decline(r.Context(), r.PathValue("id")); {
+	case errors.Is(err, conversation.ErrNoOffer):
+		transport.WriteJSON(w, http.StatusConflict, map[string]string{"error": "There is no challenge waiting.", "kind": "no_offer"})
+	case errors.Is(err, store.ErrNotFound):
+		fail(w, http.StatusNotFound, "There is no such conversation.")
+	case err != nil:
+		fail(w, http.StatusInternalServerError, "the challenge could not be left")
+	default:
+		w.WriteHeader(http.StatusNoContent)
 	}
 }
 

@@ -120,6 +120,45 @@ var migrations = []string{
 		created_at     INTEGER NOT NULL
 	);
 	CREATE INDEX challenge_by_philosopher ON challenge(philosopher_id);`,
+	// 5: facts the person tells about themselves (a new ledger kind, so the table is rebuilt: its check cannot be altered; the links to
+	// inquiries are saved and put back because dropping the old table would cascade them away), challenges the philosopher poses
+	// (offers: the topic is sealed, the pitch is an ordinary message) and the mark of an inquiry that began as an accepted challenge.
+	`CREATE TABLE ie_save AS SELECT inquiry_id, entry_id FROM inquiry_entry;
+	CREATE TABLE ledger_new (
+		id              TEXT PRIMARY KEY,
+		philosopher_id  TEXT NOT NULL,
+		conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+		kind            TEXT NOT NULL CHECK (kind IN ('claim', 'term', 'tension', 'fact')),
+		text            BLOB NOT NULL,
+		detail          BLOB,
+		quote           BLOB NOT NULL,
+		suggested       INTEGER NOT NULL DEFAULT 0 CHECK (suggested IN (0, 1)),
+		status          TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'retracted', 'resolved')),
+		a_id            TEXT,
+		b_id            TEXT,
+		created_at      INTEGER NOT NULL,
+		updated_at      INTEGER NOT NULL,
+		examined        INTEGER NOT NULL DEFAULT 0 CHECK (examined IN (0, 1, 2))
+	);
+	INSERT INTO ledger_new(id, philosopher_id, conversation_id, kind, text, detail, quote, suggested, status, a_id, b_id, created_at, updated_at, examined)
+		SELECT id, philosopher_id, conversation_id, kind, text, detail, quote, suggested, status, a_id, b_id, created_at, updated_at, examined FROM ledger;
+	DROP TABLE ledger;
+	ALTER TABLE ledger_new RENAME TO ledger;
+	CREATE INDEX ledger_by_philosopher ON ledger(philosopher_id, created_at);
+	INSERT INTO inquiry_entry(inquiry_id, entry_id) SELECT inquiry_id, entry_id FROM ie_save;
+	DROP TABLE ie_save;
+	ALTER TABLE inquiry ADD COLUMN challenge INTEGER NOT NULL DEFAULT 0 CHECK (challenge IN (0, 1));
+	ALTER TABLE conversations ADD COLUMN challenge_hint INTEGER NOT NULL DEFAULT 0 CHECK (challenge_hint IN (0, 1));
+	CREATE TABLE offer (
+		id              TEXT PRIMARY KEY,
+		conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+		philosopher_id  TEXT NOT NULL,
+		topic           BLOB NOT NULL,
+		state           TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending', 'accepted', 'declined')),
+		seq             INTEGER NOT NULL DEFAULT 0,
+		created_at      INTEGER NOT NULL
+	);
+	CREATE INDEX offer_by_conversation ON offer(conversation_id, created_at);`,
 }
 
 // dbtx is what both *sql.DB and *sql.Tx offer.
@@ -259,7 +298,7 @@ func (s *Store) Update(ctx context.Context, fn func(*Ops) error) error {
 // freed space does not keep old data. The caller deletes the file and the key as well when a profile is deleted.
 func (s *Store) Wipe(ctx context.Context) error {
 	err := s.Update(ctx, func(o *Ops) error {
-		for _, t := range []string{"challenge", "inquiry_entry", "inquiry", "ledger", "safety_state", "summaries", "messages", "conversations", "settings"} {
+		for _, t := range []string{"offer", "challenge", "inquiry_entry", "inquiry", "ledger", "safety_state", "summaries", "messages", "conversations", "settings"} {
 			if _, err := o.q.ExecContext(ctx, "DELETE FROM "+t); err != nil {
 				return err
 			}

@@ -211,6 +211,8 @@ type Result struct {
 	Text    string  `json:"text,omitempty"` // the fixed text, when nothing was kept to show it
 	// ProviderKind, for an unavailable turn: what went wrong with the provider (auth, rate_limit, overloaded, ...), when it is known.
 	ProviderKind string `json:"providerKind,omitempty"`
+	// Offer, when a challenge can be taken up or is waiting for an answer (see challenge.go).
+	Offer *OfferView `json:"offer,omitempty"`
 	// Milestone, when a challenge was finished since the person last heard of one: a plain sentence, never a number.
 	Milestone string `json:"milestone,omitempty"`
 }
@@ -264,18 +266,19 @@ func contextFor(msgs []store.Message, newest string) []llm.Message {
 
 // Send runs one turn.
 func (s *Service) Send(ctx context.Context, conversationID, text string) (*Result, error) {
-	return s.send(ctx, conversationID, text, false)
+	return s.send(ctx, conversationID, text, false, "")
 }
 
 // SendSuggested runs a turn for a message the user chose (or started from) among the suggestions: it is kept marked as such, and the
 // philosopher is told to take it as tentative.
 func (s *Service) SendSuggested(ctx context.Context, conversationID, text string) (*Result, error) {
-	return s.send(ctx, conversationID, text, true)
+	return s.send(ctx, conversationID, text, true, "")
 }
 
 const suggestedNote = `The person's newest message was one of several wordings you offered to help them answer, which they chose or started from. It is a starting point, not yet their settled view: take it seriously, and when it matters you may ask whether it is really what they think.`
 
-func (s *Service) send(ctx context.Context, conversationID, text string, suggested bool) (*Result, error) {
+// send is the turn. note, when given, is added to what the philosopher is told for this reply only.
+func (s *Service) send(ctx context.Context, conversationID, text string, suggested bool, note string) (*Result, error) {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return nil, ErrEmpty
@@ -356,9 +359,15 @@ func (s *Service) send(ctx context.Context, conversationID, text string, suggest
 		if suggested {
 			system += "\n\n" + suggestedNote
 		}
-		if known, err := s.st.Entries(ctx, ph.ID, false); err == nil && s.MemoryEnabled(ctx) {
-			if c := ledger.Context(known); c != "" {
-				system += "\n\n" + c
+		if note != "" {
+			system += "\n\n" + note
+		}
+		if s.MemoryEnabled(ctx) {
+			system += "\n\n" + ledger.GetToKnow
+			if known, err := s.st.Entries(ctx, ph.ID, false); err == nil {
+				if c := ledger.Context(known); c != "" {
+					system += "\n\n" + c
+				}
 			}
 		}
 		if sum, _, ok, _ := s.st.Summary(ctx, conversationID); ok {
@@ -384,6 +393,7 @@ func (s *Service) send(ctx context.Context, conversationID, text string, suggest
 				}
 			}
 			s.afterTurn(client, conv, userSeq)
+			res.Offer = s.OfferState(ctx, conv.ID)
 			if n, err := s.st.TakeAnnouncements(ctx, conv.ID); err == nil && n > 0 {
 				res.Milestone = "You finished a challenge with " + ph.Name + ": you took one question a real way through."
 			}
@@ -579,6 +589,9 @@ func (s *Service) remember(ctx context.Context, client Completer, conv store.Con
 		log.Printf("[conversation] the ledger could not be updated")
 		return
 	}
+	if reading.Offer {
+		s.noteOffer(ctx, conv.ID, newest.Seq)
+	}
 	action := ledger.ValidateInquiry(reading.Inquiry, current, shown, inInquiry, userTexts)
 	changes, _ := ledger.Validate(reading.Ops, shown, userTexts, newest.Content, newest.Suggested, conv.PhilosopherID, conv.ID)
 	if action == nil && len(changes) == 0 {
@@ -615,8 +628,12 @@ func (s *Service) remember(ctx context.Context, client Completer, conv store.Con
 				return err
 			}
 		}
-		link := func(id string) error {
-			if !have {
+		kindOf := map[string]string{}
+		for _, e := range shown {
+			kindOf[e.ID] = e.Kind
+		}
+		link := func(id, kind string) error { // facts are about the person, not about an inquiry
+			if !have || kind == store.KindFact {
 				return nil
 			}
 			return o.LinkEntries(ctx, inq.ID, id)
@@ -627,14 +644,14 @@ func (s *Service) remember(ctx context.Context, client Completer, conv store.Con
 			case c.New != nil:
 				var added store.Entry
 				if added, err = o.AddEntry(ctx, *c.New); err == nil {
-					err = link(added.ID)
+					err = link(added.ID, added.Kind)
 				}
 			case c.Revise != nil:
 				if err = o.ReviseEntry(ctx, c.Revise.ID, c.Revise.Text, c.Revise.Detail, c.Revise.Status); err == nil && c.Revise.Examined > 0 {
 					err = o.SetExamined(ctx, c.Revise.ID, c.Revise.Examined)
 				}
 				if err == nil {
-					err = link(c.Revise.ID)
+					err = link(c.Revise.ID, kindOf[c.Revise.ID])
 				}
 			}
 			if errors.Is(err, store.ErrBadEntry) || errors.Is(err, store.ErrNotFound) {

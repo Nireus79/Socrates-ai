@@ -66,6 +66,9 @@ func New(d Deps) (*http.ServeMux, *conversation.Service) {
 	mux.HandleFunc("DELETE /api/conversations/{id}", h.deleteConversation)
 	mux.HandleFunc("POST /api/conversations/{id}/messages", h.sendMessage)
 	mux.HandleFunc("POST /api/conversations/{id}/suggestions", h.suggestions)
+	mux.HandleFunc("POST /api/conversations/{id}/challenge", h.challenge)
+	mux.HandleFunc("POST /api/conversations/{id}/challenge/accept", h.acceptChallenge)
+	mux.HandleFunc("POST /api/conversations/{id}/challenge/decline", h.declineChallenge)
 	return mux, h.conv
 }
 

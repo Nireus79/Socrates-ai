@@ -260,6 +260,61 @@ test("a locked philosopher says what to finish, and a finished challenge is told
   assert.ok(!/\d+%|score|points/i.test(text(p.root)), "no numbers or scores in the chat");
 });
 
+const buttonWith = (root, label) => [...root.querySelectorAll("button")].find((b) => b.textContent === label);
+
+test("a challenge is asked for, posed in the philosopher's words, taken up or left; nothing is shown while the person has the floor", async () => {
+  let offer = null;
+  const p = page(ready({
+    "GET /api/conversations/c1": () => [200, { conversation: { id: "c1", philosopherId: "socrates", title: "" }, messages: [{ role: "user", text: "Hm." }, { role: "philosopher", text: "And then?" }], offer }],
+    "POST /api/conversations/c1/challenge": () => { offer = { state: "pending" }; return [200, { outcome: "replied", added: [{ role: "philosopher", text: "Here is a question for you, and you may leave it." }], offer }]; },
+    "POST /api/conversations/c1/challenge/accept": () => { offer = null; return [200, { outcome: "replied", added: [{ role: "user", text: "I'll take the challenge." }, { role: "philosopher", text: "What do you think is owed?" }] }]; },
+    "POST /api/conversations/c1/challenge/decline": () => { offer = null; return [204, {}]; },
+  }));
+  p.app.start(p.root); await settle();
+  click(p.root.querySelector(".card.click")); await settle();
+  assert.ok(buttonWith(p.root, "Challenge me") && !buttonWith(p.root, "Challenge me").hidden, "the person can always ask for one when the philosopher spoke last");
+  click(buttonWith(p.root, "Challenge me")); await settle();
+  assert.match(text(p.root), /Here is a question for you/);
+  assert.match(text(p.root), /Take up Socrates’s challenge\?/);
+  assert.ok(buttonWith(p.root, "Challenge me").hidden, "no second challenge while one waits");
+  click(buttonWith(p.root, "Not now")); await settle();
+  assert.ok(p.calls.some((c) => c.key === "POST /api/conversations/c1/challenge/decline"));
+  assert.ok(!/Take up Socrates/.test(text(p.root)));
+  click(buttonWith(p.root, "Challenge me")); await settle();
+  click(buttonWith(p.root, "Take it")); await settle();
+  assert.match(text(p.root), /I'll take the challenge\./);
+  assert.match(text(p.root), /What do you think is owed\?/);
+  assert.ok(!/Take up Socrates/.test(text(p.root)), "the question is gone once answered");
+});
+
+test("a challenge the philosopher has ready is offered as a chip, and the Memory screen names what the person told about themselves", async () => {
+  const p = page(ready({
+    "GET /api/conversations/c1": [200, { conversation: { id: "c1", philosopherId: "socrates", title: "" }, messages: [{ role: "philosopher", text: "And then?" }], offer: { state: "ready" } }],
+    "POST /api/conversations/c1/challenge": [200, { outcome: "replied", added: [{ role: "philosopher", text: "A question." }], offer: { state: "pending" } }],
+    "GET /api/ledger?philosopherId=socrates": [200, { entries: [{ id: "e1", kind: "fact", text: "works as a nurse", quote: "I work as a nurse", suggested: false }] }],
+  }));
+  p.app.start(p.root); await settle();
+  click(p.root.querySelector(".card.click")); await settle();
+  assert.match(text(p.root), /Socrates has a challenge for you\./);
+  click(buttonWith(p.root, "Hear it")); await settle();
+  assert.match(text(p.root), /A question\./);
+  click(buttonWith(p.root, "Memory")); await settle(10);
+  assert.match(text(p.root), /Something you told about yourself/);
+  assert.match(text(p.root), /works as a nurse/);
+});
+
+test("a failed challenge shows the plain sentence and the person can try again", async () => {
+  const p = page(ready({
+    "GET /api/conversations/c1": [200, { conversation: { id: "c1", philosopherId: "socrates", title: "" }, messages: [{ role: "philosopher", text: "And then?" }] }],
+    "POST /api/conversations/c1/challenge": [503, { outcome: "unavailable", text: "I cannot answer right now. Nothing was sent or saved; please try again in a moment." }],
+  }));
+  p.app.start(p.root); await settle();
+  click(p.root.querySelector(".card.click")); await settle();
+  click(buttonWith(p.root, "Challenge me")); await settle();
+  assert.match(text(p.root), /Nothing was sent or saved/);
+  assert.ok(!buttonWith(p.root, "Challenge me").hidden);
+});
+
 const key = (el, k) => el.dispatchEvent(new global.window.KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true }));
 
 test("each new screen takes the focus on its heading", async () => {

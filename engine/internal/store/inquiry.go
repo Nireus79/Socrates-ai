@@ -21,18 +21,19 @@ type Inquiry struct {
 	Banked         int // the highest maturity reached, in thousandths
 	Completed      bool
 	Announced      bool // the person has been told it was finished
+	Challenge      bool // it began as a challenge the philosopher posed and the person accepted
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 }
 
-const inquiryColumns = "id, philosopher_id, conversation_id, parent_id, question, quote, banked, completed, announced, created_at, updated_at"
+const inquiryColumns = "id, philosopher_id, conversation_id, parent_id, question, quote, banked, completed, announced, created_at, updated_at, challenge"
 
 func (o *Ops) scanInquiry(sc interface{ Scan(...any) error }) (Inquiry, error) {
 	var in Inquiry
 	var parent sql.NullString
 	var q, quote []byte
-	var done, ann, created, updated int64
-	if err := sc.Scan(&in.ID, &in.PhilosopherID, &in.ConversationID, &parent, &q, &quote, &in.Banked, &done, &ann, &created, &updated); err != nil {
+	var done, ann, created, updated, chal int64
+	if err := sc.Scan(&in.ID, &in.PhilosopherID, &in.ConversationID, &parent, &q, &quote, &in.Banked, &done, &ann, &created, &updated, &chal); err != nil {
 		return Inquiry{}, err
 	}
 	var err error
@@ -45,7 +46,7 @@ func (o *Ops) scanInquiry(sc interface{ Scan(...any) error }) (Inquiry, error) {
 		return Inquiry{}, err
 	}
 	in.Quote = string(p)
-	in.ParentID, in.Completed, in.Announced = parent.String, done == 1, ann == 1
+	in.ParentID, in.Completed, in.Announced, in.Challenge = parent.String, done == 1, ann == 1, chal == 1
 	in.CreatedAt, in.UpdatedAt = time.Unix(created, 0), time.Unix(updated, 0)
 	return in, nil
 }
@@ -66,8 +67,12 @@ func (o *Ops) CreateInquiry(ctx context.Context, in Inquiry) (Inquiry, error) {
 	if err != nil {
 		return Inquiry{}, err
 	}
-	_, err = o.q.ExecContext(ctx, `INSERT INTO inquiry(id, philosopher_id, conversation_id, parent_id, question, quote, created_at, updated_at)
-		VALUES (?, ?, ?, NULLIF(?, ''), ?, ?, ?, ?)`, in.ID, in.PhilosopherID, in.ConversationID, in.ParentID, q, quote, now, now)
+	chal := 0
+	if in.Challenge {
+		chal = 1
+	}
+	_, err = o.q.ExecContext(ctx, `INSERT INTO inquiry(id, philosopher_id, conversation_id, parent_id, question, quote, created_at, updated_at, challenge)
+		VALUES (?, ?, ?, NULLIF(?, ''), ?, ?, ?, ?, ?)`, in.ID, in.PhilosopherID, in.ConversationID, in.ParentID, q, quote, now, now, chal)
 	if err != nil {
 		return Inquiry{}, err
 	}
@@ -231,4 +236,10 @@ func (o *Ops) TakeAnnouncements(ctx context.Context, conversationID string) (int
 	}
 	n, _ := res.RowsAffected()
 	return int(n), nil
+}
+
+// DeleteInquiry removes an inquiry (used to undo one that was begun for a turn that then failed).
+func (o *Ops) DeleteInquiry(ctx context.Context, id string) error {
+	res, err := o.q.ExecContext(ctx, "DELETE FROM inquiry WHERE id = ?", id)
+	return affected(res, err)
 }

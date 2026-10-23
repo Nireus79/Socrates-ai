@@ -248,7 +248,52 @@ async function openChat(id) {
     const l = k[k.length - 1];
     return !!l && l.classList.contains("philosopher") && !l.classList.contains("typing");
   };
-  const refreshHelp = () => { helpBtn.hidden = !canHelp(); if (helpBtn.hidden) helpBox.hidden = true; };
+  // A challenge is a fundamental topic the philosopher poses; the person takes it up or leaves it. `offer` is what the engine says waits.
+  let offer = r.data.offer || null;
+  const challengeBar = el("div", { class: "help", hidden: true });
+  const challengeBtn = el("button", { class: "link", type: "button" }, "Challenge me");
+  const canChallenge = () => {
+    const k = [...list.children].filter((c) => !c.classList.contains("opening"));
+    const l = k[k.length - 1];
+    return !l || (l.classList.contains("philosopher") && !l.classList.contains("typing"));
+  };
+  const turnProblem = (res) => (res.status === 503 ? providerProblem(res.data) : res.data.error || "That did not work.");
+  const challengeStep = async (path, thinking) => {
+    err.textContent = ""; challengeBtn.disabled = true;
+    challengeBar.hidden = false; challengeBar.replaceChildren(el("span", { class: "muted" }, thinking));
+    const res = await api("POST", "/api/conversations/" + encodeURIComponent(id) + path);
+    challengeBtn.disabled = false;
+    if (res.status === 200) {
+      (res.data.added || []).forEach(add);
+      if (res.data.milestone) add({ role: "marker", text: res.data.milestone });
+      offer = res.data.offer || null;
+    } else {
+      err.textContent = turnProblem(res);
+      if (res.data.kind === "no_offer") offer = null;
+    }
+    refreshHelp(); main.scrollTop = main.scrollHeight;
+  };
+  const leaveChallenge = async () => {
+    const res = await api("POST", "/api/conversations/" + encodeURIComponent(id) + "/challenge/decline");
+    if (res.status === 204 || res.data.kind === "no_offer") offer = null; else err.textContent = turnProblem(res);
+    refreshHelp();
+  };
+  challengeBtn.addEventListener("click", () => challengeStep("/challenge", who.name + " is thinking of a challenge…"));
+  const showOffer = () => {
+    const pending = offer && offer.state === "pending", ready = offer && offer.state === "ready";
+    challengeBtn.hidden = pending || !canChallenge();
+    if (pending) {
+      challengeBar.hidden = false;
+      challengeBar.replaceChildren(el("div", { class: "muted" }, "Take up " + who.name + "’s challenge?"),
+        el("div", { class: "row" }, el("button", { class: "primary", type: "button", onclick: () => challengeStep("/challenge/accept", "Starting the challenge…") }, "Take it"),
+          el("button", { class: "link", type: "button", onclick: leaveChallenge }, "Not now")));
+    } else if (ready && canChallenge()) {
+      challengeBar.hidden = false;
+      challengeBar.replaceChildren(el("div", { class: "muted" }, who.name + " has a challenge for you."),
+        el("div", { class: "row" }, el("button", { class: "link", type: "button", onclick: () => challengeStep("/challenge", who.name + " is thinking of a challenge…") }, "Hear it")));
+    } else { challengeBar.replaceChildren(); challengeBar.hidden = true; }
+  };
+  const refreshHelp = () => { helpBtn.hidden = !canHelp(); if (helpBtn.hidden) helpBox.hidden = true; showOffer(); };
   const showSuggestions = async () => {
     helpBtn.disabled = true; helpBox.hidden = false;
     helpBox.replaceChildren(el("span", { class: "muted" }, "Thinking of some starting points…"));
@@ -292,6 +337,7 @@ async function openChat(id) {
       (d.added || []).forEach((m) => { if (m.role !== "user") add(m); });
       if (d.outcome === "fixed" && !(d.added || []).some((m) => m.role === "marker")) add({ role: "marker", text: d.text });
       if (d.milestone) add({ role: "marker", text: d.milestone });
+      offer = d.offer || (d.outcome === "replied" ? null : offer);
     } else {
       mine.remove(); input.value = text; fromSuggestion = flag;
       if (res.status === 503) err.textContent = providerProblem(d);
@@ -306,7 +352,7 @@ async function openChat(id) {
   mount(el("header", {}, el("button", { class: "link", onclick: back }, "← Back"), el("h1", {}, who.name),
     el("button", { class: "link", onclick: () => show(() => memory(who)) }, "Memory"),
     confirmButton("Delete", "link", "Sure?", async () => { await api("DELETE", "/api/conversations/" + encodeURIComponent(id)); unwind(); home(); })),
-    main, err, helpBox, el("div", { class: "helpbar" }, helpBtn), form);
+    main, err, helpBox, challengeBar, el("div", { class: "helpbar" }, helpBtn, challengeBtn), form);
   refreshHelp(); main.scrollTop = main.scrollHeight; input.focus();
 }
 
@@ -323,7 +369,7 @@ async function memory(who) {
     if (d.status === 204 || d.status === 404) return memory(who);
     err.textContent = d.data.error || "That did not work.";
   };
-  const label = { claim: "Something you said", term: "A word you used", tension: "Things that did not fit together" };
+  const label = { claim: "Something you said", term: "A word you used", tension: "Things that did not fit together", fact: "Something you told about yourself" };
   if (!entries.length) body.append(el("div", { class: "card" }, el("p", { class: "muted" }, `${who.name} has not noted anything about you yet.`)));
   for (const e of entries) {
     body.append(el("div", { class: "card stack" },

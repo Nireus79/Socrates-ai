@@ -15,6 +15,7 @@ const (
 	KindClaim   = "claim"
 	KindTerm    = "term"
 	KindTension = "tension"
+	KindFact    = "fact" // something the person told about themselves
 
 	StatusActive    = "active"
 	StatusRetracted = "retracted"
@@ -58,7 +59,7 @@ func (o *Ops) sealOpt(col, id, v string) ([]byte, error) {
 // AddEntry stores a new entry (status active) and returns it with its id.
 func (o *Ops) AddEntry(ctx context.Context, e Entry) (Entry, error) {
 	if e.PhilosopherID == "" || e.ConversationID == "" || e.Text == "" || e.Quote == "" ||
-		(e.Kind != KindClaim && e.Kind != KindTerm && e.Kind != KindTension) ||
+		(e.Kind != KindClaim && e.Kind != KindTerm && e.Kind != KindTension && e.Kind != KindFact) ||
 		len([]rune(e.Text)) > MaxEntryText || len([]rune(e.Detail)) > MaxEntryText || len([]rune(e.Quote)) > MaxEntryQuote {
 		return Entry{}, ErrBadEntry
 	}
