@@ -227,3 +227,14 @@ test("suggestions are shown as text, never as markup", async () => {
   assert.equal(p.root.querySelectorAll("img").length, 0);
   assert.ok(text(p.root).includes(evil));
 });
+
+test("a locked philosopher is shown as locked and cannot be opened", async () => {
+  const p = page(ready({ "GET /api/philosophers": [200, { philosophers: [{ id: "socrates", name: "Socrates", era: "Athens", unlocked: true }, { id: "plato", name: "Plato", era: "Athens", unlocked: false }] }] }));
+  p.app.start(p.root); await settle();
+  assert.equal(p.root.querySelectorAll(".card.click").length, 1);
+  const locked = p.root.querySelector(".card.locked");
+  assert.match(locked.textContent, /Plato/);
+  assert.match(locked.textContent, /Locked/);
+  click(locked); await settle();
+  assert.ok(!p.calls.some((c) => c.key === "POST /api/conversations"), "a locked card must not start a conversation");
+});

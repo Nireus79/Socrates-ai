@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"socrates/internal/entitlements"
 	"socrates/internal/llm"
 	"socrates/internal/philosophers"
 	"socrates/internal/safety"
@@ -36,6 +37,7 @@ var (
 	ErrAgeNotConfirmed = errors.New("the age limit has not been confirmed")
 	ErrNoProvider      = errors.New("no AI provider has been set up")
 	ErrNotNow          = errors.New("suggestions are not offered now")
+	ErrNotEntitled     = errors.New("this is not part of what is unlocked")
 	ErrNotFound        = store.ErrNotFound
 	ErrLocked          = errors.New("this philosopher is not unlocked")
 )
@@ -53,6 +55,7 @@ type Service struct {
 	st     *store.Store
 	models ModelSource
 	roster *philosophers.Registry
+	rights entitlements.Source
 
 	mu    sync.Mutex
 	locks map[string]*sync.Mutex
@@ -60,7 +63,16 @@ type Service struct {
 }
 
 func New(st *store.Store, models ModelSource, roster *philosophers.Registry) *Service {
-	return &Service{st: st, models: models, roster: roster, locks: map[string]*sync.Mutex{}}
+	return &Service{st: st, models: models, roster: roster, rights: entitlements.Beta{}, locks: map[string]*sync.Mutex{}}
+}
+
+// SetEntitlements replaces the source that says what the person may use (the free beta grants everything).
+func (s *Service) SetEntitlements(e entitlements.Source) { s.rights = e }
+
+// Allowed reports whether a feature may be used; a source that cannot tell counts as no.
+func (s *Service) Allowed(ctx context.Context, f entitlements.Feature) bool {
+	ok, err := s.rights.Allowed(ctx, f)
+	return err == nil && ok
 }
 
 // Wait returns when the background work of finished turns (titles, summaries) is done. Used by tests and by a clean shutdown.
@@ -114,7 +126,7 @@ func (s *Service) Start(ctx context.Context, philosopherID string) (store.Conver
 	if err != nil {
 		return store.Conversation{}, err
 	}
-	if !p.Unlocked {
+	if !s.Allowed(ctx, entitlements.Philosopher(p.ID)) {
 		return store.Conversation{}, ErrLocked
 	}
 	return s.st.CreateConversation(ctx, p.ID)
@@ -249,6 +261,9 @@ func (s *Service) send(ctx context.Context, conversationID, text string, suggest
 	ph, err := s.roster.Get(conv.PhilosopherID)
 	if err != nil {
 		return nil, err
+	}
+	if !s.Allowed(ctx, entitlements.Philosopher(ph.ID)) {
+		return nil, ErrLocked
 	}
 	ss, err := s.st.SafetyState(ctx, conversationID)
 	if err != nil {
@@ -505,6 +520,9 @@ func (s *Service) Suggest(ctx context.Context, conversationID string, exclude []
 	defer s.lock(conversationID)()
 	if _, err := s.st.Conversation(ctx, conversationID); err != nil {
 		return nil, err
+	}
+	if !s.Allowed(ctx, entitlements.Suggestions) {
+		return nil, ErrNotEntitled
 	}
 	ss, err := s.st.SafetyState(ctx, conversationID)
 	if err != nil {

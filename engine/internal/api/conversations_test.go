@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"socrates/internal/conversation"
+	"socrates/internal/entitlements"
 	"socrates/internal/llm"
 	"socrates/internal/store"
 	"socrates/internal/transport"
@@ -286,5 +287,33 @@ func TestSuggestionsWhenTheProviderIsDownAre503WithAPlainSentence(t *testing.T) 
 	code, r := a.do(t, "POST", "/api/conversations/"+id+"/suggestions", "")
 	if code != 503 || !strings.Contains(r["error"].(string), "cannot offer suggestions") {
 		t.Fatalf("%d %v", code, r)
+	}
+}
+
+func TestTheRosterShowsWhatIsUnlockedAndALockedPhilosopherIsRefusedOverHTTP(t *testing.T) {
+	a := newApp(t, newScript(t))
+	_, r := a.do(t, "GET", "/api/philosophers", "")
+	for _, p := range r["philosophers"].([]any) {
+		if p.(map[string]any)["unlocked"] != true {
+			t.Fatalf("the beta must unlock everyone: %v", p)
+		}
+	}
+	a.svc.SetEntitlements(entitlements.Static{entitlements.Philosopher("socrates"): true})
+	_, r = a.do(t, "GET", "/api/philosophers", "")
+	open := map[string]bool{}
+	for _, p := range r["philosophers"].([]any) {
+		m := p.(map[string]any)
+		open[m["id"].(string)] = m["unlocked"].(bool)
+	}
+	if !open["socrates"] || open["plato"] || open["diogenes"] || open["aristotle"] {
+		t.Fatalf("%v", open)
+	}
+	if code, _ := a.do(t, "POST", "/api/conversations", `{"philosopherId":"plato"}`); code != 403 {
+		t.Fatalf("starting with a locked philosopher: %d", code)
+	}
+	a.setUp(t)
+	_, conv := a.do(t, "POST", "/api/conversations", `{"philosopherId":"socrates"}`)
+	if code, r := a.do(t, "POST", "/api/conversations/"+conv["id"].(string)+"/suggestions", ""); code != 403 || r["kind"] != "locked" {
+		t.Fatalf("suggestions locked: %d %v", code, r)
 	}
 }

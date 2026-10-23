@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"socrates/internal/entitlements"
 	"socrates/internal/llm"
 	"socrates/internal/philosophers"
 	"socrates/internal/safety"
@@ -496,4 +497,43 @@ func TestAChosenSuggestionIsJudgedLikeAnyOtherMessageAndARefusedOneKeepsNothing(
 			t.Fatalf("a %s message was kept", m.Role)
 		}
 	}
+}
+
+func TestWhatIsNotUnlockedCannotBeUsedAndTheBetaGrantsEverything(t *testing.T) {
+	e := newEnv(t)
+	for _, id := range []string{"socrates", "diogenes", "plato", "aristotle"} {
+		if _, err := e.svc.Start(bg, id); err != nil {
+			t.Fatalf("beta: %s: %v", id, err)
+		}
+	}
+	e.svc.SetEntitlements(entitlements.Static{entitlements.Philosopher("socrates"): true})
+	if _, err := e.svc.Start(bg, "plato"); !errors.Is(err, ErrLocked) {
+		t.Fatalf("a locked philosopher: %v", err)
+	}
+	if _, err := e.svc.Start(bg, "socrates"); err != nil {
+		t.Fatal(err)
+	}
+	// a conversation that was started while Plato was open cannot go on once he is locked, and no model is called
+	conv, _ := e.st.CreateConversation(bg, "plato")
+	if _, err := e.svc.Send(bg, conv.ID, "hello"); !errors.Is(err, ErrLocked) {
+		t.Fatalf("sending to a locked philosopher: %v", err)
+	}
+	// suggestions are a feature of their own
+	if _, err := e.svc.Suggest(bg, e.conv.ID, nil); !errors.Is(err, ErrNotEntitled) {
+		t.Fatalf("suggestions locked: %v", err)
+	}
+	if len(e.mock.Requests) != 0 {
+		t.Fatalf("%d model calls for things that are locked", len(e.mock.Requests))
+	}
+	// a source that cannot tell counts as no
+	e.svc.SetEntitlements(failing{})
+	if _, err := e.svc.Start(bg, "socrates"); !errors.Is(err, ErrLocked) {
+		t.Fatalf("an unreadable source: %v", err)
+	}
+}
+
+type failing struct{}
+
+func (failing) Allowed(context.Context, entitlements.Feature) (bool, error) {
+	return true, errors.New("could not read")
 }

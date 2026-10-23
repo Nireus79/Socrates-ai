@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"socrates/internal/conversation"
+	"socrates/internal/entitlements"
 	"socrates/internal/llm"
 	"socrates/internal/philosophers"
 	"socrates/internal/store"
@@ -51,8 +52,16 @@ func (h *handler) confirmAge(w http.ResponseWriter, r *http.Request) {
 	transport.WriteJSON(w, http.StatusOK, map[string]bool{"ageConfirmed": true})
 }
 
-func (h *handler) philosophers(w http.ResponseWriter, _ *http.Request) {
-	transport.WriteJSON(w, http.StatusOK, map[string]any{"philosophers": h.d.Roster.All()})
+func (h *handler) philosophers(w http.ResponseWriter, r *http.Request) {
+	type view struct {
+		philosophers.Philosopher
+		Unlocked bool `json:"unlocked"`
+	}
+	var out []view
+	for _, p := range h.d.Roster.All() {
+		out = append(out, view{p, h.conv.Allowed(r.Context(), entitlements.Philosopher(p.ID))})
+	}
+	transport.WriteJSON(w, http.StatusOK, map[string]any{"philosophers": out})
 }
 
 type conversationJSON struct {
@@ -147,6 +156,8 @@ func (h *handler) sendMessage(w http.ResponseWriter, r *http.Request) {
 		transport.WriteJSON(w, http.StatusForbidden, map[string]string{"error": "The age limit has to be confirmed first.", "kind": "age"})
 	case errors.Is(err, conversation.ErrNoProvider):
 		transport.WriteJSON(w, http.StatusConflict, map[string]string{"error": "Set up an AI provider first.", "kind": "no_provider"})
+	case errors.Is(err, conversation.ErrLocked):
+		transport.WriteJSON(w, http.StatusForbidden, map[string]string{"error": "This philosopher is not unlocked yet.", "kind": "locked"})
 	case errors.Is(err, store.ErrNotFound):
 		fail(w, http.StatusNotFound, "There is no such conversation.")
 	case err != nil:
@@ -171,6 +182,8 @@ func (h *handler) suggestions(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case errors.Is(err, conversation.ErrAgeNotConfirmed):
 		transport.WriteJSON(w, http.StatusForbidden, map[string]string{"error": "The age limit has to be confirmed first.", "kind": "age"})
+	case errors.Is(err, conversation.ErrNotEntitled):
+		transport.WriteJSON(w, http.StatusForbidden, map[string]string{"error": "Suggestions are not unlocked.", "kind": "locked"})
 	case errors.Is(err, conversation.ErrNoProvider):
 		transport.WriteJSON(w, http.StatusConflict, map[string]string{"error": "Set up an AI provider first.", "kind": "no_provider"})
 	case errors.Is(err, store.ErrNotFound):

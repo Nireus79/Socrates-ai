@@ -141,6 +141,10 @@ async function home() {
   if (S.notice) { body.append(errorLine(S.notice)); S.notice = ""; }
   body.append(el("h2", { class: "muted" }, "Talk with"));
   for (const p of S.philosophers) {
+    if (p.unlocked === false) {
+      body.append(el("div", { class: "card locked", "aria-disabled": "true" }, el("h2", {}, p.name), el("div", { class: "muted" }, p.era + " · Locked")));
+      continue;
+    }
     body.append(el("div", { class: "card click", role: "button", tabindex: "0", onclick: () => startWith(p), onkeydown: (e) => { if (e.key === "Enter") startWith(p); } },
       el("h2", {}, p.name), el("div", { class: "muted" }, p.era)));
   }

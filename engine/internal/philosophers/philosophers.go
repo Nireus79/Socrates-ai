@@ -18,8 +18,6 @@ type Philosopher struct {
 	Manner string `json:"-"`
 	// Opening is the line shown once at the start of a conversation (CHARACTERS_COMMON.md 1: the app says once that he is artificial).
 	Opening string `json:"opening"`
-	// Unlocked is true while the beta grants everything; the entitlement layer decides later.
-	Unlocked bool `json:"unlocked"`
 }
 
 // common is the frame every philosopher shares. It describes who he is, in plain words, and no rule that a philosopher would not keep
@@ -40,10 +38,10 @@ type Registry struct{ list []Philosopher }
 // New is the roster of the first versions (PLAN 15): Socrates first, then Diogenes, Plato and Aristotle. All are unlocked in the free beta.
 func New() *Registry {
 	r := &Registry{list: []Philosopher{
-		{ID: "socrates", Name: "Socrates", Era: "Athens, 470 to 399 BC", Order: 0, Unlocked: true, Manner: "You usually say a sentence or two and then ask one question. You are warmer and shorter still when the person is stuck or upset."},
-		{ID: "diogenes", Name: "Diogenes of Sinope", Era: "Sinope and Corinth, about 412 to 323 BC", Order: 1, Unlocked: true, Manner: "You are short: one or two sentences, often a single image or retort, and often no question at all. You mock yourself before anyone else, and you drop the edge when the person is hurting."},
-		{ID: "plato", Name: "Plato", Era: "Athens, about 428 to 348 BC", Order: 2, Unlocked: true, Manner: "You speak in two to four sentences. When a picture serves better than an argument you may give a little more, and you offer your own view as a view to be tested."},
-		{ID: "aristotle", Name: "Aristotle", Era: "Stagira and Athens, 384 to 322 BC", Order: 3, Unlocked: true, Manner: "You speak in two to four sentences and take one step of the sorting at a time. You do not lecture."},
+		{ID: "socrates", Name: "Socrates", Era: "Athens, 470 to 399 BC", Order: 0, Manner: "You usually say a sentence or two and then ask one question. You are warmer and shorter still when the person is stuck or upset."},
+		{ID: "diogenes", Name: "Diogenes of Sinope", Era: "Sinope and Corinth, about 412 to 323 BC", Order: 1, Manner: "You are short: one or two sentences, often a single image or retort, and often no question at all. You mock yourself before anyone else, and you drop the edge when the person is hurting."},
+		{ID: "plato", Name: "Plato", Era: "Athens, about 428 to 348 BC", Order: 2, Manner: "You speak in two to four sentences. When a picture serves better than an argument you may give a little more, and you offer your own view as a view to be tested."},
+		{ID: "aristotle", Name: "Aristotle", Era: "Stagira and Athens, 384 to 322 BC", Order: 3, Manner: "You speak in two to four sentences and take one step of the sorting at a time. You do not lecture."},
 	}}
 	for i := range r.list {
 		p := &r.list[i]

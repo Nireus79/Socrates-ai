@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	"socrates/internal/conversation"
+	"socrates/internal/entitlements"
 	"socrates/internal/llm"
 	"socrates/internal/philosophers"
 	"socrates/internal/store"
@@ -19,6 +20,7 @@ import (
 type Deps struct {
 	Store      *store.Store
 	Roster     *philosophers.Registry // nil: the standard roster
+	Rights     entitlements.Source    // nil: the free beta grants everything
 	Version    string
 	LLMOptions []llm.Option // only tests change these (a stand-in provider, no waiting between retries)
 }
@@ -31,6 +33,9 @@ func New(d Deps) (*http.ServeMux, *conversation.Service) {
 	}
 	h := &handler{d: d}
 	h.conv = conversation.New(d.Store, h.models, d.Roster)
+	if d.Rights != nil {
+		h.conv.SetEntitlements(d.Rights)
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/status", h.status)
 	mux.HandleFunc("GET /api/settings/llm", h.getLLM)
