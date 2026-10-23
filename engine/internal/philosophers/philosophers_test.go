@@ -29,15 +29,13 @@ func TestEveryPhilosopherSpeaksBrieflyAndAsHimself(t *testing.T) {
 	}
 }
 
-func TestEveryoneHasOwnOpening(t *testing.T) {
-	seen := map[string]bool{}
+func TestEveryOpeningSaysHeIsArtificialAndOnlyThatAndNoOneGetsATagline(t *testing.T) {
 	for _, p := range New().All() {
 		if !strings.Contains(p.Opening, "artificial") {
 			t.Errorf("%s: opening must say he is artificial: %q", p.ID, p.Opening)
 		}
-		if strings.HasSuffix(p.Opening, " ") || seen[p.Opening] {
-			t.Errorf("%s: opening is empty-tailed or repeated: %q", p.ID, p.Opening)
+		if p.ID != "socrates" && strings.Count(p.Opening, ".") != 1 {
+			t.Errorf("%s: only the approved Socrates line has more than the plain statement: %q", p.ID, p.Opening)
 		}
-		seen[p.Opening] = true
 	}
 }
