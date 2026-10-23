@@ -28,6 +28,7 @@ label { display: block; margin: 12px 0 4px; color: var(--muted); font-size: .9re
 .card h2 { margin: 0 0 2px; font-size: 1.05rem; }
 .muted { color: var(--muted); font-size: .9rem; }
 .error { color: var(--danger); margin: 8px 0; }
+#root > p.error { margin: 0; padding: 8px 16px; }
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .stack > * + * { margin-top: 12px; }
 .msgs { display: flex; flex-direction: column; gap: 10px; }
