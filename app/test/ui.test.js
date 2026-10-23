@@ -275,3 +275,59 @@ test("fields have names a screen reader can read, and replies are announced", as
   gate.app.start(gate.root); await settle();
   assert.equal(gate.root.querySelector("input[type=password]").getAttribute("aria-label"), "Passphrase");
 });
+
+const entriesFor = (list) => ({ "GET /api/ledger?philosopherId=socrates": [200, { entries: list }] });
+const openMemory = async (p) => { p.app.start(p.root); await settle(); click(p.root.querySelector(".card.click")); await settle(); click([...p.root.querySelectorAll("button")].find((b) => b.textContent === "Memory")); await settle(); };
+
+test("the memory screen shows what the philosopher noted, with the person's own words, and says so when there is nothing", async () => {
+  const p = page(ready(entriesFor([
+    { id: "e1", kind: "claim", text: "lying is wrong", quote: "lying is always wrong" },
+    { id: "e2", kind: "term", text: "lie", detail: "saying what is false", quote: "a lie is saying what is false", suggested: true },
+    { id: "e3", kind: "tension", text: "always wrong versus a kind lie is fine", quote: "q" },
+  ])));
+  await openMemory(p);
+  const t = text(p.root);
+  assert.match(t, /What Socrates remembers/);
+  assert.match(t, /lying is wrong/);
+  assert.match(t, /Your words: “lying is always wrong”/);
+  assert.match(t, /lie: saying what is false/);
+  assert.match(t, /from a wording you picked among suggestions/);
+  assert.match(t, /Things that did not fit together/);
+  assert.ok(!/Your words: “q”/.test(t), "a tension has no quotation line");
+  const q = page(ready(entriesFor([])));
+  await openMemory(q);
+  assert.match(text(q.root), /has not noted anything about you yet/);
+  assert.ok(![...q.root.querySelectorAll("button")].some((b) => /Forget everything/.test(b.textContent)));
+});
+
+test("deleting a note or everything needs two clicks and then refreshes the list", async () => {
+  let list = [{ id: "e1", kind: "claim", text: "one", quote: "one two three" }, { id: "e2", kind: "claim", text: "two", quote: "four five six" }];
+  const p = page(ready({
+    "GET /api/ledger?philosopherId=socrates": () => [200, { entries: list }],
+    "DELETE /api/ledger/e1": () => { list = list.filter((e) => e.id !== "e1"); return [204, {}]; },
+    "DELETE /api/ledger?philosopherId=socrates": () => { list = []; return [204, {}]; },
+  }));
+  await openMemory(p);
+  const del = () => [...p.root.querySelectorAll("button")].filter((b) => b.textContent === "Delete" || b.textContent === "Sure?")[0];
+  click(del());
+  assert.ok(!p.calls.some((c) => c.key.startsWith("DELETE /api/ledger/")), "one click must not delete");
+  click(del()); await settle();
+  assert.equal(p.calls.filter((c) => c.key === "DELETE /api/ledger/e1").length, 1);
+  assert.ok(!text(p.root).includes("Your words: “one two three”"));
+  const all = [...p.root.querySelectorAll("button")].find((b) => /Forget everything/.test(b.textContent));
+  click(all);
+  assert.ok(!p.calls.some((c) => c.key.startsWith("DELETE /api/ledger?")), "one click must not forget everything");
+  click(all); await settle();
+  assert.ok(p.calls.some((c) => c.key === "DELETE /api/ledger?philosopherId=socrates"));
+  assert.match(text(p.root), /has not noted anything/);
+});
+
+test("what is noted is shown as text, never as markup, and Back returns to the chat", async () => {
+  const evil = '<img src=x onerror="window.pwned=1">';
+  const p = page(ready(entriesFor([{ id: "e1", kind: "claim", text: evil, quote: evil }])));
+  await openMemory(p);
+  assert.equal(p.root.querySelectorAll("img").length, 0);
+  assert.ok(text(p.root).includes(evil));
+  click([...p.root.querySelectorAll("button")].find((b) => b.textContent === "Back")); await settle();
+  assert.ok(p.root.querySelector("textarea"), "back to the chat");
+});

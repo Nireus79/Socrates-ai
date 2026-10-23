@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"socrates/internal/entitlements"
+	"socrates/internal/ledger"
 	"socrates/internal/llm"
 	"socrates/internal/philosophers"
 	"socrates/internal/safety"
@@ -315,6 +316,11 @@ func (s *Service) send(ctx context.Context, conversationID, text string, suggest
 		if suggested {
 			system += "\n\n" + suggestedNote
 		}
+		if known, err := s.st.Entries(ctx, ph.ID, false); err == nil {
+			if c := ledger.Context(known); c != "" {
+				system += "\n\n" + c
+			}
+		}
 		if sum, _, ok, _ := s.st.Summary(ctx, conversationID); ok {
 			system += "\n\nWhat has been said earlier in this conversation, in short:\n" + sum
 		}
@@ -328,7 +334,8 @@ func (s *Service) send(ctx context.Context, conversationID, text string, suggest
 		}
 		res, err := s.commit(ctx, conversationID, d, &text, reply, suggested)
 		if err == nil && res.Outcome == OutcomeReplied {
-			s.afterTurn(client, conv)
+			// what someone says while they may be hurting is not written into the ledger
+			s.afterTurn(client, conv, d.Action != safety.ActionProceedGently)
 		}
 		return res, err
 	}
@@ -429,7 +436,7 @@ func (s *Service) guarded(ctx context.Context, client Completer, system string, 
 
 // afterTurn writes the title after the first exchange and the running summary every few messages. It runs in the background, after the
 // turn is kept, and a failure changes nothing about the turn.
-func (s *Service) afterTurn(client Completer, conv store.Conversation) {
+func (s *Service) afterTurn(client Completer, conv store.Conversation, remember bool) {
 	s.bg.Add(1)
 	go func() {
 		defer s.bg.Done()
@@ -445,7 +452,73 @@ func (s *Service) afterTurn(client Completer, conv store.Conversation) {
 			s.title(ctx, client, c.ID, msgs)
 		}
 		s.summary(ctx, client, conv.ID, msgs)
+		if remember {
+			s.remember(ctx, client, conv, msgs)
+		}
 	}()
+}
+
+// remember updates the ledger from the newest user message. The model proposes, ledger.Validate disposes: only operations resting on the
+// person's own words in the last few messages are applied, all in one transaction. Any failure changes nothing.
+func (s *Service) remember(ctx context.Context, client Completer, conv store.Conversation, msgs []store.Message) {
+	newestAt := -1
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].Role == "user" {
+			newestAt = i
+			break
+		}
+	}
+	if newestAt < 0 {
+		return
+	}
+	newest := msgs[newestAt]
+	var userTexts []string
+	for i := newestAt; i >= 0 && len(userTexts) < 3; i-- {
+		if msgs[i].Role == "user" {
+			userTexts = append(userTexts, msgs[i].Content)
+		}
+	}
+	from := newestAt - 3
+	if from < 0 {
+		from = 0
+	}
+	recent := toLLM(msgs[from:newestAt])
+	known, err := s.st.Entries(ctx, conv.PhilosopherID, false)
+	if err != nil {
+		return
+	}
+	ops, shown, err := ledger.Extract(ctx, client, known, recent, newest.Content)
+	if err != nil || len(ops) == 0 {
+		if err != nil {
+			log.Printf("[conversation] the ledger could not be updated")
+		}
+		return
+	}
+	changes, _ := ledger.Validate(ops, shown, userTexts, newest.Content, newest.Suggested, conv.PhilosopherID, conv.ID)
+	if len(changes) == 0 {
+		return
+	}
+	err = s.st.Update(ctx, func(o *store.Ops) error {
+		for _, c := range changes {
+			var err error
+			switch {
+			case c.New != nil:
+				_, err = o.AddEntry(ctx, *c.New)
+			case c.Revise != nil:
+				err = o.ReviseEntry(ctx, c.Revise.ID, c.Revise.Text, c.Revise.Detail, c.Revise.Status)
+			}
+			if errors.Is(err, store.ErrBadEntry) || errors.Is(err, store.ErrNotFound) {
+				continue // one bad change does not spoil the rest
+			}
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		log.Printf("[conversation] the ledger could not be saved")
+	}
 }
 
 func (s *Service) title(ctx context.Context, client Completer, id string, msgs []store.Message) {

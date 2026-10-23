@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"socrates/internal/transport"
 )
@@ -47,6 +48,9 @@ func (f *fakeOllama) handler() http.Handler {
 		case strings.Contains(sys, "You check a draft reply"):
 			out = `{"flagged":false,"category":"none","reason":"fine"}`
 			f.prompts = append(f.prompts, "gate")
+		case strings.HasPrefix(sys, "You keep the ledger"):
+			out = `{"ops":[{"op":"add_claim","text":"courage matters, says ZEBRA-CLAIM","quote":"ZEBRA-USER-WORDS about courage"}]}`
+			f.prompts = append(f.prompts, "ledger")
 		case strings.Contains(sys, "title"):
 			out = "A short title"
 			f.prompts = append(f.prompts, "title")
@@ -122,6 +126,16 @@ func TestAWholeJourneyThroughTheRealEngine(t *testing.T) {
 	if code != 200 || res["outcome"] != "fixed" || !strings.Contains(raw, "emergency number") {
 		t.Fatalf("crisis: %d %s", code, raw)
 	}
+	// the ledger was written after the first turn (in the background) from the person's own words
+	var remembered []any
+	for i := 0; i < 50 && len(remembered) == 0; i++ {
+		_, led, _ := e.call(t, "GET", "/api/ledger?philosopherId=socrates", "")
+		remembered, _ = led["entries"].([]any)
+		time.Sleep(100 * time.Millisecond)
+	}
+	if len(remembered) != 1 || remembered[0].(map[string]any)["quote"] != secretUser {
+		t.Fatalf("ledger: %v", remembered)
+	}
 	// the order of the calls was judge, reply, gate (then title and summary in the background), judge for the crisis and nothing else
 	want := []string{"judge", "reply", "gate"}
 	fake.mu.Lock()
@@ -147,7 +161,7 @@ func TestAWholeJourneyThroughTheRealEngine(t *testing.T) {
 	stop := func() { e.stdin.Close(); e.waitExit(t, 15*1e9) }
 	stop()
 	logs := e.stderr.String()
-	for _, s := range []string{"ZEBRA", "QUOKKA", "WOMBAT", "end my life"} {
+	for _, s := range []string{"ZEBRA", "QUOKKA", "WOMBAT", "end my life"} { // ZEBRA covers the message, its quotation and the ledger claim
 		if strings.Contains(logs, s) {
 			t.Fatalf("%q reached the log:\n%s", s, logs)
 		}

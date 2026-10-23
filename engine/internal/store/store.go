@@ -70,6 +70,24 @@ var migrations = []string{
 	);`,
 	// 2: a user message may be marked as chosen from suggestions the philosopher offered (it is not yet the user's own conviction)
 	`ALTER TABLE messages ADD COLUMN suggested INTEGER NOT NULL DEFAULT 0 CHECK (suggested IN (0, 1));`,
+	// 3: the ledger, what a philosopher remembers of the person (claims, terms, tensions), each with the person's own words as evidence.
+	// It belongs to one philosopher and is deleted with the conversation it was learnt in.
+	`CREATE TABLE ledger (
+		id              TEXT PRIMARY KEY,
+		philosopher_id  TEXT NOT NULL,
+		conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+		kind            TEXT NOT NULL CHECK (kind IN ('claim', 'term', 'tension')),
+		text            BLOB NOT NULL,
+		detail          BLOB,
+		quote           BLOB NOT NULL,
+		suggested       INTEGER NOT NULL DEFAULT 0 CHECK (suggested IN (0, 1)),
+		status          TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'retracted', 'resolved')),
+		a_id            TEXT,
+		b_id            TEXT,
+		created_at      INTEGER NOT NULL,
+		updated_at      INTEGER NOT NULL
+	);
+	CREATE INDEX ledger_by_philosopher ON ledger(philosopher_id, created_at);`,
 }
 
 // dbtx is what both *sql.DB and *sql.Tx offer.
@@ -203,7 +221,7 @@ func (s *Store) Update(ctx context.Context, fn func(*Ops) error) error {
 // freed space does not keep old data. The caller deletes the file and the key as well when a profile is deleted.
 func (s *Store) Wipe(ctx context.Context) error {
 	err := s.Update(ctx, func(o *Ops) error {
-		for _, t := range []string{"safety_state", "summaries", "messages", "conversations", "settings"} {
+		for _, t := range []string{"ledger", "safety_state", "summaries", "messages", "conversations", "settings"} {
 			if _, err := o.q.ExecContext(ctx, "DELETE FROM "+t); err != nil {
 				return err
 			}

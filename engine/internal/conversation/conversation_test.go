@@ -33,7 +33,31 @@ func verdict(label string, conf string, evidence string) string {
 	return `{"label":"` + label + `","confidence":` + conf + `,"evidence":"` + evidence + `","reason":"r"}`
 }
 
+// ledgerTap answers the ledger's call itself (nothing to record unless a test queues an answer), so that tests of other things keep
+// their scripts; it records what the ledger was asked.
+type ledgerTap struct {
+	inner  Completer
+	mu     sync.Mutex
+	answer []string
+	asked  []llm.Request
+}
+
+func (l *ledgerTap) Complete(ctx context.Context, req llm.Request) (*llm.Response, error) {
+	if strings.HasPrefix(req.System, "You keep the ledger") {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+		l.asked = append(l.asked, req)
+		out := `{"ops": []}`
+		if len(l.answer) > 0 {
+			out, l.answer = l.answer[0], l.answer[1:]
+		}
+		return &llm.Response{Text: out}, nil
+	}
+	return l.inner.Complete(ctx, req)
+}
+
 type env struct {
+	tap  *ledgerTap
 	svc  *Service
 	st   *store.Store
 	mock *llm.Mock
@@ -50,8 +74,8 @@ func newEnv(t *testing.T, steps ...llm.MockStep) *env {
 	}
 	t.Cleanup(func() { st.Close() })
 	mock := llm.NewMock(steps...)
-	client := llm.NewClientWith(mock, llm.Settings{FastModel: "fast-model", ReplyModel: "reply-model"})
-	svc := New(st, func(context.Context) (Completer, error) { return client, nil }, philosophers.New())
+	tap := &ledgerTap{inner: llm.NewClientWith(mock, llm.Settings{FastModel: "fast-model", ReplyModel: "reply-model"})}
+	svc := New(st, func(context.Context) (Completer, error) { return tap, nil }, philosophers.New())
 	if err := svc.ConfirmAge(bg); err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +86,7 @@ func newEnv(t *testing.T, steps ...llm.MockStep) *env {
 	logs := &bytes.Buffer{}
 	log.SetOutput(logs)
 	t.Cleanup(func() { log.SetOutput(io.Discard) })
-	return &env{svc: svc, st: st, mock: mock, conv: conv, logs: logs}
+	return &env{tap: tap, svc: svc, st: st, mock: mock, conv: conv, logs: logs}
 }
 
 func (e *env) send(t *testing.T, text string) *Result {
@@ -536,4 +560,119 @@ type failing struct{}
 
 func (failing) Allowed(context.Context, entitlements.Feature) (bool, error) {
 	return true, errors.New("could not read")
+}
+
+func addClaimOp(text, quote string) string {
+	return `{"ops":[{"op":"add_claim","text":"` + text + `","quote":"` + quote + `"}]}`
+}
+
+func TestWhatThePersonSaysIsRememberedWithTheirWordsAndTheNextReplyKnowsIt(t *testing.T) {
+	e := newEnv(t, llm.Say(judgeOK), llm.Say("What do you mean by that?"), llm.Say(gateOK), llm.Say("t"),
+		llm.Say(judgeOK), llm.Say("Then what about a kind lie?"), llm.Say(gateOK))
+	e.tap.answer = []string{addClaimOp("lying is always wrong", "lying is always wrong")}
+	e.send(t, "I am sure that lying is always wrong, whatever the reason.")
+	got, _ := e.st.Entries(bg, "socrates", false)
+	if len(got) != 1 || got[0].Text != "lying is always wrong" || got[0].Quote != "lying is always wrong" || got[0].ConversationID != e.conv.ID || got[0].Suggested {
+		t.Fatalf("%+v", got)
+	}
+	e.send(t, "Go on then.")
+	reply := e.mock.Requests[len(e.mock.Requests)-2]
+	if !strings.Contains(reply.System, "What this person has told you") || !strings.Contains(reply.System, `their words: "lying is always wrong"`) {
+		t.Fatalf("the philosopher was not told: %s", reply.System)
+	}
+	// the ledger call saw the entries under aliases and the person's message inside the markers
+	asked := e.tap.asked[1].Messages[0].Content
+	if !strings.Contains(asked, "E1 claim: lying is always wrong") || !strings.Contains(asked, "<<<USER\nGo on then.\nUSER>>>") {
+		t.Fatalf("%s", asked)
+	}
+}
+
+func TestAnInventedQuotationIsNotRemembered(t *testing.T) {
+	e := newEnv(t, llm.Say(judgeOK), llm.Say("Tell me more."), llm.Say(gateOK), llm.Say("t"))
+	e.tap.answer = []string{addClaimOp("the earth is flat", "I believe the earth is flat")}
+	e.send(t, "I think lying is sometimes necessary, honestly.")
+	if got, _ := e.st.Entries(bg, "socrates", true); len(got) != 0 {
+		t.Fatalf("%+v", got)
+	}
+}
+
+func TestAMessageChosenFromSuggestionsIsRememberedAsUnconfirmed(t *testing.T) {
+	e := newEnv(t, llm.Say(judgeOK), llm.Say("A first reply."), llm.Say(gateOK), llm.Say("t"), llm.Say(judgeOK), llm.Say("A second reply."), llm.Say(gateOK))
+	e.send(t, "Is it ever okay to lie?")
+	e.tap.answer = []string{addClaimOp("a kind lie is fine", "a kind lie is fine")}
+	if _, err := e.svc.SendSuggested(bg, e.conv.ID, "I think a kind lie is fine."); err != nil {
+		t.Fatal(err)
+	}
+	e.svc.Wait()
+	got, _ := e.st.Entries(bg, "socrates", false)
+	if len(got) != 1 || !got[0].Suggested {
+		t.Fatalf("%+v", got)
+	}
+}
+
+func TestNothingIsRememberedFromAMessageThatMayComeFromPainOrWasRefused(t *testing.T) {
+	e := newEnv(t, llm.Say(verdict("self_harm_unclear", "0.8", "no point in going on")), llm.Say("How are you, really?"), llm.Say(gateOK), llm.Say("t"),
+		llm.Say(verdict("harm_to_others", "0.9", "hurt him")))
+	e.tap.answer = []string{addClaimOp("there is no point in going on", "no point in going on at all")}
+	e.send(t, "Honestly there is no point in going on at all.")
+	e.send(t, "I will hurt him badly")
+	if len(e.tap.asked) != 0 {
+		t.Fatalf("the ledger was asked %d times for a gentle or refused turn", len(e.tap.asked))
+	}
+	if got, _ := e.st.Entries(bg, "socrates", true); len(got) != 0 {
+		t.Fatalf("%+v", got)
+	}
+}
+
+func TestEachPhilosopherRemembersOnlyWhatWasToldToHim(t *testing.T) {
+	e := newEnv(t, llm.Say(judgeOK), llm.Say("Reply."), llm.Say(gateOK), llm.Say("t"), llm.Say(judgeOK), llm.Say("Reply to the other."), llm.Say(gateOK), llm.Say("t"))
+	e.tap.answer = []string{addClaimOp("lying is always wrong", "lying is always wrong")}
+	e.send(t, "I am sure that lying is always wrong.")
+	plato, _ := e.svc.Start(bg, "plato")
+	if _, err := e.svc.Send(bg, plato.ID, "Hello Plato, what do you think of truth?"); err != nil {
+		t.Fatal(err)
+	}
+	e.svc.Wait()
+	var reply llm.Request
+	for _, r := range e.mock.Requests {
+		if r.Role == llm.RoleReply {
+			reply = r // the last reply of all: Plato's
+		}
+	}
+	if !strings.Contains(reply.System, "artificial Plato") || strings.Contains(reply.System, "lying is always wrong") || strings.Contains(reply.System, "What this person has told you") {
+		t.Fatalf("Plato was told what Socrates knows: %s", reply.System)
+	}
+	if got, _ := e.st.Entries(bg, "plato", true); len(got) != 0 {
+		t.Fatal("an entry appeared in Plato's ledger")
+	}
+}
+
+func TestALedgerThatFailsChangesNothingAboutTheTurnAndLogsNoContent(t *testing.T) {
+	e := newEnv(t, llm.Say(judgeOK), llm.Say("A reply."), llm.Say(gateOK), llm.Say("t"))
+	e.tap.inner = failingLedger{e.tap.inner}
+	res := e.send(t, "I am sure that lying is always wrong, SECRET-LEDGER-WORDS.")
+	if res.Outcome != OutcomeReplied || strings.Contains(e.logs.String(), "SECRET-LEDGER-WORDS") {
+		t.Fatalf("%+v\n%s", res, e.logs.String())
+	}
+}
+
+type failingLedger struct{ Completer }
+
+func (f failingLedger) Complete(ctx context.Context, req llm.Request) (*llm.Response, error) {
+	if strings.HasPrefix(req.System, "You keep the ledger") {
+		return nil, &llm.Error{Kind: llm.KindNetwork, Reason: "SECRET-LEDGER-WORDS"}
+	}
+	return f.Completer.Complete(ctx, req)
+}
+
+func TestDeletingAConversationDeletesWhatWasLearntInIt(t *testing.T) {
+	e := newEnv(t, llm.Say(judgeOK), llm.Say("Reply."), llm.Say(gateOK), llm.Say("t"))
+	e.tap.answer = []string{addClaimOp("lying is always wrong", "lying is always wrong")}
+	e.send(t, "I am sure that lying is always wrong.")
+	if err := e.svc.Delete(bg, e.conv.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := e.st.Entries(bg, "socrates", true); len(got) != 0 {
+		t.Fatalf("%+v", got)
+	}
 }

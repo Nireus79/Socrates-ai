@@ -114,8 +114,9 @@ func (a *app) setUp(t *testing.T) {
 }
 
 const (
-	okJudge = `{"label":"ok","confidence":0.95,"evidence":"","reason":"x"}`
-	okGate  = `{"flagged":false,"category":"none","reason":"x"}`
+	okJudge  = `{"label":"ok","confidence":0.95,"evidence":"","reason":"x"}`
+	okGate   = `{"flagged":false,"category":"none","reason":"x"}`
+	okLedger = `{"ops":[]}`
 )
 
 func TestTheProfileTheRosterAndTheAgeConfirmation(t *testing.T) {
@@ -137,7 +138,7 @@ func TestTheProfileTheRosterAndTheAgeConfirmation(t *testing.T) {
 }
 
 func TestATurnOverHTTPAndItsHistory(t *testing.T) {
-	a := newApp(t, newScript(t, okJudge, "What do you mean by it?", okGate, "On courage"))
+	a := newApp(t, newScript(t, okJudge, "What do you mean by it?", okGate, "On courage", okLedger))
 	a.setUp(t)
 	code, conv := a.do(t, "POST", "/api/conversations", `{"philosopherId":"socrates"}`)
 	if code != 201 {
@@ -249,7 +250,7 @@ func TestDeletingAConversation(t *testing.T) {
 
 func TestSuggestionsOverHTTPAndAChosenOneIsMarked(t *testing.T) {
 	sug := `{"suggestions":["A lie is saying what you know is false.","I might lie to spare a friend.","It always costs trust.","I really don't know."]}`
-	a := newApp(t, newScript(t, okJudge, "What do you mean by a lie?", okGate, "On lying", sug, okJudge, "And if the friend asked?", okGate))
+	a := newApp(t, newScript(t, okJudge, "What do you mean by a lie?", okGate, "On lying", okLedger, sug, okJudge, "And if the friend asked?", okGate))
 	a.setUp(t)
 	_, conv := a.do(t, "POST", "/api/conversations", `{"philosopherId":"socrates"}`)
 	id := conv["id"].(string)
@@ -278,7 +279,7 @@ func TestSuggestionsOverHTTPAndAChosenOneIsMarked(t *testing.T) {
 }
 
 func TestSuggestionsWhenTheProviderIsDownAre503WithAPlainSentence(t *testing.T) {
-	a := newApp(t, newScript(t, okJudge, "What do you mean?", okGate, "t")) // then the script is empty: overloaded
+	a := newApp(t, newScript(t, okJudge, "What do you mean?", okGate, "t", okLedger)) // then the script is empty: overloaded
 	a.setUp(t)
 	_, conv := a.do(t, "POST", "/api/conversations", `{"philosopherId":"socrates"}`)
 	id := conv["id"].(string)

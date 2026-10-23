@@ -251,9 +251,40 @@ async function openChat(id) {
   input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) submit(e); });
   const form = el("form", { class: "composer", onsubmit: submit }, input, send);
   mount(el("header", {}, el("button", { class: "link", onclick: home }, "← Back"), el("h1", {}, who.name),
+    el("button", { class: "link", onclick: () => memory(who, () => openChat(id)) }, "Memory"),
     confirmButton("Delete", "link", "Sure?", async () => { await api("DELETE", "/api/conversations/" + encodeURIComponent(id)); home(); })),
     main, err, helpBox, el("div", { class: "helpbar" }, helpBtn), form);
   refreshHelp(); main.scrollTop = main.scrollHeight; input.focus();
+}
+
+// ---- what a philosopher remembers about the person
+
+async function memory(who, back) {
+  const r = await api("GET", "/api/ledger?philosopherId=" + encodeURIComponent(who.id));
+  const entries = r.data.entries || [];
+  const body = el("div", { class: "stack" });
+  const err = errorLine(r.status === 200 ? "" : (r.data.error || "That did not work."));
+  body.append(el("p", { class: "muted" }, `${who.name} keeps short notes of what you tell him, with your own words. They are stored encrypted on this computer, are used only in your conversations with ${who.name}, and are deleted with the conversation they came from. You can delete any of them.`), err);
+  const remove = async (id) => {
+    const d = await api("DELETE", "/api/ledger/" + encodeURIComponent(id));
+    if (d.status === 204 || d.status === 404) return memory(who, back);
+    err.textContent = d.data.error || "That did not work.";
+  };
+  const label = { claim: "Something you said", term: "A word you used", tension: "Things that did not fit together" };
+  if (!entries.length) body.append(el("div", { class: "card" }, el("p", { class: "muted" }, `${who.name} has not noted anything about you yet.`)));
+  for (const e of entries) {
+    body.append(el("div", { class: "card stack" },
+      el("div", { class: "muted" }, label[e.kind] || e.kind, e.suggested ? " · from a wording you picked among suggestions" : ""),
+      el("div", {}, e.kind === "term" && e.detail ? `${e.text}: ${e.detail}` : e.text),
+      e.kind !== "tension" ? el("div", { class: "muted" }, "Your words: “" + e.quote + "”") : null,
+      confirmButton("Delete", "link", "Sure?", () => remove(e.id))));
+  }
+  if (entries.length) body.append(confirmButton(`Forget everything ${who.name} knows about me`, "danger", "Click again to forget it all", async () => {
+    const d = await api("DELETE", "/api/ledger?philosopherId=" + encodeURIComponent(who.id));
+    if (d.status === 204) return memory(who, back);
+    err.textContent = d.data.error || "That did not work.";
+  }));
+  mount(...screen(`What ${who.name} remembers`, body, el("button", { class: "link", onclick: back }, "Back")));
 }
 
 function ended(text) {

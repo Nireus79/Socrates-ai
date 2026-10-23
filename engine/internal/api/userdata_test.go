@@ -7,7 +7,7 @@ import (
 )
 
 func TestExportHoldsTheConversationsAndNeverTheKeyThenImportAddsThemBack(t *testing.T) {
-	a := newApp(t, newScript(t, okJudge, "What do you mean by it?", okGate, "On courage"))
+	a := newApp(t, newScript(t, okJudge, "What do you mean by it?", okGate, "On courage", okLedger))
 	a.setUp(t)
 	_, conv := a.do(t, "POST", "/api/conversations", `{"philosopherId":"socrates"}`)
 	id := conv["id"].(string)
