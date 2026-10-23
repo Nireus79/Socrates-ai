@@ -16,7 +16,7 @@ Moly is neither copied whole nor ignored.
 | `security.go` (loopback only, host check against DNS rebinding, origin policy, per-run token), `ratelimit.go`, `lifecycle.go`, `stop.go`, `keygate.go` | ~640 lines | the origin policy is adapted to the desktop shell and the phone shell (requests without an Origin header, token added by the shell) |
 | LLM layer: `tools/llm_client.go`, `llm_models.go`, `llm_swap.go`, `model_roles.go`, `approved_models.json`, the mock client; `llm_settings.go` | ~2,000 lines | providers Claude, OpenAI, Ollama; roles resolved to models; per-user keys; to be separated from the layer code around them |
 | Safety stage: `agents/safety_stage.go` and `tools/constitutional_evaluator.go` with `config/constitution.yaml` | ~800 lines | read and audited first, then ported or rewritten; crisis refusal, the fixed check-in on the next turn, "an unclear message is never a crisis" |
-| `database/encryption.go`, the user export, import and delete semantics, one transaction per turn (`turn_commit.go`) | ~600 lines | the schema itself is new |
+| the user export, import and delete semantics, one transaction per turn (`turn_commit.go`) | ~300 lines | the schema is new; **the SQLCipher driver is not carried over** (unmaintained since 2020): the store is pure-Go SQLite with field-level AES-256-GCM, see THREAT_MODEL.md |
 | Title and summary writers | ~500 lines | rewritten over the new store if the old ones are too coupled |
 | UI pieces: `KeystoreGate`, the settings for key and model, the chat primitives, the phone `shim.js` idea | | the screens are re-laid out for a game, not a sidebar |
 
