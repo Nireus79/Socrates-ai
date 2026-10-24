@@ -104,7 +104,7 @@ sells the person's words. Wording follows the rule that nothing sounds like a sp
 **Hosted credits** (option K), explained: today the person brings their own key and pays the AI provider directly. With hosted credits the person would pay us instead, and we would pay the provider on their behalf from a server of ours that holds our own key, meters each person's use and checks who they are. It would remove the biggest barrier (most people have no API key), but it needs a server and money up front, makes their words pass through us, makes us answerable for abuse, and is a different business. Not planned; the founder had not met the term.
 
 ## 7. Open questions still for the founder
-1. Which philosophers' products to define first in the stores (per philosopher, as a bundle, or both).
+1. (Decided 2026-10-24: both. One product per philosopher, `philosopher.diogenes`, `philosopher.plato`, `philosopher.aristotle`, and a bundle, `philosophers.all`. Socrates is open from the start and has no product. Each store lists the same ids; the bundle's price is set below the sum on each platform.)
 2. The supporter benefits, in the house voice (no sport or game words).
 3. The address reports are to be sent to.
 4. Ads: which network, and which screens may carry them (never a chat, never after a crisis).
