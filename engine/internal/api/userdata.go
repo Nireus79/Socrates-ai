@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strconv"
 	"time"
 
 	"socrates/internal/safety"
@@ -150,7 +151,7 @@ func (h *handler) importProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, c := range in.Challenges {
-		if _, err := h.d.Roster.Get(c.PhilosopherID); err != nil || c.At < 0 {
+		if _, err := h.d.Roster.Get(c.PhilosopherID); err != nil || c.At < 0 || c.At > time.Now().Add(24*time.Hour).Unix() {
 			fail(w, http.StatusBadRequest, "The file holds a finished question that cannot be read.")
 			return
 		}
@@ -276,7 +277,20 @@ func importAll(ctx context.Context, o *store.Ops, in exportFile) error {
 			return err
 		}
 	}
+	have, err := o.Challenges(ctx) // the same file imported twice adds nothing the second time
+	if err != nil {
+		return err
+	}
+	seen := map[string]int{} // each finished question already held cancels one in the file
+	for _, c := range have {
+		seen[c.PhilosopherID+"@"+strconv.FormatInt(c.CreatedAt.Unix(), 10)]++
+	}
 	for _, c := range in.Challenges {
+		key := c.PhilosopherID + "@" + strconv.FormatInt(c.At, 10)
+		if seen[key] > 0 {
+			seen[key]--
+			continue
+		}
 		if err := o.AddChallenge(ctx, store.Challenge{PhilosopherID: c.PhilosopherID, CreatedAt: time.Unix(c.At, 0)}); err != nil {
 			return err
 		}

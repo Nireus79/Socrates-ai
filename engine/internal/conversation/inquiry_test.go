@@ -373,3 +373,16 @@ func TestTheRuleOfUnlockingFiveChallengesWithEachEarlierPhilosopher(t *testing.T
 		t.Fatal(err)
 	}
 }
+
+func TestADeepeningThatOnlyInheritsSettledWorkIsNotAnotherChallenge(t *testing.T) {
+	e := newEnv(t, turnSteps(6)...)
+	finish(t, e)
+	if c, _ := e.st.ChallengeCounts(bg); c["socrates"] != 1 {
+		t.Fatalf("setup: %v", c)
+	}
+	e.tap.answer = append(e.tap.answer, reading(inq("what harm is", "harms someone who trusted you", "deepening", "E1", "E2", "E3")))
+	e.send(t, q3)
+	if c, _ := e.st.ChallengeCounts(bg); c["socrates"] != 1 {
+		t.Fatalf("inherited work was counted again: %v", c)
+	}
+}

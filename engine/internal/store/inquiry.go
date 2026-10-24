@@ -106,6 +106,35 @@ func (o *Ops) LinkEntries(ctx context.Context, inquiryID string, entryIDs ...str
 	return nil
 }
 
+// LinkInherited ties to a new inquiry entries it takes over from earlier work; they are marked, and the score of a deepening leaves them out
+// when it decides whether the deepening is finished.
+func (o *Ops) LinkInherited(ctx context.Context, inquiryID string, entryIDs ...string) error {
+	for _, id := range entryIDs {
+		if _, err := o.q.ExecContext(ctx, "INSERT OR IGNORE INTO inquiry_entry(inquiry_id, entry_id, inherited) SELECT ?, id, 1 FROM ledger WHERE id = ?", inquiryID, id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// InheritedEntryIDs is the set of entries an inquiry took over from earlier work.
+func (o *Ops) InheritedEntryIDs(ctx context.Context, inquiryID string) (map[string]bool, error) {
+	rows, err := o.q.QueryContext(ctx, "SELECT entry_id FROM inquiry_entry WHERE inquiry_id = ? AND inherited = 1", inquiryID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]bool{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out[id] = true
+	}
+	return out, rows.Err()
+}
+
 // LinkOrphans ties to an inquiry the entries of its conversation that belong to no inquiry yet (the first inquiry of a conversation
 // takes what was noted before it was recognised).
 func (o *Ops) LinkOrphans(ctx context.Context, inquiryID, conversationID string) error {

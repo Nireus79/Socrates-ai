@@ -504,3 +504,20 @@ func TestAReportedReplyLosesItsWordsAndBecomesAMarkerAndNothingElseCanBeReported
 		t.Fatal("the words are still on disk")
 	}
 }
+
+func TestForgettingAConversationAlsoRemovesATensionOtherConversationsHeldOnItsClaims(t *testing.T) {
+	s, _, _ := open(t)
+	a, b := mustConv(t, &s.Ops, "socrates"), mustConv(t, &s.Ops, "socrates")
+	ca, _ := s.AddEntry(ctx, claim(a, "claim from a"))
+	cb, _ := s.AddEntry(ctx, claim(b, "claim from b"))
+	if _, err := s.AddEntry(ctx, Entry{PhilosopherID: "socrates", ConversationID: b.ID, Kind: KindTension, Text: "they conflict", Quote: "q", A: ca.ID, B: cb.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Update(ctx, func(o *Ops) error { return o.DeleteConversation(ctx, a.ID) }); err != nil {
+		t.Fatal(err)
+	}
+	all, _ := s.Entries(ctx, "socrates", true)
+	if len(all) != 1 || all[0].Text != "claim from b" {
+		t.Fatalf("%+v", all)
+	}
+}

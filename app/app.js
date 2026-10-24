@@ -330,14 +330,15 @@ const REASONS = { harmful: "It was harmful", hateful: "It was hateful or insulti
     } else { challengeBar.replaceChildren(); challengeBar.hidden = true; }
   };
   // Deleting a conversation asks, when the philosopher learnt something in it, whether he should forget that too (forgetting is the default).
-  const learned = r.data.learned || 0;
   const deleteBox = el("div", { class: "help", hidden: true });
   const removeConversation = async (keep) => {
     await api("DELETE", "/api/conversations/" + encodeURIComponent(id) + (keep ? "?keep=memory" : ""));
     unwind(); home();
   };
   const hideDelete = () => { deleteBox.replaceChildren(); deleteBox.hidden = true; };
-  const showDelete = () => {
+  const showDelete = async () => {
+    const fresh = await api("GET", "/api/conversations/" + encodeURIComponent(id)); // what was learnt may have changed since the chat opened
+    const learned = fresh.status === 200 ? (fresh.data.learned || 0) : 0;
     deleteBox.hidden = false;
     deleteBox.replaceChildren(el("div", { class: "muted" }, learned > 0 ? "Also forget what " + who.name + " learned in this conversation?" : "Delete this conversation?"),
       el("div", { class: "row" },

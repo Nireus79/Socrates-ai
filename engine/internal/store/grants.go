@@ -30,21 +30,18 @@ func (o *Ops) ReplaceGrants(ctx context.Context, source string, products []strin
 	return nil
 }
 
-// AddPass grants a product until a time (a rewarded ad, for instance). A later pass for the same product and source moves the end.
+// AddPass grants a product until a time (a rewarded ad, for instance). A later pass for the same product and source can only move the end later, never earlier.
 func (o *Ops) AddPass(ctx context.Context, source, product string, until time.Time) error {
 	if source == "" || product == "" {
 		return ErrBadEntry
 	}
-	_, err := o.q.ExecContext(ctx, "INSERT INTO grants(product_id, source, expires_at) VALUES (?, ?, ?) ON CONFLICT(product_id, source) DO UPDATE SET expires_at = excluded.expires_at WHERE grants.expires_at IS NOT NULL", product, source, until.Unix())
+	_, err := o.q.ExecContext(ctx, "INSERT INTO grants(product_id, source, expires_at) VALUES (?, ?, ?) ON CONFLICT(product_id, source) DO UPDATE SET expires_at = MAX(grants.expires_at, excluded.expires_at) WHERE grants.expires_at IS NOT NULL", product, source, until.Unix())
 	return err
 }
 
-// ActiveGrants are the product ids in force at a time, without repeats; expired passes are removed.
+// ActiveGrants are the product ids in force at a time, without repeats. It only reads; PurgeGrants removes the expired passes.
 func (o *Ops) ActiveGrants(ctx context.Context, now time.Time) ([]string, error) {
-	if _, err := o.q.ExecContext(ctx, "DELETE FROM grants WHERE expires_at IS NOT NULL AND expires_at <= ?", now.Unix()); err != nil {
-		return nil, err
-	}
-	rows, err := o.q.QueryContext(ctx, "SELECT DISTINCT product_id FROM grants ORDER BY product_id")
+	rows, err := o.q.QueryContext(ctx, "SELECT DISTINCT product_id FROM grants WHERE expires_at IS NULL OR expires_at > ? ORDER BY product_id", now.Unix())
 	if err != nil {
 		return nil, err
 	}
@@ -58,4 +55,10 @@ func (o *Ops) ActiveGrants(ctx context.Context, now time.Time) ([]string, error)
 		out = append(out, id)
 	}
 	return out, rows.Err()
+}
+
+// PurgeGrants removes the passes that have ended.
+func (o *Ops) PurgeGrants(ctx context.Context, now time.Time) error {
+	_, err := o.q.ExecContext(ctx, "DELETE FROM grants WHERE expires_at IS NOT NULL AND expires_at <= ?", now.Unix())
+	return err
 }

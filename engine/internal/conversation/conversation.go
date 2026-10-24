@@ -67,10 +67,11 @@ type Service struct {
 	now     func() time.Time       // the clock, replaceable in tests
 	bgLocks map[string]*sync.Mutex // one piece of background work at a time per conversation; never held by a turn
 	bg      sync.WaitGroup
+	reports map[string]int // how many replies were reported in a conversation; a summary written across a report is thrown away
 }
 
 func New(st *store.Store, models ModelSource, roster *philosophers.Registry) *Service {
-	return &Service{st: st, models: models, roster: roster, rights: entitlements.Beta{}, now: time.Now, locks: map[string]*sync.Mutex{}, bgLocks: map[string]*sync.Mutex{}}
+	return &Service{st: st, models: models, roster: roster, rights: entitlements.Beta{}, now: time.Now, locks: map[string]*sync.Mutex{}, bgLocks: map[string]*sync.Mutex{}, reports: map[string]int{}}
 }
 
 // SetEntitlements replaces the source that says what the person may use (the free beta grants everything).
@@ -190,7 +191,7 @@ func (s *Service) Delete(ctx context.Context, id string, keepMemory bool) error 
 	if keepMemory {
 		err = s.st.DeleteConversationKeepingMemory(ctx, id)
 	} else {
-		err = s.st.DeleteConversation(ctx, id)
+		err = s.st.Update(ctx, func(o *store.Ops) error { return o.DeleteConversation(ctx, id) })
 	}
 	unlock()
 	if err == nil {
@@ -214,8 +215,24 @@ func (s *Service) Report(ctx context.Context, conversationID, messageID string) 
 			return err
 		}
 		text = t
-		return o.ClearSummary(ctx, conversationID)
+		if err := o.ClearSummary(ctx, conversationID); err != nil {
+			return err
+		}
+		// a challenge waiting to be taken up may be the very reply that was reported: it is put aside, and so is the pause noted
+		if pending, ok, err := o.PendingOffer(ctx, conversationID); err != nil {
+			return err
+		} else if ok {
+			if err := o.SetOfferState(ctx, pending.ID, store.OfferDeclined); err != nil {
+				return err
+			}
+		}
+		return o.SetChallengeHint(ctx, conversationID, false)
 	})
+	if err == nil {
+		s.mu.Lock()
+		s.reports[conversationID]++
+		s.mu.Unlock()
+	}
 	return text, err
 }
 
@@ -361,7 +378,7 @@ func (s *Service) send(ctx context.Context, conversationID, text string, suggest
 	// 2. What the decision says.
 	switch d.Action {
 	case safety.ActionEndForAge:
-		if err := s.st.DeleteConversation(ctx, conversationID); err != nil {
+		if err := s.st.Update(ctx, func(o *store.Ops) error { return o.DeleteConversation(ctx, conversationID) }); err != nil {
 			return nil, err
 		}
 		return &Result{Outcome: OutcomeEnded, Added: []View{}, Text: safety.TextEndForAge}, nil
@@ -396,7 +413,9 @@ func (s *Service) send(ctx context.Context, conversationID, text string, suggest
 			system += "\n\n" + note
 		}
 		if s.MemoryEnabled(ctx) {
-			system += "\n\n" + ledger.GetToKnow
+			if d.Action != safety.ActionProceedGently { // a person who may be hurting is not asked about their life
+				system += "\n\n" + ledger.GetToKnow
+			}
 			if known, err := s.st.Entries(ctx, ph.ID, false); err == nil {
 				if c := ledger.Context(known); c != "" {
 					system += "\n\n" + c
@@ -424,6 +443,9 @@ func (s *Service) send(ctx context.Context, conversationID, text string, suggest
 						userSeq = m.Seq
 					}
 				}
+			}
+			if d.Action == safety.ActionProceedGently {
+				_ = s.st.SetChallengeHint(ctx, conversationID, false)
 			}
 			s.afterTurn(client, conv, userSeq)
 			res.Offer = s.OfferState(ctx, conv.ID)
@@ -653,7 +675,7 @@ func (s *Service) remember(ctx context.Context, client Completer, conv store.Con
 			have = true
 			if had { // a later inquiry builds on the entries it names
 				for _, e := range action.Inherit {
-					if err := o.LinkEntries(ctx, inq.ID, e.ID); err != nil {
+					if err := o.LinkInherited(ctx, inq.ID, e.ID); err != nil {
 						return err
 					}
 				}
@@ -718,6 +740,21 @@ func (s *Service) score(ctx context.Context, o *store.Ops, inq store.Inquiry) er
 	if inq.Completed || !r.Complete(progress.Default) {
 		return nil
 	}
+	if inq.ParentID != "" { // a deepening is not finished by what it inherited: its own thinking has to reach the line again
+		inherited, err := o.InheritedEntryIDs(ctx, inq.ID)
+		if err != nil {
+			return err
+		}
+		fresh := make([]store.Entry, 0, len(entries))
+		for _, e := range entries {
+			if !inherited[e.ID] {
+				fresh = append(fresh, e)
+			}
+		}
+		if !progress.Score(fresh, progress.Default).Complete(progress.Default) {
+			return nil
+		}
+	}
 	today, err := o.ChallengesSince(ctx, progress.DayStart(s.now()))
 	if err != nil || today >= progress.MaxPerDay {
 		return err
@@ -770,7 +807,14 @@ func (s *Service) title(ctx context.Context, client Completer, id string, msgs [
 	}
 }
 
+func (s *Service) reportCount(id string) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.reports[id]
+}
+
 func (s *Service) summary(ctx context.Context, client Completer, id string) {
+	reports := s.reportCount(id)
 	prev, through, has, err := s.st.Summary(ctx, id)
 	if err != nil {
 		return
@@ -804,7 +848,7 @@ func (s *Service) summary(ctx context.Context, client Completer, id string) {
 		log.Printf("[conversation] no summary could be written")
 		return
 	}
-	if t := strings.TrimSpace(resp.Text); t != "" {
+	if t := strings.TrimSpace(resp.Text); t != "" && s.reportCount(id) == reports {
 		s.st.SetSummary(ctx, id, t, last)
 	}
 }

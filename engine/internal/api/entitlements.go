@@ -58,7 +58,12 @@ func (h *handler) addPass(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	until := time.Now().Add(time.Duration(body.Hours) * time.Hour)
-	if err := h.d.Store.Update(r.Context(), func(o *store.Ops) error { return o.AddPass(r.Context(), body.Source, body.Product, until) }); err != nil {
+	if err := h.d.Store.Update(r.Context(), func(o *store.Ops) error {
+		if err := o.PurgeGrants(r.Context(), time.Now()); err != nil {
+			return err
+		}
+		return o.AddPass(r.Context(), body.Source, body.Product, until)
+	}); err != nil {
 		fail(w, http.StatusInternalServerError, "the pass could not be saved")
 		return
 	}

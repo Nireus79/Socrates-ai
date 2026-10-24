@@ -193,6 +193,8 @@ var migrations = []string{
 		expires_at INTEGER,
 		PRIMARY KEY (product_id, source)
 	);`,
+	// 8: an entry a deepening inquiry took over from earlier work is marked, so that work already counted is not counted again.
+	`ALTER TABLE inquiry_entry ADD COLUMN inherited INTEGER NOT NULL DEFAULT 0;`,
 }
 
 // dbtx is what both *sql.DB and *sql.Tx offer.
@@ -432,7 +434,12 @@ func (o *Ops) SetTitle(ctx context.Context, id, title string) error {
 }
 
 // DeleteConversation removes a conversation with its messages, summary, safety state and everything the philosophers learnt in it.
+// Call it inside Store.Update: the entries, the tensions that rest on them and the conversation go together or not at all.
 func (o *Ops) DeleteConversation(ctx context.Context, id string) error {
+	// A tension may join a claim of this conversation to one of another; it describes the forgotten claim, so it goes too.
+	if _, err := o.q.ExecContext(ctx, "DELETE FROM ledger WHERE kind = 'tension' AND (a_id IN (SELECT id FROM ledger WHERE conversation_id = ?) OR b_id IN (SELECT id FROM ledger WHERE conversation_id = ?))", id, id); err != nil {
+		return err
+	}
 	if _, err := o.q.ExecContext(ctx, "DELETE FROM ledger WHERE conversation_id = ?", id); err != nil {
 		return err
 	}

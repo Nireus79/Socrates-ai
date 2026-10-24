@@ -358,3 +358,29 @@ func TestAReportedReplyIsNeverReadAgainByTheModelsOrKeptInTheSummary(t *testing.
 		t.Fatal("reported twice")
 	}
 }
+
+func TestAGentleTurnClearsTheNotedPauseAndIsNotToldToAskAboutTheirLife(t *testing.T) {
+	e := newEnv(t, llm.Say(verdict("self_harm_clear", "0.6", "no point in going on")), llm.Say("How are you, really?"), llm.Say(gateOK), llm.Say("t"))
+	e.st.SetChallengeHint(bg, e.conv.ID, true)
+	e.send(t, "I just see no point in going on")
+	if r := e.mock.Requests[1]; strings.Contains(r.System, "getting to know this person") {
+		t.Fatal("someone who may be hurting was invited to be asked about their life")
+	}
+	if hint, _ := e.st.ChallengeHint(bg, e.conv.ID); hint {
+		t.Fatal("the pause noted earlier survived a gentle turn")
+	}
+	if s := e.svc.OfferState(bg, e.conv.ID); s != nil {
+		t.Fatalf("a question was offered after a gentle turn: %+v", s)
+	}
+}
+
+func TestReportingAReplyPutsAsideAQuestionThatWasWaitingAndTheNotedPause(t *testing.T) {
+	e := chatted(t, llm.Say(topicJSON), llm.Say("Here is a question for you."), llm.Say(gateOK))
+	res := e.offer(t)
+	if _, err := e.svc.Report(bg, e.conv.ID, res.Added[len(res.Added)-1].ID); err != nil {
+		t.Fatal(err)
+	}
+	if s := e.svc.OfferState(bg, e.conv.ID); s != nil {
+		t.Fatalf("the reported pitch can still be taken up: %+v", s)
+	}
+}
