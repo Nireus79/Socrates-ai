@@ -13,6 +13,7 @@ type Profile struct {
 	Threshold  float64 // maturity at which an inquiry is finished
 	MinSettled int     // settled items needed, whatever the score
 	MinOwn     int     // of those, settled in the person's own words
+	MinTurns   int     // turns of the person's the inquiry must have been examined over
 	// The most items of each kind that count, so that piling up one kind of entry cannot raise the score.
 	CapTerms, CapClaims, CapTensions int
 	// Suggested is the weight of a settled item whose words came from a chosen suggestion.
@@ -20,7 +21,7 @@ type Profile struct {
 }
 
 // Default is the profile of every philosopher until one is given his own.
-var Default = Profile{Threshold: 0.6, MinSettled: 3, MinOwn: 2, CapTerms: 5, CapClaims: 6, CapTensions: 3, Suggested: 0.4}
+var Default = Profile{Threshold: 0.6, MinSettled: 2, MinOwn: 2, MinTurns: 5, CapTerms: 5, CapClaims: 6, CapTensions: 3, Suggested: 0.4}
 
 // Result is the reading of one inquiry.
 type Result struct {

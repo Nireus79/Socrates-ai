@@ -21,19 +21,20 @@ type Inquiry struct {
 	Banked         int // the highest maturity reached, in thousandths
 	Completed      bool
 	Announced      bool // the person has been told it was finished
+	Turns          int  // the turns of the person's over which it has been examined
 	Challenge      bool // it began as a challenge the philosopher posed and the person accepted
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 }
 
-const inquiryColumns = "id, philosopher_id, conversation_id, parent_id, question, quote, banked, completed, announced, created_at, updated_at, challenge"
+const inquiryColumns = "id, philosopher_id, conversation_id, parent_id, question, quote, banked, completed, announced, created_at, updated_at, challenge, turns"
 
 func (o *Ops) scanInquiry(sc interface{ Scan(...any) error }) (Inquiry, error) {
 	var in Inquiry
 	var parent sql.NullString
 	var q, quote []byte
 	var done, ann, created, updated, chal int64
-	if err := sc.Scan(&in.ID, &in.PhilosopherID, &in.ConversationID, &parent, &q, &quote, &in.Banked, &done, &ann, &created, &updated, &chal); err != nil {
+	if err := sc.Scan(&in.ID, &in.PhilosopherID, &in.ConversationID, &parent, &q, &quote, &in.Banked, &done, &ann, &created, &updated, &chal, &in.Turns); err != nil {
 		return Inquiry{}, err
 	}
 	var err error
@@ -177,6 +178,16 @@ func (o *Ops) InquiryEntryIDs(ctx context.Context, inquiryID string) (map[string
 		out[id] = true
 	}
 	return out, rows.Err()
+}
+
+// AddInquiryTurn counts one more turn of the person's over which an inquiry has been examined, and returns the count.
+func (o *Ops) AddInquiryTurn(ctx context.Context, inquiryID string) (int, error) {
+	if _, err := o.q.ExecContext(ctx, "UPDATE inquiry SET turns = turns + 1 WHERE id = ?", inquiryID); err != nil {
+		return 0, err
+	}
+	var n int
+	err := o.q.QueryRowContext(ctx, "SELECT turns FROM inquiry WHERE id = ?", inquiryID).Scan(&n)
+	return n, err
 }
 
 // Bank raises the banked maturity of an inquiry (never lowers it).

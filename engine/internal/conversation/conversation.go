@@ -734,10 +734,15 @@ func (s *Service) score(ctx context.Context, o *store.Ops, inq store.Inquiry) er
 		return err
 	}
 	r := progress.Score(entries, progress.Default)
+	turns, err := o.AddInquiryTurn(ctx, inq.ID)
+	if err != nil {
+		return err
+	}
+	inq.Turns = turns
 	if err := o.Bank(ctx, inq.ID, r.Thousandths()); err != nil {
 		return err
 	}
-	if inq.Completed || !r.Complete(progress.Default) {
+	if inq.Completed || inq.Turns < progress.Default.MinTurns || !r.Complete(progress.Default) {
 		return nil
 	}
 	if inq.ParentID != "" { // a deepening is not finished by what it inherited: its own thinking has to reach the line again

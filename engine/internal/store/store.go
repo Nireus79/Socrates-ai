@@ -195,6 +195,8 @@ var migrations = []string{
 	);`,
 	// 8: an entry a deepening inquiry took over from earlier work is marked, so that work already counted is not counted again.
 	`ALTER TABLE inquiry_entry ADD COLUMN inherited INTEGER NOT NULL DEFAULT 0;`,
+	// 9: how many of the person's turns an inquiry has been examined over (a question is not thought through in two messages).
+	`ALTER TABLE inquiry ADD COLUMN turns INTEGER NOT NULL DEFAULT 0;`,
 }
 
 // dbtx is what both *sql.DB and *sql.Tx offer.

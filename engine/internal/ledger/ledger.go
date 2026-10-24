@@ -57,7 +57,7 @@ Operations (use only these):
 - {"op":"define_term","id":"E5","definition":"the person's new definition","quote":"..."}
 - {"op":"mark_tension","a":"E1","b":"E3","text":"what conflicts","quote":"..."}
 - {"op":"resolve_tension","id":"E7","quote":"..."}  (the person resolved it)
-- {"op":"test_claim","id":"E3","quote":"..."}  (the philosopher put a case or a consequence to the claim and the person answered it, keeping the claim as it was; qualifying or taking it back have their own operations)
+- {"op":"test_claim","id":"E3","quote":"..."}  (the philosopher put a case or a consequence to the claim and the person answered it, keeping the claim as it was; qualifying or taking it back have their own operations. Use it each time the philosopher's question puts a case, an example or a consequence to one of the ledger's claims and the person's answer shows what they make of it: it is the commonest change in an inquiry that is being examined)
 - {"op":"add_fact","text":"the fact in the person's terms","quote":"..."}
 - {"op":"retract_fact","id":"E9","quote":"..."}  (the person said it is no longer true or was wrong)
 - {"op":"see_tension","id":"E7","quote":"..."}  (the person says in their own words that they see the two claims conflict)

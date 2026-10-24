@@ -89,9 +89,10 @@ func finish(t *testing.T, e *env) []*Result {
 		reading("", opTerm("wrong", "harming someone who trusted you", "harms someone who trusted you")),
 		reading("", opOn("test_claim", "E1", "still say it is wrong even to lie to a murderer")),
 		reading(""),
+		reading(""),
 	}
 	var out []*Result
-	for _, text := range []string{q1 + " " + q2, q3, q4, "Nothing more to add here, really."} {
+	for _, text := range []string{q1 + " " + q2, q3, q4, "Nothing more to add here, really.", "I have thought it through as far as I can."} {
 		out = append(out, e.send(t, text))
 	}
 	return out
@@ -194,7 +195,7 @@ func TestAProposalThatOnlyRewordsTheCurrentInquiryChangesNothing(t *testing.T) {
 }
 
 func TestAnInquiryWhoseClaimsAreTestedAndTermsDefinedBecomesAChallengeOnceAndIsToldOnce(t *testing.T) {
-	e := newEnv(t, turnSteps(5)...)
+	e := newEnv(t, turnSteps(6)...)
 	results := finish(t, e)
 	in := e.current(t)
 	if !in.Completed || in.Banked < 600 {
@@ -211,14 +212,21 @@ func TestAnInquiryWhoseClaimsAreTestedAndTermsDefinedBecomesAChallengeOnceAndIsT
 	}
 	e.tap.answer = []string{reading("")}
 	last := e.send(t, "Nothing more to add here, really.")
-	if last.Milestone != "" || counts(t, e)["socrates"] != 1 {
-		t.Fatalf("told again or counted twice: %q %v", last.Milestone, counts(t, e))
+	if strings.Contains(last.Milestone, "challenge with Socrates") {
+		told++
+	}
+	if counts(t, e)["socrates"] != 1 {
+		t.Fatalf("counted twice: %v", counts(t, e))
+	}
+	e.tap.answer = []string{reading("")}
+	if again := e.send(t, "And nothing else either."); again.Milestone != "" {
+		t.Fatalf("told again: %q", again.Milestone)
 	}
 	if told > 1 {
 		t.Fatalf("told %d times", told)
 	}
 	// the milestone appears on the turn after the work is done at the latest
-	e2 := newEnv(t, turnSteps(5)...)
+	e2 := newEnv(t, turnSteps(6)...)
 	rs := finish(t, e2)
 	e2.tap.answer = []string{reading("")}
 	rs = append(rs, e2.send(t, "One more thing to say to you."))
@@ -302,7 +310,7 @@ func TestOnlyThreeChallengesCountInADayAndTheFourthIsCountedOnALaterDay(t *testi
 }
 
 func TestAFinishedChallengeSurvivesTheConversationItWasWonIn(t *testing.T) {
-	e := newEnv(t, turnSteps(5)...)
+	e := newEnv(t, turnSteps(6)...)
 	finish(t, e)
 	if err := e.svc.Delete(bg, e.conv.ID, false); err != nil {
 		t.Fatal(err)
@@ -320,7 +328,7 @@ func TestAFinishedChallengeSurvivesTheConversationItWasWonIn(t *testing.T) {
 }
 
 func TestWithMemoryOffNoChallengeCanBeWon(t *testing.T) {
-	e := newEnv(t, turnSteps(5)...)
+	e := newEnv(t, turnSteps(6)...)
 	if err := e.svc.SetMemoryEnabled(bg, false); err != nil {
 		t.Fatal(err)
 	}
@@ -384,5 +392,26 @@ func TestADeepeningThatOnlyInheritsSettledWorkIsNotAnotherChallenge(t *testing.T
 	e.send(t, q3)
 	if c, _ := e.st.ChallengeCounts(bg); c["socrates"] != 1 {
 		t.Fatalf("inherited work was counted again: %v", c)
+	}
+}
+
+func TestAQuestionIsNotThoughtThroughInTwoMessagesHoweverMuchIsSaid(t *testing.T) {
+	e := newEnv(t, turnSteps(5)...)
+	e.tap.answer = []string{
+		reading(inq("whether lying is ever right", "lying is always wrong", "new"), opAdd("claim", "lying is always wrong", "lying is always wrong"), opTerm("lie", "saying what you know is false to deceive", "saying what you know is false")),
+		reading("", opTerm("wrong", "harming someone who trusted you", "harms someone who trusted you"), opOn("test_claim", "E1", "still say it is wrong even to lie to a murderer")),
+	}
+	e.send(t, q1+" "+q2)
+	e.send(t, q3+" "+q4)
+	in := e.current(t)
+	if in.Completed || in.Banked < 600 || in.Turns != 2 {
+		t.Fatalf("the floor of turns did not hold: %+v", in)
+	}
+	e.tap.answer = []string{reading(""), reading(""), reading("")}
+	e.send(t, "Nothing more to add here, really.")
+	e.send(t, "Nothing at all to add here, truly.")
+	e.send(t, "Still nothing to add, honestly.")
+	if in = e.current(t); !in.Completed {
+		t.Fatalf("it should count once it has been examined long enough: %+v", in)
 	}
 }

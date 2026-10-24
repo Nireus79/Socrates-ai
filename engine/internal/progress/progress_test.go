@@ -82,8 +82,11 @@ func TestAChallengeNeedsTheScoreEnoughSettledItemsTheirOwnWordsAndAnExaminedView
 	if own("term", "term", "term").Complete(p) {
 		t.Fatal("defining words alone is not examining a view")
 	}
-	if own("claim", "term").Complete(p) {
-		t.Fatal("two items are too few")
+	if !own("claim", "term").Complete(p) {
+		t.Fatal("a tested claim and a defined word in the person's words is enough: the turns floor guards against haste")
+	}
+	if own("claim").Complete(p) {
+		t.Fatal("one item is too few")
 	}
 	if Score([]store.Entry{e("claim", 2), e("term", 2), e("term", 2)}, p).Complete(p) {
 		t.Fatal("suggested wording alone cannot finish a challenge")
