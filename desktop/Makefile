@@ -11,8 +11,9 @@ build: frontend
 	cp ../engine/bin/socrates-engine bin/socrates-engine
 test:
 	go vet ./shell/ && go test -race -count=1 ./shell/
-# The Windows window and engine, cross-compiled without a C compiler (the window needs the WebView2 runtime on the machine, which Windows 11
+# The Windows window and engine (the icon and version go in through go-winres: go install github.com/tc-hib/go-winres@v0.3.3), cross-compiled without a C compiler (the window needs the WebView2 runtime on the machine, which Windows 11
 # has). Compiling is not running: nothing here has been run on Windows.
 windows: frontend
+	go-winres simply --arch amd64 --icon icon.png --manifest gui --product-name Socrates --file-description "Socrates: ask a philosopher" --copyright "Hermes Software, MIT" --out rsrc
 	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -tags production -ldflags "-H windowsgui" -o bin/socrates-desktop.exe .
 	cd ../engine && GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -o ../desktop/bin/socrates-engine.exe ./cmd/socrates-engine
