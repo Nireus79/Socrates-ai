@@ -5,7 +5,6 @@ import (
 	_ "embed"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -105,7 +104,7 @@ func ResolveRoleModels(provider string, list *ModelList, table ApprovedTable) (R
 }
 
 // dynamicPick chooses by the family words the providers themselves use: Claude "haiku" for fast and "sonnet" for replies; OpenAI the
-// highest version of "mini" (or "nano") for fast and of the plain model for replies. Ollama has no families: the caller chooses.
+// highest version of "mini" (or "nano") for fast and of the plain model for replies.
 func dynamicPick(provider, role string, list *ModelList) string {
 	switch strings.ToLower(provider) {
 	case "claude":
@@ -194,7 +193,7 @@ func pickOpenAI(role string, list *ModelList) string {
 // left out wrongly can still be typed in.
 var openAINotChat = regexp.MustCompile(`(?i)(embedding|whisper|tts|dall-e|moderation|image|audio|realtime|transcribe|search|davinci|babbage|instruct|computer-use)`)
 
-// ListModels asks the provider which models the key can use. Ollama needs no key: the server's own list.
+// ListModels asks the provider which models the key can use.
 func ListModels(ctx context.Context, s Settings, opts ...Option) (*ModelList, error) {
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
@@ -204,12 +203,6 @@ func ListModels(ctx context.Context, s Settings, opts ...Option) (*ModelList, er
 		return listClaude(ctx, o, s.APIKey)
 	case "openai":
 		return listOpenAI(ctx, o, s.APIKey)
-	case "ollama":
-		e, err := NormalizeOllamaEndpoint(s.OllamaEndpoint)
-		if err != nil {
-			return nil, err
-		}
-		return listOllama(ctx, o, e)
 	}
 	return nil, &Error{Kind: KindInvalid, Reason: "unknown AI provider " + strconv.Quote(s.Provider)}
 }
@@ -325,28 +318,6 @@ func listOpenAI(ctx context.Context, o *options, key string) (*ModelList, error)
 	list := &ModelList{Models: []ModelInfo{}}
 	for _, e := range entries {
 		list.Models = append(list.Models, ModelInfo{ID: e.id, Label: e.id})
-	}
-	if len(list.Models) > 0 {
-		list.Suggested = list.Models[0].ID
-	}
-	return list, nil
-}
-
-func listOllama(ctx context.Context, o *options, endpoint string) (*ModelList, error) {
-	d := o.doer("")
-	var resp struct {
-		Models []struct {
-			Name string `json:"name"`
-		} `json:"models"`
-	}
-	if err := d.get(ctx, endpoint+"/api/tags", nil, &resp); err != nil {
-		return nil, fmt.Errorf("Ollama did not answer at %s", endpoint)
-	}
-	list := &ModelList{Models: []ModelInfo{}}
-	for _, m := range resp.Models {
-		if m.Name != "" {
-			list.Models = append(list.Models, ModelInfo{ID: m.Name, Label: m.Name})
-		}
 	}
 	if len(list.Models) > 0 {
 		list.Suggested = list.Models[0].ID

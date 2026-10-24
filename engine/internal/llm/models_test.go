@@ -63,7 +63,7 @@ func TestAClaudeModelNotInTheTableIsFoundByItsFamily(t *testing.T) {
 }
 
 func TestWhenNothingFitsTheProvidersSuggestionIsUsedAndAnEmptyListIsAnError(t *testing.T) {
-	got, err := ResolveRoleModels("ollama", listOf("mistral:latest", "llama3"), ApprovedTable{})
+	got, err := ResolveRoleModels("claude", listOf("mistral:latest", "llama3"), ApprovedTable{})
 	if err != nil || got.Fast != "mistral:latest" || got.Reply != "mistral:latest" || got.Tested {
 		t.Fatalf("%+v %v", got, err)
 	}
@@ -118,14 +118,6 @@ func TestListOpenAIModelsDropsWhatIsNotChatAndSortsNewestFirst(t *testing.T) {
 	}
 	if f.last().Headers.Get("Authorization") != "Bearer "+openAIKey {
 		t.Fatal("no key sent")
-	}
-}
-
-func TestListOllamaModelsNeedsNoKey(t *testing.T) {
-	f := newFake(t, ok(`{"models":[{"name":"mistral:latest"},{"name":"llama3:8b"}]}`))
-	list, err := ListModels(context.Background(), Settings{Provider: "ollama", OllamaEndpoint: f.srv.URL}, f.opts()...)
-	if err != nil || len(list.Models) != 2 || list.Suggested != "mistral:latest" {
-		t.Fatalf("%v %+v", err, list)
 	}
 }
 

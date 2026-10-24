@@ -13,8 +13,7 @@ show a contradiction, reach "I do not know yet", then a better question). When t
 different starting points the user can take, edit or reject.
 
 It is built from the code of Moly (same product family): a **standalone app** for Windows, Linux and macOS (decided 2026-10-23, section 15: engine and screens in one window, no extension and no installers) and an Android app (no local model on Android);
-a browser extension for Chrome, Edge and Firefox stays possible later as an optional free entry. Like Moly it runs on the user's own AI provider key (Claude or OpenAI) or,
-on desktop, a local model (Ollama). No page scanning, no ads in the chat, encrypted local storage, no user content in logs.
+a browser extension for Chrome, Edge and Firefox stays possible later as an optional free entry. Like Moly it runs on the user's own AI provider key (Claude or OpenAI) (local models were dropped on 2026-10-24, section 19). No page scanning, no ads in the chat, encrypted local storage, no user content in logs.
 
 ## 2. What the two sources teach
 
@@ -167,7 +166,7 @@ Socrates suggested.
 
 ## 5. Platforms and releases (same versions as Moly)
 - **Desktop (main form, decided 2026-10-23)**: a standalone app for Windows, Linux, macOS: the Go engine as a child process of the app and the Moly screens in its window, with a `shim.js` for the `chrome.*` calls, the pattern that
-  the Android app of Moly already uses. No native-messaging host, no installers. A Wails v2 window with the engine as a child process, the Moly screens embedded and the engine's API proxied with the token added was built and ran on Linux (experiment of 2026-10-23, session record section 14); Windows and macOS are not yet tested. A local model (Ollama) is optional on desktop only; the provider key route is the default.
+  the Android app of Moly already uses. No native-messaging host, no installers. A Wails v2 window with the engine as a child process, the Moly screens embedded and the engine's API proxied with the token added was built and ran on Linux (experiment of 2026-10-23, session record section 14); Windows and macOS are not yet tested. There is no local model (section 19); the provider key route is the only one.
 - **Browser extension**: optional, later, as a free entry (Chrome and Edge Manifest V3 side panel, Firefox separate build). Not part of M0. The Chrome Web Store has no payments of its own.
 - **Android**: Capacitor shell with the engine embedded, copy/paste layout and share target, `play` flavor only (F-Droid is out for this product, section 15; the `foss` flavor of Moly is not carried over
   unless that changes). Provider key only, no local model, no page scanning.
@@ -180,7 +179,7 @@ English only at the beginning (decided 2026-10-22). Prompts are English.
 - Scenario suite as in `orchestration_test.go`: scripted model, real temporary database, one scenario per rule, each checked to fail without the rule.
 - Labelled judge batteries (`judges_live_test.go`): factual vs philosophical question, stuck vs not stuck, same inquiry vs new, claim vs question vs
   joke, hard-topic vs harm. Held-out cases are marked "held out:" and occur in no prompt. Measure each judge with 3 replays before keeping it.
-- Live checks with real models (Claude, OpenAI, one local model) by hand before each release; local safety scenarios stay git-ignored.
+- Live checks with real models (Claude and OpenAI) by hand before each release; local safety scenarios stay git-ignored.
 - Reply-quality review: a fixed list of 30 questions across ethics, politics, science, love, death and everyday life; read by the founder.
 - Privacy tests: user content absent from logs, deletion leaves nothing.
 - Character tests (2026-10-23): a factual-fidelity battery (a philosopher does not assert an episode that did not happen or a work he did not write; checked by hand and by a judge on a fixed list of questions), the output gate on questions, claims of being real or human, and the "bridge to today" being a question; a local battery per philosopher (CHARACTERS_COMMON.md 5).
@@ -199,9 +198,9 @@ English only at the beginning (decided 2026-10-22). Prompts are English.
 - A question-only bot feels evasive. Mitigation: direct-answer exit, the mode setting, suggestions, the "I do not know" ending.
 - Hard topics trigger crisis refusals wrongly. Mitigation: ambiguity asks first; philosophy batteries.
 - Socrates putting words in the user's mouth (quotes, suggestions stored as beliefs). Mitigation: evidence rule, suggestion provenance, confirm on doubt.
-- Model drift across Claude, OpenAI and local models. Mitigation: judges with defined labels, batteries, model approval script as in Moly.
+- Model drift across Claude and OpenAI. Mitigation: judges with defined labels, batteries, model approval script as in Moly.
 - The copy of Moly diverges from Moly. Mitigation: the sharing model of decision 6 (section 10): start as a copy, extract shared parts later.
-- A local model on desktop may be too weak for the examination moves; it is optional and labelled untested.
+- (Local models: dropped, section 19.)
 
 ## 10. Decisions of the founder, 2026-10-22
 
@@ -215,7 +214,7 @@ English only at the beginning (decided 2026-10-22). Prompts are English.
 | 6 | Code sharing | "Whatever is better". Recommendation: **start as a copy of Moly** (M0), port shared fixes by hand during the beta, and extract the shared parts (keystore, privacy, provider and key handling, installers) into one module only after both products are stable. Revisit at M5 |
 | 7 | Memory | Socrates remembers claims across conversations (the ledger belongs to the user, not the conversation; deletable by the user) |
 | 8 | Hard topics | The principle of no harm; ethical reasoning as in Moly (safety stage, refusal rules, check-in after a crisis) |
-| 9 | Local model | Local (desktop, Ollama) and cloud (Claude, OpenAI), as in Moly; Android cloud only |
+| 9 | Local model | *Dropped 2026-10-24 (section 19).* Cloud only (Claude, OpenAI) |
 | 10 | Business | Free launch with the sponsor card, as in Moly. Later the user can buy more time (turns) and more suggestions |
 | 11 | Android timing | Undecided. Recommendation: extension and desktop first, Android after the game loop is proven (the copy/paste layout needs its own screens) |
 | 12 | Knowledge | A curated set of philosophical texts, bundled and searched on the device (section 13). *Shelved on 2026-10-23 (section 18): the philosophers speak from what the models already know of the texts* |
@@ -451,3 +450,4 @@ The answers were as good as with the corpus, the application is lighter and simp
 - Store products: one per philosopher plus a bundle (MONETIZATION.md 7). Socrates has no unlock product; an allowance product (turns, suggestions) is possible later and waits for the beta to set numbers.
 - Testing: simulated until the final tests. For the final tests the founder allows his API key and a phone on USB; both only when he says go. Until then M4 continues on the simulator and the mock model.
 - Greek (2026-10-24, founder: "we need to start adding the Greek language"): modern Greek is added beside English. The person chooses the language of the screens (the device language is the first guess and is told to the engine once); the application's own texts (fixed refusals, the crisis message and check-in, milestones, the philosophers' names, eras and opening lines, the engine's error messages) follow that choice, while the philosophers answer in the language the person writes in. Ancient Greek stays a much later "hardcore" mode (PLAN 15). Prompts, the persona and the safety judge stay English and read Greek. Quotations are matched ignoring Greek stress marks and final sigma. Not yet in Greek: the store listings, the privacy page, the character sheets (English documents), numbers and dates (none shown).
+- Local models dropped (2026-10-24, founder: "remove ollama"): Moly offered them for privacy, which Socrates does not need; the people it is for do not run local models; and a small local model would need a corpus and a strong Greek to match the cloud models (they know the texts, write good Greek, and give the judge, gate and ledger the reliable structured answers the safety path depends on). The Ollama provider, its address setting and its screens were removed. A file that names a provider that is no longer offered is treated as having none, so the person chooses Claude or OpenAI again. For simulated whole-journey tests the engine builds with `-tags testprovider`, which alone reads `SOCRATES_TEST_PROVIDER_URL` (a stand-in Claude server); the shipped engine has no such door.

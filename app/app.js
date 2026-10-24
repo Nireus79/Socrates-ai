@@ -205,25 +205,20 @@ function ageScreen() {
 
 function providerScreen(first, back) {
   const err = errorLine();
-  const provider = el("select", { "aria-label": t("Provider") }, el("option", { value: "claude" }, "Claude (Anthropic)"), el("option", { value: "openai" }, "OpenAI"), el("option", { value: "ollama" }, t("Ollama (a model on this computer)")));
+  const provider = el("select", { "aria-label": t("Provider") }, el("option", { value: "claude" }, "Claude (Anthropic)"), el("option", { value: "openai" }, "OpenAI"));
   const key = el("input", { type: "password", autocomplete: "off", placeholder: t("Paste your API key"), "aria-label": t("API key") });
-  const endpoint = el("input", { type: "text", value: "http://127.0.0.1:11434", "aria-label": t("Ollama address") });
   const keyBox = el("div", {}, el("label", {}, t("Your API key")), key, el("p", { class: "muted" }, t("The key stays on this computer, encrypted. It is tested once, then used only to talk to your provider.")));
-  const epBox = el("div", { hidden: true }, el("label", {}, t("Ollama address")), endpoint);
-  provider.addEventListener("change", () => { const o = provider.value === "ollama"; keyBox.hidden = o; epBox.hidden = !o; });
   const save = el("button", { class: "primary" }, t("Save and test"));
   save.addEventListener("click", async () => {
     err.textContent = ""; save.disabled = true; save.textContent = t("Testing…");
-    const body = { provider: provider.value };
-    if (provider.value === "ollama") body.ollamaEndpoint = endpoint.value; else body.apiKey = key.value;
-    const r = await api("PUT", "/api/settings/llm", body);
+    const r = await api("PUT", "/api/settings/llm", { provider: provider.value, apiKey: key.value });
     save.disabled = false; save.textContent = t("Save and test");
     if (r.status === 200) { key.value = ""; return boot(); }
     err.textContent = errMsg(r.data);
   });
   mount(...screen(first ? t("Connect an AI provider") : t("AI provider"), el("div", { class: "card stack" },
     el("p", {}, t("Socrates uses your own account with an AI provider. You pay the provider directly; Socrates has no server and sees nothing.")),
-    el("label", {}, t("Provider")), provider, keyBox, epBox, err, save), back ? el("button", { class: "link", onclick: back }, t("Back")) : null));
+    el("label", {}, t("Provider")), provider, keyBox, err, save), back ? el("button", { class: "link", onclick: back }, t("Back")) : null));
 }
 
 // ---- home: the philosophers and the conversations

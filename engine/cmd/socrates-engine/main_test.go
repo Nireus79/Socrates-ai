@@ -34,7 +34,7 @@ func build(t *testing.T) string {
 			return
 		}
 		binary = filepath.Join(dir, "socrates-engine")
-		out, err := exec.Command("go", "build", "-o", binary, ".").CombinedOutput()
+		out, err := exec.Command("go", "build", "-tags", "testprovider", "-o", binary, ".").CombinedOutput()
 		if err != nil {
 			buildErr = fmt.Errorf("build failed: %v\n%s", err, out)
 		}
@@ -74,13 +74,13 @@ type engine struct {
 	done   chan error
 }
 
-func start(t *testing.T) *engine {
+func start(t *testing.T, env ...string) *engine {
 	t.Helper()
 	bin := build(t)
 	dir := filepath.Join(t.TempDir(), "data")
 	cmd := exec.Command(bin, "--data-dir", dir)
 	// The key comes from the environment so that the test never touches the real keychain.
-	cmd.Env = append(os.Environ(), "SOCRATES_DB_KEY="+strings.Repeat("ab", 32))
+	cmd.Env = append(append(os.Environ(), "SOCRATES_DB_KEY="+strings.Repeat("ab", 32)), env...)
 	stdin, _ := cmd.StdinPipe()
 	stdoutPipe, _ := cmd.StdoutPipe()
 	e := &engine{cmd: cmd, stdin: stdin, stdout: &safeBuffer{}, stderr: &safeBuffer{}, dir: dir, done: make(chan error, 1)}

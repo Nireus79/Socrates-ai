@@ -16,28 +16,26 @@ import (
 	"socrates/internal/transport"
 )
 
-// A stand-in Ollama: it lists one model and answers /api/chat according to who is asking (judge, gate, title, summary or the philosopher).
-type fakeOllama struct {
+// A stand-in Claude: it lists two models and answers /v1/messages according to who is asking (judge, gate, ledger, title, summary or the
+// philosopher).
+type fakeClaude struct {
 	mu       sync.Mutex
 	verdicts []string // the judge's answers, in order
 	replies  []string // the philosopher's answers, in order
 	prompts  []string // every system prompt seen (for the ordering check)
 }
 
-func (f *fakeOllama) handler() http.Handler {
+func (f *fakeClaude) handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/tags", func(w http.ResponseWriter, _ *http.Request) {
-		io.WriteString(w, `{"models":[{"name":"test-model"}]}`)
+	mux.HandleFunc("/v1/models", func(w http.ResponseWriter, _ *http.Request) {
+		io.WriteString(w, `{"data":[{"id":"claude-sonnet-5-5","line":"sonnet"},{"id":"claude-haiku-5-5","line":"haiku"}],"has_more":false}`)
 	})
-	mux.HandleFunc("/api/chat", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v1/messages", func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
-			Messages []struct{ Role, Content string } `json:"messages"`
+			System string `json:"system"`
 		}
 		json.NewDecoder(r.Body).Decode(&req)
-		sys := ""
-		if len(req.Messages) > 0 && req.Messages[0].Role == "system" {
-			sys = req.Messages[0].Content
-		}
+		sys := req.System
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		var out string
@@ -61,7 +59,7 @@ func (f *fakeOllama) handler() http.Handler {
 			out, f.replies = f.replies[0], f.replies[1:]
 			f.prompts = append(f.prompts, "reply")
 		}
-		json.NewEncoder(w).Encode(map[string]any{"model": "test-model", "message": map[string]string{"role": "assistant", "content": out}, "done_reason": "stop"})
+		json.NewEncoder(w).Encode(map[string]any{"model": "claude-sonnet-5-5", "content": []map[string]string{{"type": "text", "text": out}}, "stop_reason": "end_turn"})
 	})
 	return mux
 }
@@ -87,7 +85,7 @@ func TestAWholeJourneyThroughTheRealEngine(t *testing.T) {
 		secretReply  = "QUOKKA-REPLY-WORDS what do you mean"
 		secretCrisis = "WOMBAT-CRISIS-WORDS I want to end my life"
 	)
-	fake := &fakeOllama{
+	fake := &fakeClaude{
 		verdicts: []string{
 			`{"label":"ok","confidence":0.95,"evidence":"","reason":"x"}`,
 			`{"label":"self_harm_clear","confidence":0.97,"evidence":"end my life","reason":"x"}`,
@@ -97,7 +95,7 @@ func TestAWholeJourneyThroughTheRealEngine(t *testing.T) {
 	srv := httptest.NewServer(fake.handler())
 	defer srv.Close()
 
-	e := start(t)
+	e := start(t, "SOCRATES_TEST_PROVIDER_URL="+srv.URL)
 	e.waitReady(t)
 	// before anything is set up, a message is refused for the right reason
 	_, conv, _ := e.call(t, "POST", "/api/conversations", `{"philosopherId":"socrates"}`)
@@ -112,7 +110,7 @@ func TestAWholeJourneyThroughTheRealEngine(t *testing.T) {
 	if code, body, _ := e.call(t, "POST", "/api/conversations/"+id+"/messages", `{"text":"hello"}`); code != 409 || body["kind"] != "no_provider" {
 		t.Fatalf("before the provider: %d %v", code, body)
 	}
-	if code, _, raw := e.call(t, "PUT", "/api/settings/llm", `{"provider":"ollama","ollamaEndpoint":"`+srv.URL+`"}`); code != 200 {
+	if code, _, raw := e.call(t, "PUT", "/api/settings/llm", `{"provider":"claude","apiKey":"sk-ant-journey-test"}`); code != 200 {
 		t.Fatalf("provider: %d %s", code, raw)
 	}
 

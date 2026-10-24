@@ -16,4 +16,4 @@ make live    # tests against the real providers (needs ANTHROPIC_API_KEY, costs 
 5. The database key comes from the system keychain, a passphrase or a key file (`internal/keystore`); `SOCRATES_DB_KEY` (64 hex characters) overrides it for a shell that holds the key itself (the phone app) and for tests.
 
 ## Packages
-`internal/secrets` sealing and process hardening · `internal/keystore` where the database key lives · `internal/privacy` log scrubbing · `internal/transport` the door (policy, rate limit, key gate, handshake) · `internal/store` the encrypted store · `internal/llm` Claude, OpenAI and Ollama · `internal/api` the routes once the database is open · `cmd/socrates-engine` the program.
+`internal/secrets` sealing and process hardening · `internal/keystore` where the database key lives · `internal/privacy` log scrubbing · `internal/transport` the door (policy, rate limit, key gate, handshake) · `internal/store` the encrypted store · `internal/llm` Claude and OpenAI · `internal/api` the routes once the database is open · `cmd/socrates-engine` the program.

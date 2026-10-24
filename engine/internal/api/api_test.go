@@ -195,11 +195,10 @@ func TestOmittingTheKeyKeepsTheStoredOneAndChangingTheProviderDropsIt(t *testing
 func TestBadInputIsRefused(t *testing.T) {
 	e := setup(t)
 	for name, body := range map[string]string{
-		"unknown provider":  `{"provider":"gemini","apiKey":"k"}`,
-		"no key":            `{"provider":"claude"}`,
-		"bad ollama":        `{"provider":"ollama","ollamaEndpoint":"ftp://x"}`,
-		"not json":          `nonsense`,
-		"credentials in it": `{"provider":"ollama","ollamaEndpoint":"http://u:p@127.0.0.1:11434"}`,
+		"unknown provider": `{"provider":"gemini","apiKey":"k"}`,
+		"no key":           `{"provider":"claude"}`,
+		"ollama":           `{"provider":"ollama","ollamaEndpoint":"http://127.0.0.1:11434"}`,
+		"not json":         `nonsense`,
 	} {
 		if code, _ := e.do(t, "PUT", "/api/settings/llm", body); code != 400 {
 			t.Errorf("%s: %d", name, code)

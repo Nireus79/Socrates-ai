@@ -9,11 +9,10 @@ import (
 // Settings are the user's choices: which provider, with which key, and which model for each role (found once with ListModels and
 // ResolveRoleModels, then kept).
 type Settings struct {
-	Provider       string // "claude", "openai" or "ollama"
-	APIKey         string
-	OllamaEndpoint string
-	FastModel      string
-	ReplyModel     string
+	Provider   string // "claude" or "openai"
+	APIKey     string
+	FastModel  string
+	ReplyModel string
 }
 
 // Client sends each call to the model of its role.
@@ -30,12 +29,6 @@ func NewClient(s Settings, opts ...Option) (*Client, error) {
 		p = NewAnthropic(s.APIKey, opts...)
 	case "openai":
 		p = NewOpenAI(s.APIKey, opts...)
-	case "ollama":
-		o, err := NewOllama(s.OllamaEndpoint, opts...)
-		if err != nil {
-			return nil, err
-		}
-		p = o
 	default:
 		return nil, &Error{Kind: KindInvalid, Reason: "unknown AI provider " + s.Provider}
 	}
@@ -60,8 +53,7 @@ func (c *Client) Model(r Role) string {
 	return m
 }
 
-// Complete makes the call. Without a deadline of its own the call gets one that fits its role (a reply may think for minutes; a local
-// model on a slow machine may need much longer).
+// Complete makes the call. Without a deadline of its own the call gets one that fits its role (a reply may think for minutes).
 func (c *Client) Complete(ctx context.Context, req Request) (*Response, error) {
 	if req.Role == "" {
 		req.Role = RoleFast
@@ -74,9 +66,6 @@ func (c *Client) Complete(ctx context.Context, req Request) (*Response, error) {
 		d := 90 * time.Second
 		if req.Role == RoleReply {
 			d = 10 * time.Minute
-		}
-		if strings.EqualFold(c.settings.Provider, "ollama") {
-			d = 20 * time.Minute
 		}
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, d)

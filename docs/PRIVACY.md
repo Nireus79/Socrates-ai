@@ -4,7 +4,7 @@ Status: draft of 2026-10-24 for the beta. It is the source for the privacy page 
 
 ## In plain words
 - Your conversations, the notes the philosophers keep about you and your settings are stored **only on your own device**, encrypted. We (Hermes Software) run no server and receive nothing.
-- To write a reply, the text of the conversation is sent to the **AI provider you chose** (Anthropic, OpenAI, or a model on your own computer through Ollama) with **your own key**. That provider's terms and privacy policy apply to what it receives. Nothing else leaves your device.
+- To write a reply, the text of the conversation is sent to the **AI provider you chose** (Anthropic or OpenAI) with **your own key**. That provider's terms and privacy policy apply to what it receives. Nothing else leaves your device.
 - There is no account, no analytics, no advertising and no tracking in the beta.
 - The philosophers are artificial. They are not a medical, legal or crisis service. The app is for people aged 16 and over.
 
@@ -22,7 +22,7 @@ Status: draft of 2026-10-24 for the beta. It is the source for the privacy page 
 - Nothing is learned from a message while you may be hurting.
 
 ## Where it goes
-Each turn makes a few short calls to your provider: a safety check of your message, the reply, a safety check of the reply, and afterwards (in the background) a title, a running summary and the notes for the memory; "Help me answer" asks for suggestions. The text of the conversation is in those calls. The provider may keep it under its own terms; use a key with a spending limit and read its policy. With Ollama on your own computer nothing leaves it.
+Each turn makes a few short calls to your provider: a safety check of your message, the reply, a safety check of the reply, and afterwards (in the background) a title, a running summary and the notes for the memory; "Help me answer" asks for suggestions. The text of the conversation is in those calls. The provider may keep it under its own terms; use a key with a spending limit and read its policy.
 
 ## Your controls
 - **Memory off** (Settings): no new notes, and the old ones are not told to the philosophers.

@@ -1,4 +1,4 @@
-// Package llm talks to the AI provider the user chose (Claude, OpenAI, or a local Ollama) with the user's own key.
+// Package llm talks to the AI provider the user chose (Claude or OpenAI) with the user's own key.
 //
 // The package knows the vendors' addresses and quirks and nothing else about Socrates. It never logs what it sends or receives, it never
 // puts the key into an error, and it does not echo a provider's raw error body (only a short, cleaned reason).

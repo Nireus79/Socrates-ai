@@ -121,7 +121,7 @@ func run() error {
 	}
 	defer db.Close()
 
-	mux, conversations := api.New(api.Deps{Store: db, Version: version, EnforceUnlocks: os.Getenv("SOCRATES_ENFORCE_UNLOCKS") == "1"})
+	mux, conversations := api.New(api.Deps{Store: db, Version: version, LLMOptions: llmOptions(), EnforceUnlocks: os.Getenv("SOCRATES_ENFORCE_UNLOCKS") == "1"})
 	defer conversations.Wait() // titles and summaries of the last turns are written before the database closes
 	transport.RegisterShutdown(mux, quit)
 	limiter := transport.NewRateLimiter(transport.DefaultLimits)

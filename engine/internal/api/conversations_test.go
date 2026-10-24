@@ -132,6 +132,17 @@ func TestTheProfileTheRosterAndTheAgeConfirmation(t *testing.T) {
 	if p["ageConfirmed"] != true || p["hasProvider"] != true {
 		t.Fatalf("%v", p)
 	}
+	// A file written when a local model was possible names a provider this version does not offer: the person is asked to choose again.
+	if err := a.st.Update(context.Background(), func(o *store.Ops) error { return o.SetSetting(context.Background(), "llm.provider", "ollama") }); err != nil {
+		t.Fatal(err)
+	}
+	_, p = a.do(t, "GET", "/api/profile", "")
+	if p["hasProvider"] != false {
+		t.Fatalf("a provider that is no longer offered counted: %v", p)
+	}
+	if err := a.st.Update(context.Background(), func(o *store.Ops) error { return o.SetSetting(context.Background(), "llm.provider", "claude") }); err != nil {
+		t.Fatal(err)
+	}
 	_, r := a.do(t, "GET", "/api/philosophers", "")
 	list, _ := r["philosophers"].([]any)
 	if len(list) != 4 || list[0].(map[string]any)["id"] != "socrates" {

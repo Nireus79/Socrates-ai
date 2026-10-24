@@ -53,11 +53,6 @@ func TestACallWithoutADeadlineGetsOneThatFitsItsRole(t *testing.T) {
 	if spy.deadline < 9*time.Minute || spy.deadline > 10*time.Minute+time.Second {
 		t.Fatalf("reply: %v", spy.deadline)
 	}
-	local := NewClientWith(spy, Settings{Provider: "ollama", FastModel: "a", ReplyModel: "b"})
-	local.Complete(context.Background(), Request{Role: RoleReply, Messages: userMsg("x")})
-	if spy.deadline < 19*time.Minute {
-		t.Fatalf("a local model: %v", spy.deadline)
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	c.Complete(ctx, Request{Role: RoleReply, Messages: userMsg("x")})
@@ -67,18 +62,15 @@ func TestACallWithoutADeadlineGetsOneThatFitsItsRole(t *testing.T) {
 }
 
 func TestNewClientBuildsTheNamedProviderAndRefusesAnUnknownOne(t *testing.T) {
-	for _, p := range []string{"claude", "Claude", " openai ", "ollama"} {
+	for _, p := range []string{"claude", "Claude", " openai "} {
 		if _, err := NewClient(Settings{Provider: p, APIKey: "k"}); err != nil {
 			t.Errorf("%q: %v", p, err)
 		}
 	}
-	for _, p := range []string{"", "gemini", "claude-cli"} {
+	for _, p := range []string{"", "gemini", "claude-cli", "ollama"} {
 		if _, err := NewClient(Settings{Provider: p}); !errors.Is(err, ErrInvalid) {
 			t.Errorf("%q: %v", p, err)
 		}
-	}
-	if _, err := NewClient(Settings{Provider: "ollama", OllamaEndpoint: "ftp://x"}); err == nil {
-		t.Error("a bad Ollama endpoint was accepted")
 	}
 }
 

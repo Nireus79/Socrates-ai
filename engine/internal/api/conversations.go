@@ -17,13 +17,16 @@ import (
 	"socrates/internal/transport"
 )
 
+// knownProvider is false for an empty name and for one this version no longer offers (a file written when a local model was possible).
+func knownProvider(p string) bool { return p == "claude" || p == "openai" }
+
 // models builds the client from the user's stored settings, for each turn (a changed key or provider applies at once).
 func (h *handler) models(ctx context.Context) (conversation.Completer, error) {
 	s, _, err := h.loadCtx(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if s.Provider == "" || (s.Provider != "ollama" && s.APIKey == "") || s.FastModel == "" {
+	if !knownProvider(s.Provider) || s.APIKey == "" || s.FastModel == "" {
 		return nil, conversation.ErrNoProvider
 	}
 	return llm.NewClient(s, h.d.LLMOptions...)
@@ -42,7 +45,7 @@ func (h *handler) profile(w http.ResponseWriter, r *http.Request) {
 	}
 	transport.WriteJSON(w, http.StatusOK, map[string]any{
 		"ageConfirmed": age,
-		"hasProvider":  s.Provider != "" && (s.Provider == "ollama" || s.APIKey != ""),
+		"hasProvider":  knownProvider(s.Provider) && s.APIKey != "",
 	})
 }
 
