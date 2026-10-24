@@ -2,6 +2,7 @@
 // on the page with textContent, never as markup. The page talks to the same origin only (the shell adds the engine's token).
 "use strict";
 
+const CONTACT = "Hermes_creative@proton.me";
 const AGE_TEXT = "This is for people aged 16 and over.";
 
 function el(tag, props, ...kids) {
@@ -239,7 +240,7 @@ async function openChat(id) {
   const list = el("div", { class: "msgs", "aria-live": "polite" });
   const main = el("main", {}, list);
   if (!msgs.length && who.opening) list.append(el("div", { class: "msg opening" }, who.opening));
-  const REASONS = { harmful: "It was harmful", hateful: "It was hateful or insulting", sexual: "It was sexual", untrue: "It was untrue about the real world", other: "Something else" };
+const REASONS = { harmful: "It was harmful", hateful: "It was hateful or insulting", sexual: "It was sexual", untrue: "It was untrue about the real world", other: "Something else" };
   // Reporting takes the reply out of the conversation (nothing is sent anywhere); the person may keep a copy of the report to send to the developer.
   const report = (m, bubble) => {
     const choose = el("div", { class: "help" }, el("div", { class: "muted" }, "Why are you reporting this reply?"),
@@ -254,7 +255,7 @@ async function openChat(id) {
         const text = ["Socrates AI: report of a reply", "Philosopher: " + who.name, "Reason: " + REASONS[category]].concat(withReply ? ["Reply: " + res.data.reply] : []).join("\n");
         const done = (msg) => keep.replaceChildren(el("span", { class: "muted" }, msg));
         const clip = window.navigator && window.navigator.clipboard;
-        if (clip && clip.writeText) clip.writeText(text).then(() => done("Copied. Send it to the developer (Hermes Software) as you like; nothing was sent from here."), () => manual(text));
+        if (clip && clip.writeText) clip.writeText(text).then(() => done("Copied. Send it to " + CONTACT + " as you like; nothing was sent from here."), () => manual(text));
         else manual(text);
       };
       const manual = (text) => keep.replaceChildren(el("div", { class: "muted" }, "Copy this yourself:"), el("textarea", { readonly: "", rows: "4", "aria-label": "Report text" }, text));
@@ -478,7 +479,8 @@ async function settings() {
   body.append(el("div", { class: "card stack" }, el("h2", {}, "About"), logo(),
     el("p", { class: "muted" }, "The philosophers are artificial characters made from what was written about them. They are not real people, and they are not a source of medical, legal or other professional advice."),
     el("p", { class: "muted" }, "If you are thinking of hurting yourself, please call your local emergency number or a crisis line, or tell someone you trust."),
-    el("p", { class: "muted" }, "For people aged 16 and over. " + (st.data.version ? "Version " + st.data.version + "." : ""))));
+    el("p", { class: "muted" }, "For people aged 16 and over. " + (st.data.version ? "Version " + st.data.version + "." : "")),
+    el("p", { class: "muted" }, "Problems, questions and reports: " + CONTACT + " (Hermes Software).")));
   body.append(el("div", { class: "card stack" }, el("h2", {}, "Delete everything"),
     el("p", { class: "muted" }, "Removes every conversation, your provider key and your settings from this computer. It cannot be undone."),
     confirmButton("Delete everything", "danger", "Click again to delete everything", async () => {

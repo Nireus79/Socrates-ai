@@ -106,7 +106,7 @@ sells the person's words. Wording follows the rule that nothing sounds like a sp
 ## 7. Open questions still for the founder
 1. (Decided 2026-10-24: both. One product per philosopher, `philosopher.diogenes`, `philosopher.plato`, `philosopher.aristotle`, and a bundle, `philosophers.all`. Socrates is open from the start and has no product. Each store lists the same ids; the bundle's price is set below the sum on each platform.)
 2. The supporter benefits, in the house voice (no sport or game words).
-3. The address reports are to be sent to.
+3. (Decided 2026-10-24: the same address as Moly, Hermes_creative@proton.me, shown in the report copy and in About.)
 4. Ads: which network, and which screens may carry them (never a chat, never after a crisis).
 
 ## Sources (searched 2026-10-23, third-party unless marked)

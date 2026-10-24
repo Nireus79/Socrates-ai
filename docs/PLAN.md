@@ -443,3 +443,10 @@ The answers were as good as with the corpus, the application is lighter and simp
 **What stays:** the philosophers as persons with their own ways and mistakes; speaking from today with knowledge of what came after; the shape for an unpopular view (said plainly, put in the frame of his own time with what his contemporaries said against it, then a question about what holds today that is left open for the user); the Moly safety stage; honesty about being artificial.
 **Cost of the decision, stated plainly.** Without grounding the model can still misremember or invent a detail, and nothing in the application will catch it; the instruction lowers the chance and a fixed battery of questions checked by hand (and by a judge) measures it, as in section 7. A corpus can come back later, with the legal route of the session record, section 28.
 **Length of replies** (still open): the answers are essays of 500 words or more when nothing limits them; the limit belongs to the output layer, not to the character.
+
+
+## 19. Decisions of the founder, 2026-10-24
+- The whole app is for people aged 16 and over, Diogenes included; any stricter restriction is added after the beta.
+- Reports and questions go to the same contact address as Moly (in the screens as `CONTACT`).
+- Store products: one per philosopher plus a bundle (MONETIZATION.md 7). Socrates has no unlock product; an allowance product (turns, suggestions) is possible later and waits for the beta to set numbers.
+- Testing: simulated until the final tests. For the final tests the founder allows his API key and a phone on USB; both only when he says go. Until then M4 continues on the simulator and the mock model.
