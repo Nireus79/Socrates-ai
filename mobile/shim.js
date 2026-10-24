@@ -16,5 +16,7 @@
   };
   // "Export": the system's save-as picker, so the person chooses where the file goes.
   shell.saveFile = function (name, text) { return plugin.saveFile({ name: name, text: text }); };
+  // The key help opens the provider's page in the phone's browser (the plugin allows only the two providers' sites over https).
+  shell.openLink = function (url) { return plugin.openLink({ url: url }); };
   window.socratesShell = shell;
 })();

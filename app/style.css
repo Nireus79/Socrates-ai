@@ -49,3 +49,7 @@ h1:focus { outline: none; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }
 .small { font-size: .8rem; padding: 0 4px; }
+
+.keyhelp h2 { margin: 0 0 4px; font-size: 1.05rem; }
+.keystep p { margin: 12px 0 6px; }
+.keystep .muted { margin-top: 4px; overflow-wrap: anywhere; }

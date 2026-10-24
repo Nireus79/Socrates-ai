@@ -3,7 +3,9 @@
 package main
 
 import (
+	"context"
 	"embed"
+	"errors"
 	"log"
 	"os"
 	"path/filepath"
@@ -14,6 +16,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/linux"
+	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"socrates-desktop/shell"
 )
@@ -23,6 +26,20 @@ var assets embed.FS
 
 //go:embed icon.png
 var icon []byte
+
+// App is what the page may call in the window: opening the key pages of the providers in the person's browser, nothing else.
+type App struct{ ctx context.Context }
+
+func (a *App) startup(ctx context.Context) { a.ctx = ctx }
+
+// OpenLink opens an address in the system browser if the shell allows it (shell.AllowedLink).
+func (a *App) OpenLink(url string) error {
+	if !shell.AllowedLink(url) {
+		return errors.New("that address is not one the app opens")
+	}
+	wruntime.BrowserOpenURL(a.ctx, url)
+	return nil
+}
 
 func enginePath() string {
 	if p := os.Getenv("SOCRATES_ENGINE"); p != "" {
@@ -49,6 +66,7 @@ func main() {
 		log.Fatal(err)
 	}
 	defer eng.Stop()
+	app := &App{}
 	err = wails.Run(&options.App{
 		Title:       "Socrates",
 		Width:       980,
@@ -56,6 +74,8 @@ func main() {
 		MinWidth:    420,
 		MinHeight:   520,
 		AssetServer: &assetserver.Options{Assets: assets, Handler: eng.Proxy(nil)},
+		OnStartup:   app.startup,
+		Bind:        []interface{}{app},
 		Linux:       &linux.Options{Icon: icon},
 	})
 	if err != nil {

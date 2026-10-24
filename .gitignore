@@ -18,3 +18,5 @@ engine/internal/safety/battery/
 
 desktop/*.syso
 engine/internal/conversation/battery/
+
+mobile/.test-engine-build

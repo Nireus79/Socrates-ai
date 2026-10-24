@@ -203,11 +203,45 @@ function ageScreen() {
     el("button", { class: "primary", onclick: async () => { await api("POST", "/api/profile/age"); boot(); } }, t("I am 16 or older")))));
 }
 
+// Pages of the two providers that the key help leads to. A link is opened in the system's browser, by the shell, and only if it is
+// one of these two sites over https; the page never navigates itself and never sends anything to them.
+const PROVIDER_SITES = /^https:\/\/platform\.(claude|openai)\.com\//;
+async function openLink(url, err) {
+  if (!PROVIDER_SITES.test(url)) return;
+  const shell = shellInfo();
+  const bound = typeof window !== "undefined" && window.go && window.go.main && window.go.main.App; // the desktop window
+  try {
+    if (shell && shell.openLink) await shell.openLink(url);
+    else if (bound && bound.OpenLink) await bound.OpenLink(url);
+    else window.open(url, "_blank", "noopener,noreferrer");
+  } catch (_) {
+    err.textContent = t("The browser could not be opened. Go to {url} yourself.", { url });
+  }
+}
+
+// How to get a key, for the provider chosen: three steps, each with a button that opens the right page, and the address in plain text.
+function keyHelp(kind, err) {
+  const claude = kind === "claude";
+  const base = claude ? "https://platform.claude.com" : "https://platform.openai.com";
+  const step = (text, label, path) => el("div", { class: "keystep" }, el("p", {}, text),
+    el("button", { class: "outlink", onclick: () => openLink(base + path, err) }, label),
+    el("div", { class: "muted" }, base.replace("https://", "") + path));
+  return el("div", { class: "keyhelp" },
+    el("h2", {}, t("How to get a key")),
+    el("p", { class: "muted" }, t("An API key is a password that lets Socrates talk to your provider's AI. It is not the same as a ChatGPT or Claude chat subscription, which does not include one.")),
+    step(t("1. Make an account on the provider's site for developers, or sign in."), t("Open the sign-in page"), "/"),
+    step(t("2. Add a small amount of credit. You pay the provider directly, only for what you use. Set a spending limit in your account if it offers one."), t("Open the billing page"), claude ? "/settings/billing" : "/settings/organization/billing/overview"),
+    step(t("3. Create a key, name it Socrates and copy it. It is shown only once."), t("Open the keys page"), claude ? "/settings/keys" : "/api-keys"),
+    el("p", {}, t("4. Come back here, paste the key above and press Save and test.")));
+}
+
 function providerScreen(first, back) {
   const err = errorLine();
   const provider = el("select", { "aria-label": t("Provider") }, el("option", { value: "claude" }, "Claude (Anthropic)"), el("option", { value: "openai" }, "OpenAI"));
   const key = el("input", { type: "password", autocomplete: "off", placeholder: t("Paste your API key"), "aria-label": t("API key") });
   const keyBox = el("div", {}, el("label", {}, t("Your API key")), key, el("p", { class: "muted" }, t("The key stays on this computer, encrypted. It is tested once, then used only to talk to your provider.")));
+  const help = el("div", {}, keyHelp(provider.value, err));
+  provider.addEventListener("change", () => { help.replaceChildren(keyHelp(provider.value, err)); });
   const save = el("button", { class: "primary" }, t("Save and test"));
   save.addEventListener("click", async () => {
     err.textContent = ""; save.disabled = true; save.textContent = t("Testing…");
@@ -216,9 +250,9 @@ function providerScreen(first, back) {
     if (r.status === 200) { key.value = ""; return boot(); }
     err.textContent = errMsg(r.data);
   });
-  mount(...screen(first ? t("Connect an AI provider") : t("AI provider"), el("div", { class: "card stack" },
+  mount(...screen(first ? t("Connect an AI provider") : t("AI provider"), el("div", {}, el("div", { class: "card stack" },
     el("p", {}, t("Socrates uses your own account with an AI provider. You pay the provider directly; Socrates has no server and sees nothing.")),
-    el("label", {}, t("Provider")), provider, keyBox, err, save), back ? el("button", { class: "link", onclick: back }, t("Back")) : null));
+    el("label", {}, t("Provider")), provider, keyBox, err, save), el("div", { class: "card" }, help)), back ? el("button", { class: "link", onclick: back }, t("Back")) : null));
 }
 
 // ---- home: the philosophers and the conversations

@@ -59,6 +59,52 @@ test("a new user confirms the age, then connects a provider, then sees the philo
   assert.ok(p.root.querySelector("input[type=password]") === null, "the key field is gone");
 });
 
+function providerPage() {
+  const p = page(ready({ "GET /api/profile": [200, { ageConfirmed: true, hasProvider: false }] }));
+  return p;
+}
+const openers = (root) => [...root.querySelectorAll("button.outlink")];
+
+test("the provider screen explains how to get a key, with a button for each step that opens the provider's own page, and the address in plain text", async () => {
+  const p = providerPage();
+  const opened = [];
+  global.window.go = { main: { App: { OpenLink: async (u) => { opened.push(u); } } } };
+  p.app.start(p.root); await settle(10);
+  assert.match(text(p.root), /How to get a key/);
+  assert.ok(p.root.querySelector("main").textContent.includes("How to get a key") && !p.root.querySelector("header").textContent.includes("How to get a key"), "the help is in the page, not the header");
+  assert.match(text(p.root), /not the same as a ChatGPT or Claude chat subscription/);
+  assert.deepStrictEqual(openers(p.root).map((b) => b.textContent), ["Open the sign-in page", "Open the billing page", "Open the keys page"]);
+  assert.match(text(p.root), /platform\.claude\.com\/settings\/keys/);
+  openers(p.root).forEach(click); await settle();
+  assert.deepStrictEqual(opened, ["https://platform.claude.com/", "https://platform.claude.com/settings/billing", "https://platform.claude.com/settings/keys"]);
+  // choosing the other provider changes the steps
+  const sel = p.root.querySelector("select"); sel.value = "openai"; sel.dispatchEvent(new global.window.Event("change", { bubbles: true }));
+  opened.length = 0; openers(p.root).forEach(click); await settle();
+  assert.deepStrictEqual(opened, ["https://platform.openai.com/", "https://platform.openai.com/settings/organization/billing/overview", "https://platform.openai.com/api-keys"]);
+  assert.match(text(p.root), /platform\.openai\.com\/api-keys/);
+  assert.doesNotMatch(text(p.root), /platform\.claude\.com/);
+  delete global.window.go;
+});
+
+test("on the phone the button asks the shell to open the page; with neither shell nor window it opens a new browser tab, and a failure shows the address to open by hand", async () => {
+  const p = providerPage();
+  const asked = [];
+  global.window.socratesShell = { ready: Promise.resolve(), base: "", token: "t", openLink: async (u) => { asked.push(u); } };
+  p.app.start(p.root); await settle(10);
+  click(openers(p.root)[2]); await settle();
+  assert.deepStrictEqual(asked, ["https://platform.claude.com/settings/keys"]);
+  global.window.socratesShell.openLink = async () => { throw new Error("no browser"); };
+  click(openers(p.root)[2]); await settle();
+  assert.match(text(p.root), /The browser could not be opened\. Go to https:\/\/platform\.claude\.com\/settings\/keys yourself\./);
+  delete global.window.socratesShell;
+  // a plain browser
+  const q = providerPage(); const tabs = [];
+  q.dom.window.open = (u, target, feats) => { tabs.push([u, target, feats]); return null; };
+  q.app.start(q.root); await settle(10);
+  click(openers(q.root)[1]); await settle();
+  assert.deepStrictEqual(tabs, [["https://platform.claude.com/settings/billing", "_blank", "noopener,noreferrer"]]);
+});
+
 test("the welcome screen shows the logo from the app's own file", async () => {
   const p = page(ready({ "GET /api/profile": [200, { ageConfirmed: false, hasProvider: false }] }));
   p.app.start(p.root); await settle();

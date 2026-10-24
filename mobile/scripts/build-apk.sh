@@ -4,6 +4,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 VARIANT=${1:-debug}
+if [ "$VARIANT" != debug ] && [ -e .test-engine-build ]; then
+  echo "refused: the engine in jniLibs was built with GO_TAGS=testprovider (emulator runs only). Run scripts/build-engine.sh again without it." >&2; exit 1
+fi
 scripts/build-www.sh
 [ -d node_modules ] || npm ci
 npx cap sync android >/dev/null
