@@ -164,7 +164,7 @@ func (s *Service) Offer(ctx context.Context, conversationID string) (*Result, er
 }
 
 func posingNote(topic string) string {
-	return "You are now putting a fundamental question to the person, to take up with you. The question is " + strconv.Quote(topic) + ". Put it in your own manner and your own words, briefly, and make clear that they may take it up or leave it. Do not number or label it."
+	return "You are now putting a fundamental question to the person, to take up with you. The question is " + strconv.Quote(topic) + ". Put it in your own manner and your own words, briefly. Do not announce that you are putting a question, do not say they may leave it (the screen offers that), and do not number or label it."
 }
 
 func acceptNote(topic string) string {

@@ -72,6 +72,7 @@ const (
 	KindNetwork    Kind = "network"     // no answer
 	KindEmpty      Kind = "empty"       // the answer had no text
 	KindInvalid    Kind = "invalid"     // the request was wrong before it was sent
+	KindRefused    Kind = "refused"     // the model declined to answer (stop reason "refusal")
 )
 
 // Error is a failed call.
@@ -109,6 +110,7 @@ var (
 	ErrNetwork    error = kindError(KindNetwork)
 	ErrEmpty      error = kindError(KindEmpty)
 	ErrInvalid    error = kindError(KindInvalid)
+	ErrRefused    error = kindError(KindRefused)
 )
 
 func (r Request) validate() error {

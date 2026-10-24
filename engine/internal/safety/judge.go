@@ -161,6 +161,11 @@ func Judge(ctx context.Context, c Completer, recent []llm.Message, newest string
 	var last error
 	for attempt := 0; attempt < judgeAttempts; attempt++ {
 		resp, err := c.Complete(ctx, req)
+		if errors.Is(err, llm.ErrRefused) {
+			// A judge that will not even read the message is itself a signal: it is treated as a request it should not help with, so
+			// the person gets the one reflective question and then the plain refusal, not a false "try again later".
+			return Verdict{Label: LabelIllegal, Confidence: 1, Reason: "the safety model declined to read the message"}, nil
+		}
 		if err != nil {
 			return Verdict{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
 		}

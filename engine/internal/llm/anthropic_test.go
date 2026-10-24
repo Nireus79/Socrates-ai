@@ -214,3 +214,11 @@ func TestABadRequestOrAMissingKeyIsRefusedBeforeAnythingIsSent(t *testing.T) {
 		t.Fatalf("%d requests were sent", len(f.Seen))
 	}
 }
+
+func TestAModelThatDeclinesToAnswerIsToldApartFromAnEmptyAnswer(t *testing.T) {
+	f := newFake(t, ok(`{"content":[],"stop_reason":"refusal","usage":{}}`))
+	_, err := call(t, f, "claude-sonnet-5-5", Request{Role: RoleReply, Messages: userMsg("x")})
+	if !errors.Is(err, ErrRefused) || errors.Is(err, ErrEmpty) {
+		t.Fatalf("%v", err)
+	}
+}

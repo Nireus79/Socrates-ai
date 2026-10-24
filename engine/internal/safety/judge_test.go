@@ -251,3 +251,28 @@ func TestAClearVerdictWithALongQuotationIsNotLostToTheLengthOfItsEvidence(t *tes
 		t.Fatalf("the kept evidence must be short: %d", len([]rune(v.Evidence)))
 	}
 }
+
+func TestASafetyModelThatWillNotReadAMessageCountsAsARequestNotToBeHelpedWith(t *testing.T) {
+	c, _ := client(llm.Fail(&llm.Error{Kind: llm.KindRefused, Reason: "the model declined to answer"}))
+	v, err := Judge(ctx, c, nil, "something the model would not read")
+	if err != nil || v.Label != LabelIllegal || Decide(v, State{}).SaveMessage {
+		t.Fatalf("%+v %v", v, err)
+	}
+	c2, _ := client(llm.Fail(&llm.Error{Kind: llm.KindServer, Reason: "x"}))
+	if _, err := Judge(ctx, c2, nil, "hello"); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("an ordinary failure must still fail closed: %v", err)
+	}
+}
+
+func TestAGateAnswerWhoseReasonBreaksTheJSONStillDecidesFromItsTwoFields(t *testing.T) {
+	g, err := parseGate(`{"flagged": false, "category": "none", "reason": "He says "I do" and mocks himself"}`)
+	if err != nil || g.Flagged || g.Category != GateNone {
+		t.Fatalf("%+v %v", g, err)
+	}
+	if _, err := parseGate(`{"flagged": true, "category": "none", "reason": "a "bad" one"}`); err == nil {
+		t.Fatal("a flag and a category that disagree must still be refused")
+	}
+	if _, err := parseGate(`{"flagged": "maybe", "reason": "x "y" z"}`); err == nil {
+		t.Fatal("an answer with no readable decision must fail closed")
+	}
+}

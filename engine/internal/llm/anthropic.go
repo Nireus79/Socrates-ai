@@ -112,6 +112,9 @@ func (a *Anthropic) Complete(ctx context.Context, model string, req Request) (*R
 		}
 	}
 	if strings.TrimSpace(text.String()) == "" {
+		if out.StopReason == "refusal" {
+			return nil, &Error{Kind: KindRefused, Status: res.status, Reason: "the model declined to answer"}
+		}
 		return nil, &Error{Kind: KindEmpty, Status: res.status, Reason: "the model returned no text (stop reason: " + out.StopReason + ")"}
 	}
 	if out.Model == "" {
