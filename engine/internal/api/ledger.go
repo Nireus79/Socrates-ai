@@ -82,3 +82,22 @@ func (h *handler) putMemory(w http.ResponseWriter, r *http.Request) {
 	}
 	transport.WriteJSON(w, http.StatusOK, map[string]bool{"enabled": *body.Enabled})
 }
+
+func (h *handler) getLang(w http.ResponseWriter, r *http.Request) {
+	l, _ := h.conv.LangChosen(r.Context()) // empty until chosen
+	transport.WriteJSON(w, http.StatusOK, map[string]string{"language": l})
+}
+
+func (h *handler) putLang(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Language string `json:"language"`
+	}
+	if !transport.ReadBody(w, r, &body) {
+		return
+	}
+	if err := h.conv.SetLang(r.Context(), body.Language); err != nil {
+		fail(w, http.StatusBadRequest, "There are no words in that language yet.")
+		return
+	}
+	transport.WriteJSON(w, http.StatusOK, map[string]string{"language": body.Language})
+}

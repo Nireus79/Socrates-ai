@@ -384,3 +384,30 @@ func TestReportingAReplyPutsAsideAQuestionThatWasWaitingAndTheNotedPause(t *test
 		t.Fatalf("the reported pitch can still be taken up: %+v", s)
 	}
 }
+
+func TestInGreekTheQuestionIsAskedForAndTakenUpInGreekWordsAndTheModelIsToldTheLanguage(t *testing.T) {
+	e := chatted(t, llm.Say(topicJSON), llm.Say("Η ερώτηση."), llm.Say(gateOK), llm.Say(judgeOK), llm.Say("Τι νομίζεις ότι οφείλεται;"), llm.Say(gateOK))
+	if err := e.svc.SetLang(bg, "el"); err != nil {
+		t.Fatal(err)
+	}
+	e.offer(t)
+	res, err := e.svc.Accept(bg, e.conv.ID)
+	e.svc.Wait()
+	if err != nil || res.Added[0].Text != "Θα πιάσω την ερώτησή σου." {
+		t.Fatalf("%+v %v", res, err)
+	}
+	var asked, noted bool
+	for _, r := range e.mock.Requests {
+		for _, m := range r.Messages {
+			if m.Content == "Θέσε μου μια ερώτηση." {
+				asked = true
+			}
+		}
+		if strings.Contains(r.System, "language the conversation has been held in") {
+			noted = true
+		}
+	}
+	if !asked || !noted {
+		t.Fatalf("asked in Greek = %v, told the language = %v", asked, noted)
+	}
+}

@@ -4,7 +4,7 @@ package conversation
 
 // The reply battery (BUILD_PLAN M4): a fixed list of questions per philosopher, each in a fresh conversation, against the real models,
 // then one question put by the philosopher in the last conversation of each. The questions are local and git-ignored
-// (battery/replies.json). Every reply is written to the file named by BATTERY_OUT (default: the test's temp folder) with its word count,
+// (battery/replies.json, or the file named by BATTERY_QUESTIONS). Every reply is written to the file named by BATTERY_OUT (default: the test's temp folder) with its word count,
 // to be read by a person: fidelity to what the philosopher really said and did, voice, length. Nothing is asserted except that a turn is
 // answered.
 //
@@ -30,7 +30,11 @@ func TestLiveReplies(t *testing.T) {
 	if key == "" {
 		t.Skip("no ANTHROPIC_API_KEY")
 	}
-	raw, err := os.ReadFile("battery/replies.json")
+	file := os.Getenv("BATTERY_QUESTIONS")
+	if file == "" {
+		file = "battery/replies.json"
+	}
+	raw, err := os.ReadFile(file)
 	if err != nil {
 		t.Skip("no local battery")
 	}
@@ -49,6 +53,11 @@ func TestLiveReplies(t *testing.T) {
 	defer st.Close()
 	svc := New(st, func(context.Context) (Completer, error) { return client, nil }, philosophers.New())
 	svc.ConfirmAge(bg)
+	if l := os.Getenv("BATTERY_LANG"); l != "" {
+		if err := svc.SetLang(bg, l); err != nil {
+			t.Fatal(err)
+		}
+	}
 	out := os.Getenv("BATTERY_OUT")
 	if out == "" {
 		out = filepath.Join(t.TempDir(), "replies.md")

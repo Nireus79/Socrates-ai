@@ -24,7 +24,7 @@ function shellInfo() { return typeof window !== "undefined" && window.socratesSh
 async function api(method, path, body) {
   const sh = shellInfo();
   if (sh) {
-    try { await sh.ready; } catch (_) { return { status: 0, data: { error: "The engine does not answer." } }; }
+    try { await sh.ready; } catch (_) { return { status: 0, data: { error: t("The engine does not answer.") } }; }
   }
   const send = () => {
     const headers = body ? { "Content-Type": "application/json" } : {};
@@ -38,8 +38,8 @@ async function api(method, path, body) {
   } catch (_) {
     // The phone stops the engine when the app has been away a while; it holds a new address and token once started again. Ask for them
     // and try once more before giving up.
-    if (!(sh && sh.reconnect)) return { status: 0, data: { error: "The engine does not answer." } };
-    try { await sh.reconnect(); res = await send(); } catch (_) { return { status: 0, data: { error: "The engine does not answer." } }; }
+    if (!(sh && sh.reconnect)) return { status: 0, data: { error: t("The engine does not answer.") } };
+    try { await sh.reconnect(); res = await send(); } catch (_) { return { status: 0, data: { error: t("The engine does not answer.") } }; }
   }
   let data = null;
   if (res.status !== 204) { try { data = await res.json(); } catch (_) { data = null; } }
@@ -56,12 +56,43 @@ const PROVIDER_PROBLEMS = {
   network: "I could not reach your AI provider. Check your connection and try again.",
   empty: "The model sent back nothing. Please try again.",
 };
-function providerProblem(d) {
+function providerProblem(d, tail = true) {
   const base = PROVIDER_PROBLEMS[d && d.providerKind] || (d && (d.text || d.error)) || "I cannot answer right now.";
-  return base + " Nothing was sent or saved.";
+  return t(base) + (tail ? " " + t("Nothing was sent or saved.") : "");
 }
 
-const S = { philosophers: [], root: null, current: null };
+const S = { philosophers: [], root: null, current: null, lang: "en" };
+// The words of the screens: the English text is the key (i18n.js holds the other languages); {name}-style placeholders take their values from vars.
+function t(key, vars) {
+  const dict = (typeof window !== "undefined" && window.SocratesI18n && window.SocratesI18n[S.lang]) || {};
+  let s = Object.prototype.hasOwnProperty.call(dict, key) ? dict[key] : key;
+  if (vars) s = s.replace(/\{(\w+)\}/g, (m, k) => (k in vars ? String(vars[k]) : m));
+  return s;
+}
+const LANGUAGES = [["en", "English"], ["el", "Ελληνικά"]];
+function detectedLang() {
+  const n = (typeof window !== "undefined" && window.navigator && window.navigator.language) || "";
+  return /^el(\b|-)/i.test(n) ? "el" : "en";
+}
+// The language is kept by the engine (it chooses the words of the fixed texts and the philosophers' names); until the person has chosen,
+// the language of the device is used and told to the engine once.
+async function loadLang() {
+  const r = await api("GET", "/api/settings/language");
+  if (r.status === 200 && LANGUAGES.some(([c]) => c === r.data.language)) S.lang = r.data.language;
+  else if (r.status === 200) await api("PUT", "/api/settings/language", { language: S.lang });
+}
+// A choice of language; the screen is drawn again in the new one.
+function languagePicker(redraw) {
+  const sel = el("select", { "aria-label": "Language" }, ...LANGUAGES.map(([c, n]) => el("option", { value: c, selected: c === S.lang }, n)));
+  sel.addEventListener("change", async () => {
+    S.lang = sel.value;
+    await api("PUT", "/api/settings/language", { language: S.lang });
+    const r = await api("GET", "/api/philosophers");
+    if (r.status === 200) S.philosophers = r.data.philosophers || [];
+    redraw();
+  });
+  return sel;
+}
 
 // A button that asks twice: the first click arms it, the second (within five seconds) does it. No browser dialogs, which not every shell shows.
 function confirmButton(label, cls, armed, action) {
@@ -102,20 +133,21 @@ function unwind() { nav.stack = []; }
 function screen(title, body, actions) {
   return [el("header", {}, el("h1", {}, title), actions || null), el("main", {}, body)];
 }
+function errMsg(d) { return t((d && d.error) || "That did not work."); }
 function errorLine(text) { return el("p", { class: "error", role: "alert" }, text || ""); }
 
 // ---- start: the engine, the key, the age, the provider
 
 async function boot() {
   unwind();
-  mount(...screen("Socrates", el("p", { class: "muted" }, "Starting…")));
+  mount(...screen("Socrates", el("p", { class: "muted" }, t("Starting…"))));
   for (let i = 0; i < 120; i++) {
     const r = await api("GET", "/api/status");
     if (r.status === 200) return afterReady();
     if (r.status === 423) return keyGate();
     await new Promise((ok) => setTimeout(ok, 500));
   }
-  mount(...screen("Socrates", [el("p", { class: "error" }, "The engine did not start."), el("button", { onclick: boot }, "Try again")]));
+  mount(...screen("Socrates", [el("p", { class: "error" }, t("The engine did not start.")), el("button", { onclick: boot }, t("Try again"))]));
 }
 
 async function keyGate() {
@@ -124,34 +156,35 @@ async function keyGate() {
   const err = errorLine();
   const finish = async (res) => {
     if (res.status === 200) return boot();
-    err.textContent = res.data.error || "That did not work.";
+    err.textContent = errMsg(res.data);
   };
   if (st.state === "locked") {
-    const pass = el("input", { type: "password", autocomplete: "current-password", "aria-label": "Passphrase" });
-    return mount(...screen("Unlock Socrates", el("div", { class: "card stack" },
-      el("p", {}, "Your conversations are encrypted. Enter your passphrase to open them."), pass, err,
-      el("button", { class: "primary", onclick: async () => finish(await api("POST", "/api/keystore/unlock", { passphrase: pass.value })) }, "Unlock"))));
+    const pass = el("input", { type: "password", autocomplete: "current-password", "aria-label": t("Passphrase") });
+    return mount(...screen(t("Unlock Socrates"), el("div", { class: "card stack" },
+      el("p", {}, t("Your conversations are encrypted. Enter your passphrase to open them.")), pass, err,
+      el("button", { class: "primary", onclick: async () => finish(await api("POST", "/api/keystore/unlock", { passphrase: pass.value })) }, t("Unlock")))));
   }
   if (st.state === "needs_setup") {
-    const pass = el("input", { type: "password", autocomplete: "new-password", "aria-label": "New passphrase" });
+    const pass = el("input", { type: "password", autocomplete: "new-password", "aria-label": t("New passphrase") });
     const opts = st.options || [];
-    const body = el("div", { class: "card stack" }, el("p", {}, "Socrates keeps your conversations encrypted on this computer. Choose where the key is kept."));
-    if (opts.includes("keychain")) body.append(el("button", { class: "primary", onclick: async () => finish(await api("POST", "/api/keystore/setup", { mode: "keychain" })) }, "Use the system keychain (recommended)"));
-    if (opts.includes("passphrase")) body.append(el("label", {}, "A passphrase (at least 12 characters; if you forget it, your conversations cannot be opened)"), pass,
-      el("button", { class: opts.includes("keychain") ? "" : "primary", onclick: async () => finish(await api("POST", "/api/keystore/setup", { mode: "passphrase", passphrase: pass.value })) }, "Use a passphrase"));
-    if (opts.includes("file")) body.append(el("p", { class: "muted" }, "Or keep the key in a file next to your data. Anyone who can read your files can then read your conversations."),
-      el("button", { onclick: async () => finish(await api("POST", "/api/keystore/setup", { mode: "file", confirmInsecure: true })) }, "Keep the key in a file"));
+    const body = el("div", { class: "card stack" }, el("p", {}, t("Socrates keeps your conversations encrypted on this computer. Choose where the key is kept.")));
+    if (opts.includes("keychain")) body.append(el("button", { class: "primary", onclick: async () => finish(await api("POST", "/api/keystore/setup", { mode: "keychain" })) }, t("Use the system keychain (recommended)")));
+    if (opts.includes("passphrase")) body.append(el("label", {}, t("A passphrase (at least 12 characters; if you forget it, your conversations cannot be opened)")), pass,
+      el("button", { class: opts.includes("keychain") ? "" : "primary", onclick: async () => finish(await api("POST", "/api/keystore/setup", { mode: "passphrase", passphrase: pass.value })) }, t("Use a passphrase")));
+    if (opts.includes("file")) body.append(el("p", { class: "muted" }, t("Or keep the key in a file next to your data. Anyone who can read your files can then read your conversations.")),
+      el("button", { onclick: async () => finish(await api("POST", "/api/keystore/setup", { mode: "file", confirmInsecure: true })) }, t("Keep the key in a file")));
     body.append(err);
-    return mount(...screen("Welcome", body));
+    return mount(...screen(t("Welcome"), body));
   }
   mount(...screen("Socrates", el("div", { class: "card stack" },
-    el("p", { class: "error" }, st.reason || "The key for your conversations could not be found."),
-    el("button", { onclick: async () => { await api("POST", "/api/keystore/recheck"); boot(); } }, "Check again"))));
+    el("p", { class: "error" }, st.reason || t("The key for your conversations could not be found.")),
+    el("button", { onclick: async () => { await api("POST", "/api/keystore/recheck"); boot(); } }, t("Check again")))));
 }
 
 async function afterReady() {
+  await loadLang();
   const p = await api("GET", "/api/profile");
-  if (p.status !== 200) return mount(...screen("Socrates", el("p", { class: "error" }, "Your profile could not be read.")));
+  if (p.status !== 200) return mount(...screen("Socrates", el("p", { class: "error" }, t("Your profile could not be read."))));
   if (!p.data.ageConfirmed) return ageScreen();
   if (!p.data.hasProvider) return providerScreen(true);
   const r = await api("GET", "/api/philosophers");
@@ -163,33 +196,34 @@ async function afterReady() {
 const logo = () => el("img", { class: "logo", src: "mark.png", alt: "Socrates AI" });
 
 function ageScreen() {
-  mount(...screen("Welcome to Socrates", el("div", { class: "card stack" }, logo(),
-    el("p", {}, "Socrates is a conversation with artificial philosophers, made from what was written about them. They ask hard questions and do not give verdicts."),
-    el("p", {}, AGE_TEXT),
-    el("button", { class: "primary", onclick: async () => { await api("POST", "/api/profile/age"); boot(); } }, "I am 16 or older"))));
+  mount(...screen(t("Welcome to Socrates"), el("div", { class: "card stack" }, logo(),
+    el("p", {}, t("Socrates is a conversation with artificial philosophers, made from what was written about them. They ask hard questions and do not give verdicts.")),
+    el("p", {}, t(AGE_TEXT)),
+    languagePicker(ageScreen),
+    el("button", { class: "primary", onclick: async () => { await api("POST", "/api/profile/age"); boot(); } }, t("I am 16 or older")))));
 }
 
 function providerScreen(first, back) {
   const err = errorLine();
-  const provider = el("select", { "aria-label": "Provider" }, el("option", { value: "claude" }, "Claude (Anthropic)"), el("option", { value: "openai" }, "OpenAI"), el("option", { value: "ollama" }, "Ollama (a model on this computer)"));
-  const key = el("input", { type: "password", autocomplete: "off", placeholder: "Paste your API key", "aria-label": "API key" });
-  const endpoint = el("input", { type: "text", value: "http://127.0.0.1:11434", "aria-label": "Ollama address" });
-  const keyBox = el("div", {}, el("label", {}, "Your API key"), key, el("p", { class: "muted" }, "The key stays on this computer, encrypted. It is tested once, then used only to talk to your provider."));
-  const epBox = el("div", { hidden: true }, el("label", {}, "Ollama address"), endpoint);
+  const provider = el("select", { "aria-label": t("Provider") }, el("option", { value: "claude" }, "Claude (Anthropic)"), el("option", { value: "openai" }, "OpenAI"), el("option", { value: "ollama" }, t("Ollama (a model on this computer)")));
+  const key = el("input", { type: "password", autocomplete: "off", placeholder: t("Paste your API key"), "aria-label": t("API key") });
+  const endpoint = el("input", { type: "text", value: "http://127.0.0.1:11434", "aria-label": t("Ollama address") });
+  const keyBox = el("div", {}, el("label", {}, t("Your API key")), key, el("p", { class: "muted" }, t("The key stays on this computer, encrypted. It is tested once, then used only to talk to your provider.")));
+  const epBox = el("div", { hidden: true }, el("label", {}, t("Ollama address")), endpoint);
   provider.addEventListener("change", () => { const o = provider.value === "ollama"; keyBox.hidden = o; epBox.hidden = !o; });
-  const save = el("button", { class: "primary" }, "Save and test");
+  const save = el("button", { class: "primary" }, t("Save and test"));
   save.addEventListener("click", async () => {
-    err.textContent = ""; save.disabled = true; save.textContent = "Testing…";
+    err.textContent = ""; save.disabled = true; save.textContent = t("Testing…");
     const body = { provider: provider.value };
     if (provider.value === "ollama") body.ollamaEndpoint = endpoint.value; else body.apiKey = key.value;
     const r = await api("PUT", "/api/settings/llm", body);
-    save.disabled = false; save.textContent = "Save and test";
+    save.disabled = false; save.textContent = t("Save and test");
     if (r.status === 200) { key.value = ""; return boot(); }
-    err.textContent = r.data.error || "That did not work.";
+    err.textContent = errMsg(r.data);
   });
-  mount(...screen(first ? "Connect an AI provider" : "AI provider", el("div", { class: "card stack" },
-    el("p", {}, "Socrates uses your own account with an AI provider. You pay the provider directly; Socrates has no server and sees nothing."),
-    el("label", {}, "Provider"), provider, keyBox, epBox, err, save), back ? el("button", { class: "link", onclick: back }, "Back") : null));
+  mount(...screen(first ? t("Connect an AI provider") : t("AI provider"), el("div", { class: "card stack" },
+    el("p", {}, t("Socrates uses your own account with an AI provider. You pay the provider directly; Socrates has no server and sees nothing.")),
+    el("label", {}, t("Provider")), provider, keyBox, epBox, err, save), back ? el("button", { class: "link", onclick: back }, t("Back")) : null));
 }
 
 // ---- home: the philosophers and the conversations
@@ -199,34 +233,34 @@ async function home() {
   const byId = Object.fromEntries(S.philosophers.map((p) => [p.id, p]));
   const body = el("div", {});
   if (S.notice) { body.append(errorLine(S.notice)); S.notice = ""; }
-  body.append(el("h2", { class: "muted" }, "Talk with"));
+  body.append(el("h2", { class: "muted" }, t("Talk with")));
   for (const p of S.philosophers) {
     if (p.unlocked === false) {
-      const who = (p.needs || []).map((n) => n.name + " (" + n.done + " so far)").join(" and ");
-      const need = p.needs && p.needs.length ? " Think " + p.needs[0].required + " questions through with " + who + " to meet him." : "";
-      body.append(el("div", { class: "card locked", "aria-disabled": "true" }, el("h2", {}, p.name), el("div", { class: "muted" }, p.era + " · Locked." + need)));
+      const who = (p.needs || []).map((n) => t("{name} ({done} so far)", { name: n.name, done: n.done })).join(t(" and "));
+      const need = p.needs && p.needs.length ? t(" Think {n} questions through with {who} to meet him.", { n: p.needs[0].required, who }) : "";
+      body.append(el("div", { class: "card locked", "aria-disabled": "true" }, el("h2", {}, p.name), el("div", { class: "muted" }, p.era + t(" · Locked.") + need)));
       continue;
     }
-    const done = p.challenges > 0 ? " · " + p.challenges + (p.challenges === 1 ? " question" : " questions") + " thought through" : "";
+    const done = p.challenges > 0 ? (p.challenges === 1 ? t(" · 1 question thought through") : t(" · {n} questions thought through", { n: p.challenges })) : "";
     body.append(el("div", { class: "card click", role: "button", tabindex: "0", onclick: () => startWith(p), onkeydown: activate(() => startWith(p)) },
       el("h2", {}, p.name), el("div", { class: "muted" }, p.era + done)));
   }
   const list = c.data.conversations || [];
   if (list.length) {
-    body.append(el("h2", { class: "muted" }, "Earlier conversations"));
+    body.append(el("h2", { class: "muted" }, t("Earlier conversations")));
     for (const k of list) {
       const who = (byId[k.philosopherId] || {}).name || k.philosopherId;
       body.append(el("div", { class: "card click", role: "button", tabindex: "0", onclick: () => show(() => openChat(k.id)), onkeydown: activate(() => show(() => openChat(k.id))) },
-        el("h2", {}, k.title || "New conversation"), el("div", { class: "muted" }, who)));
+        el("h2", {}, k.title || t("New conversation")), el("div", { class: "muted" }, who)));
     }
   }
-  mount(...screen("Socrates", body, el("button", { class: "link", onclick: () => show(settings) }, "Settings")));
+  mount(...screen("Socrates", body, el("button", { class: "link", onclick: () => show(settings) }, t("Settings"))));
 }
 
 async function startWith(p) {
   const r = await api("POST", "/api/conversations", { philosopherId: p.id });
   if (r.status === 201) return show(() => openChat(r.data.id));
-  S.notice = r.data.error || "The conversation could not be started.";
+  S.notice = r.data.error || t("The conversation could not be started.");
   home();
 }
 
@@ -243,40 +277,40 @@ async function openChat(id) {
 const REASONS = { harmful: "It was harmful", hateful: "It was hateful or insulting", sexual: "It was sexual", untrue: "It was untrue about the real world", other: "Something else" };
   // Reporting takes the reply out of the conversation (nothing is sent anywhere); the person may keep a copy of the report to send to the developer.
   const report = (m, bubble) => {
-    const choose = el("div", { class: "help" }, el("div", { class: "muted" }, "Why are you reporting this reply?"),
-      ...Object.keys(REASONS).map((k) => el("button", { class: "chip", type: "button", onclick: () => send(k) }, REASONS[k])),
-      el("button", { class: "link", type: "button", onclick: () => choose.remove() }, "Cancel"));
+    const choose = el("div", { class: "help" }, el("div", { class: "muted" }, t("Why are you reporting this reply?")),
+      ...Object.keys(REASONS).map((k) => el("button", { class: "chip", type: "button", onclick: () => send(k) }, t(REASONS[k]))),
+      el("button", { class: "link", type: "button", onclick: () => choose.remove() }, t("Cancel")));
     const send = async (category) => {
-      choose.replaceChildren(el("span", { class: "muted" }, "One moment…"));
+      choose.replaceChildren(el("span", { class: "muted" }, t("One moment…")));
       const res = await api("POST", "/api/conversations/" + encodeURIComponent(id) + "/messages/" + encodeURIComponent(m.id) + "/report", { category });
-      if (res.status !== 200) { choose.replaceChildren(errorLine(res.data.error || "That did not work.")); return; }
+      if (res.status !== 200) { choose.replaceChildren(errorLine(errMsg(res.data))); return; }
       bubble.className = "msg notice"; bubble.replaceChildren(res.data.marker);
       const copy = (withReply) => {
         const text = ["Socrates AI: report of a reply", "Philosopher: " + who.name, "Reason: " + REASONS[category]].concat(withReply ? ["Reply: " + res.data.reply] : []).join("\n");
         const done = (msg) => keep.replaceChildren(el("span", { class: "muted" }, msg));
         const clip = window.navigator && window.navigator.clipboard;
-        if (clip && clip.writeText) clip.writeText(text).then(() => done("Copied. Send it to " + CONTACT + " as you like; nothing was sent from here."), () => manual(text));
+        if (clip && clip.writeText) clip.writeText(text).then(() => done(t("Copied. Send it to {address} as you like; nothing was sent from here.", { address: CONTACT })), () => manual(text));
         else manual(text);
       };
-      const manual = (text) => keep.replaceChildren(el("div", { class: "muted" }, "Copy this yourself:"), el("textarea", { readonly: "", rows: "4", "aria-label": "Report text" }, text));
-      const keep = el("div", { class: "help" }, el("div", { class: "muted" }, "Keep a copy of the report to send to the developer?"),
-        el("div", { class: "row" }, el("button", { class: "chip", type: "button", onclick: () => copy(true) }, "Copy with the reply"), el("button", { class: "chip", type: "button", onclick: () => copy(false) }, "Copy without it"), el("button", { class: "link", type: "button", onclick: () => keep.remove() }, "No, thanks")));
+      const manual = (text) => keep.replaceChildren(el("div", { class: "muted" }, t("Copy this yourself:")), el("textarea", { readonly: "", rows: "4", "aria-label": t("Report text") }, text));
+      const keep = el("div", { class: "help" }, el("div", { class: "muted" }, t("Keep a copy of the report to send to the developer?")),
+        el("div", { class: "row" }, el("button", { class: "chip", type: "button", onclick: () => copy(true) }, t("Copy with the reply")), el("button", { class: "chip", type: "button", onclick: () => copy(false) }, t("Copy without it")), el("button", { class: "link", type: "button", onclick: () => keep.remove() }, t("No, thanks"))));
       choose.replaceWith(keep);
     };
     bubble.after(choose);
   };
   const add = (m) => {
     if (m.role === "philosopher" && m.id) {
-      const bubble = el("div", { class: "msg philosopher" }, m.text, " ", el("button", { class: "link small", type: "button", "aria-label": "Report this reply", onclick: () => { if (!bubble.nextSibling || !bubble.nextSibling.classList || !bubble.nextSibling.classList.contains("help")) report(m, bubble); } }, "Report"));
+      const bubble = el("div", { class: "msg philosopher" }, m.text, " ", el("button", { class: "link small", type: "button", "aria-label": t("Report this reply"), onclick: () => { if (!bubble.nextSibling || !bubble.nextSibling.classList || !bubble.nextSibling.classList.contains("help")) report(m, bubble); } }, t("Report")));
       list.append(bubble);
       return;
     }
     list.append(el("div", { class: "msg " + (m.role === "user" ? "user" : m.role === "marker" ? "notice" : "philosopher") }, m.text));
   };
   msgs.forEach(add);
-  const input = el("textarea", { rows: "1", placeholder: "Say something…", "aria-label": "Your message", maxlength: "6000" });
+  const input = el("textarea", { rows: "1", placeholder: t("Say something…"), "aria-label": t("Your message"), maxlength: "6000" });
   const helpBox = el("div", { class: "help", hidden: true });
-  const helpBtn = el("button", { class: "link", type: "button" }, "Help me answer");
+  const helpBtn = el("button", { class: "link", type: "button" }, t("Help me answer"));
   let offered = [];       // everything suggested so far in this chat, so that asking again gives different ones
   let fromSuggestion = false;
   const canHelp = () => {
@@ -287,13 +321,13 @@ const REASONS = { harmful: "It was harmful", hateful: "It was hateful or insulti
   // A challenge is a fundamental topic the philosopher poses; the person takes it up or leaves it. `offer` is what the engine says waits.
   let offer = r.data.offer || null;
   const challengeBar = el("div", { class: "help", hidden: true });
-  const challengeBtn = el("button", { class: "link", type: "button" }, "Put a question to me");
+  const challengeBtn = el("button", { class: "link", type: "button" }, t("Put a question to me"));
   const canChallenge = () => {
     const k = [...list.children].filter((c) => !c.classList.contains("opening"));
     const l = k[k.length - 1];
     return !l || (l.classList.contains("philosopher") && !l.classList.contains("typing"));
   };
-  const turnProblem = (res) => (res.status === 503 ? providerProblem(res.data) : res.data.error || "That did not work.");
+  const turnProblem = (res) => (res.status === 503 ? providerProblem(res.data) : errMsg(res.data));
   const challengeStep = async (path, thinking) => {
     err.textContent = ""; challengeBtn.disabled = true;
     challengeBar.hidden = false; challengeBar.replaceChildren(el("span", { class: "muted" }, thinking));
@@ -314,19 +348,19 @@ const REASONS = { harmful: "It was harmful", hateful: "It was hateful or insulti
     if (res.status === 204 || res.data.kind === "no_offer") offer = null; else err.textContent = turnProblem(res);
     refreshHelp();
   };
-  challengeBtn.addEventListener("click", () => challengeStep("/challenge", who.name + " is thinking of a question…"));
+  challengeBtn.addEventListener("click", () => challengeStep("/challenge", t("{name} is thinking of a question…", { name: who.name })));
   const showOffer = () => {
     const pending = offer && offer.state === "pending", ready = offer && offer.state === "ready";
     challengeBtn.hidden = pending || !canChallenge();
     if (pending) {
       challengeBar.hidden = false;
-      challengeBar.replaceChildren(el("div", { class: "muted" }, "Take up " + who.name + "’s question?"),
-        el("div", { class: "row" }, el("button", { class: "primary", type: "button", onclick: () => challengeStep("/challenge/accept", "One moment…") }, "Take it"),
-          el("button", { class: "link", type: "button", onclick: leaveChallenge }, "Not now")));
+      challengeBar.replaceChildren(el("div", { class: "muted" }, t("Take up {name}’s question?", { name: who.name })),
+        el("div", { class: "row" }, el("button", { class: "primary", type: "button", onclick: () => challengeStep("/challenge/accept", t("One moment…")) }, t("Take it")),
+          el("button", { class: "link", type: "button", onclick: leaveChallenge }, t("Not now"))));
     } else if (ready && canChallenge()) {
       challengeBar.hidden = false;
-      challengeBar.replaceChildren(el("div", { class: "muted" }, who.name + " has a question for you."),
-        el("div", { class: "row" }, el("button", { class: "link", type: "button", onclick: () => challengeStep("/challenge", who.name + " is thinking of a question…") }, "Hear it")));
+      challengeBar.replaceChildren(el("div", { class: "muted" }, t("{name} has a question for you.", { name: who.name })),
+        el("div", { class: "row" }, el("button", { class: "link", type: "button", onclick: () => challengeStep("/challenge", t("{name} is thinking of a question…", { name: who.name })) }, t("Hear it"))));
     } else { challengeBar.replaceChildren(); challengeBar.hidden = true; }
   };
   // Deleting a conversation asks, when the philosopher learnt something in it, whether he should forget that too (forgetting is the default).
@@ -340,33 +374,33 @@ const REASONS = { harmful: "It was harmful", hateful: "It was hateful or insulti
     const fresh = await api("GET", "/api/conversations/" + encodeURIComponent(id)); // what was learnt may have changed since the chat opened
     const learned = fresh.status === 200 ? (fresh.data.learned || 0) : 0;
     deleteBox.hidden = false;
-    deleteBox.replaceChildren(el("div", { class: "muted" }, learned > 0 ? "Also forget what " + who.name + " learned in this conversation?" : "Delete this conversation?"),
+    deleteBox.replaceChildren(el("div", { class: "muted" }, learned > 0 ? t("Also forget what {name} learned in this conversation?", { name: who.name }) : t("Delete this conversation?")),
       el("div", { class: "row" },
-        el("button", { class: "danger", type: "button", onclick: () => removeConversation(false) }, learned > 0 ? "Delete and forget it" : "Delete"),
-        learned > 0 ? el("button", { class: "link", type: "button", onclick: () => removeConversation(true) }, "Delete, but let him keep it") : null,
-        el("button", { class: "link", type: "button", onclick: hideDelete }, "Cancel")));
+        el("button", { class: "danger", type: "button", onclick: () => removeConversation(false) }, learned > 0 ? t("Delete and forget it") : t("Delete")),
+        learned > 0 ? el("button", { class: "link", type: "button", onclick: () => removeConversation(true) }, t("Delete, but let him keep it")) : null,
+        el("button", { class: "link", type: "button", onclick: hideDelete }, t("Cancel"))));
   };
   const refreshHelp = () => { helpBtn.hidden = !canHelp(); if (helpBtn.hidden) helpBox.hidden = true; showOffer(); };
   const showSuggestions = async () => {
     helpBtn.disabled = true; helpBox.hidden = false;
-    helpBox.replaceChildren(el("span", { class: "muted" }, "Thinking of some starting points…"));
+    helpBox.replaceChildren(el("span", { class: "muted" }, t("Thinking of some starting points…")));
     const r = await api("POST", "/api/conversations/" + encodeURIComponent(id) + "/suggestions", { exclude: offered });
     helpBtn.disabled = false;
     if (r.status !== 200) {
-      helpBox.replaceChildren(el("span", { class: "error" }, r.status === 503 ? providerProblem(r.data).replace(" Nothing was sent or saved.", "") : (r.data.error || "That did not work.")), el("button", { class: "link", type: "button", onclick: () => { helpBox.hidden = true; } }, "Close"));
+      helpBox.replaceChildren(el("span", { class: "error" }, r.status === 503 ? providerProblem(r.data, false) : (errMsg(r.data))), el("button", { class: "link", type: "button", onclick: () => { helpBox.hidden = true; } }, t("Close")));
       return;
     }
     const items = r.data.suggestions || [];
     offered = offered.concat(items);
     const chips = items.map((t) => el("button", { class: "chip", type: "button", onclick: () => { input.value = t; fromSuggestion = true; helpBox.hidden = true; input.focus(); } }, t));
     helpBox.replaceChildren(
-      el("div", { class: "muted" }, items.length ? "Pick one to start from, change it as you like, or write your own." : "I have no more starting points. Try putting it in your own words."),
+      el("div", { class: "muted" }, items.length ? t("Pick one to start from, change it as you like, or write your own.") : t("I have no more starting points. Try putting it in your own words.")),
       ...chips,
-      el("div", { class: "row" }, items.length ? el("button", { class: "link", type: "button", onclick: showSuggestions }, "Different ones") : null, el("button", { class: "link", type: "button", onclick: () => { helpBox.hidden = true; } }, "Close")));
+      el("div", { class: "row" }, items.length ? el("button", { class: "link", type: "button", onclick: showSuggestions }, t("Different ones")) : null, el("button", { class: "link", type: "button", onclick: () => { helpBox.hidden = true; } }, t("Close"))));
   };
   helpBtn.addEventListener("click", showSuggestions);
   input.addEventListener("input", () => { if (!input.value.trim()) fromSuggestion = false; });
-  const send = el("button", { class: "primary", type: "submit" }, "Send");
+  const send = el("button", { class: "primary", type: "submit" }, t("Send"));
   const err = errorLine();
   let busy = false;
   const submit = async (ev) => {
@@ -375,7 +409,7 @@ const REASONS = { harmful: "It was harmful", hateful: "It was hateful or insulti
     if (!text || busy) return;
     busy = true; send.disabled = true; err.textContent = "";
     const mine = el("div", { class: "msg user" }, text);
-    const typing = el("div", { class: "msg philosopher typing" }, who.name + " is thinking…");
+    const typing = el("div", { class: "msg philosopher typing" }, t("{name} is thinking…", { name: who.name }));
     list.append(mine, typing); input.value = ""; main.scrollTop = main.scrollHeight;
     const flag = fromSuggestion; fromSuggestion = false; helpBox.hidden = true;
     const res = await api("POST", "/api/conversations/" + encodeURIComponent(id) + "/messages", flag ? { text, suggested: true } : { text });
@@ -394,17 +428,17 @@ const REASONS = { harmful: "It was harmful", hateful: "It was hateful or insulti
     } else {
       mine.remove(); input.value = text; fromSuggestion = flag;
       if (res.status === 503) err.textContent = providerProblem(d);
-      else if (d.kind === "age") err.textContent = AGE_TEXT;
-      else if (d.kind === "no_provider") err.textContent = "Set up an AI provider in Settings first.";
-      else err.textContent = d.error || "That did not work.";
+      else if (d.kind === "age") err.textContent = t(AGE_TEXT);
+      else if (d.kind === "no_provider") err.textContent = t("Set up an AI provider in Settings first.");
+      else err.textContent = errMsg(d);
     }
     refreshHelp(); main.scrollTop = main.scrollHeight; input.focus();
   };
   input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) submit(e); });
   const form = el("form", { class: "composer", onsubmit: submit }, input, send);
-  mount(el("header", {}, el("button", { class: "link", onclick: back }, "← Back"), el("h1", {}, who.name),
-    el("button", { class: "link", onclick: () => show(() => memory(who)) }, "Memory"),
-    el("button", { class: "link", onclick: showDelete }, "Delete")),
+  mount(el("header", {}, el("button", { class: "link", onclick: back }, t("← Back")), el("h1", {}, who.name),
+    el("button", { class: "link", onclick: () => show(() => memory(who)) }, t("Memory")),
+    el("button", { class: "link", onclick: showDelete }, t("Delete"))),
     main, err, helpBox, challengeBar, deleteBox, el("div", { class: "helpbar" }, helpBtn, challengeBtn), form);
   refreshHelp(); main.scrollTop = main.scrollHeight; input.focus();
 }
@@ -415,32 +449,32 @@ async function memory(who) {
   const r = await api("GET", "/api/ledger?philosopherId=" + encodeURIComponent(who.id));
   const entries = r.data.entries || [];
   const body = el("div", { class: "stack" });
-  const err = errorLine(r.status === 200 ? "" : (r.data.error || "That did not work."));
-  body.append(el("p", { class: "muted" }, `${who.name} keeps short notes of what you tell him, with your own words. They are stored encrypted on this computer, are used only in your conversations with ${who.name}, and are deleted with the conversation they came from. You can delete any of them.`), err);
+  const err = errorLine(r.status === 200 ? "" : (errMsg(r.data)));
+  body.append(el("p", { class: "muted" }, t("{name} keeps short notes of what you tell him, with your own words. They are stored encrypted on this computer, are used only in your conversations with {name}, and are deleted with the conversation they came from. You can delete any of them.", { name: who.name })), err);
   const remove = async (id) => {
     const d = await api("DELETE", "/api/ledger/" + encodeURIComponent(id));
     if (d.status === 204 || d.status === 404) return memory(who);
-    err.textContent = d.data.error || "That did not work.";
+    err.textContent = errMsg(d.data);
   };
-  const label = { claim: "Something you said", term: "A word you used", tension: "Things that did not fit together", fact: "Something you told about yourself" };
-  if (!entries.length) body.append(el("div", { class: "card" }, el("p", { class: "muted" }, `${who.name} has not noted anything about you yet.`)));
+  const label = { claim: t("Something you said"), term: t("A word you used"), tension: t("Things that did not fit together"), fact: t("Something you told about yourself") };
+  if (!entries.length) body.append(el("div", { class: "card" }, el("p", { class: "muted" }, t("{name} has not noted anything about you yet.", { name: who.name }))));
   for (const e of entries) {
     body.append(el("div", { class: "card stack" },
-      el("div", { class: "muted" }, label[e.kind] || e.kind, e.suggested ? " · from a wording you picked among suggestions" : ""),
+      el("div", { class: "muted" }, label[e.kind] || e.kind, e.suggested ? t(" · from a wording you picked among suggestions") : ""),
       el("div", {}, e.kind === "term" && e.detail ? `${e.text}: ${e.detail}` : e.text),
-      e.kind !== "tension" ? el("div", { class: "muted" }, "Your words: “" + e.quote + "”") : null,
-      confirmButton("Delete", "link", "Sure?", () => remove(e.id))));
+      e.kind !== "tension" ? el("div", { class: "muted" }, t("Your words: “{quote}”", { quote: e.quote })) : null,
+      confirmButton(t("Delete"), "link", t("Sure?"), () => remove(e.id))));
   }
-  if (entries.length) body.append(confirmButton(`Forget everything ${who.name} knows about me`, "danger", "Click again to forget it all", async () => {
+  if (entries.length) body.append(confirmButton(t("Forget everything {name} knows about me", { name: who.name }), "danger", t("Click again to forget it all"), async () => {
     const d = await api("DELETE", "/api/ledger?philosopherId=" + encodeURIComponent(who.id));
     if (d.status === 204) return memory(who);
-    err.textContent = d.data.error || "That did not work.";
+    err.textContent = errMsg(d.data);
   }));
-  mount(...screen(`What ${who.name} remembers`, body, el("button", { class: "link", onclick: back }, "Back")));
+  mount(...screen(t("What {name} remembers", { name: who.name }), body, el("button", { class: "link", onclick: back }, t("Back"))));
 }
 
 function ended(text) {
-  mount(...screen("Socrates", el("div", { class: "card stack" }, el("p", {}, text), el("button", { class: "primary", onclick: () => { unwind(); home(); } }, "OK"))));
+  mount(...screen("Socrates", el("div", { class: "card stack" }, el("p", {}, text), el("button", { class: "primary", onclick: () => { unwind(); home(); } }, t("OK")))));
 }
 
 // ---- settings
@@ -449,20 +483,21 @@ async function settings() {
   const err = errorLine();
   const body = el("div", { class: "stack" });
   const p = await api("GET", "/api/settings/llm");
-  body.append(el("div", { class: "card stack" }, el("h2", {}, "AI provider"),
-    el("p", { class: "muted" }, p.data.provider ? `${p.data.provider}, models ${p.data.fastModel} and ${p.data.replyModel}` : "Not set up."),
-    el("button", { onclick: () => show(() => providerScreen(false, back)) }, "Change provider or key")));
-  body.append(el("div", { class: "card stack" }, el("h2", {}, "Your data"),
-    el("p", { class: "muted" }, "Conversations are stored encrypted on this computer only. An export holds your conversations and never your key."),
+  body.append(el("div", { class: "card stack" }, el("h2", {}, t("Language")), languagePicker(settings)));
+  body.append(el("div", { class: "card stack" }, el("h2", {}, t("AI provider")),
+    el("p", { class: "muted" }, p.data.provider ? t("{provider}, models {fast} and {reply}", { provider: p.data.provider, fast: p.data.fastModel, reply: p.data.replyModel }) : t("Not set up.")),
+    el("button", { onclick: () => show(() => providerScreen(false, back)) }, t("Change provider or key"))));
+  body.append(el("div", { class: "card stack" }, el("h2", {}, t("Your data")),
+    el("p", { class: "muted" }, t("Conversations are stored encrypted on this computer only. An export holds your conversations and never your key.")),
     el("div", { class: "row" },
-      el("button", { onclick: exportData }, "Export conversations"),
-      el("button", { onclick: () => importInput.click() }, "Import")),
+      el("button", { onclick: exportData }, t("Export conversations")),
+      el("button", { onclick: () => importInput.click() }, t("Import"))),
     err));
   const importInput = el("input", { type: "file", accept: "application/json", hidden: true, onchange: async (e) => {
     const f = e.target.files[0]; if (!f) return;
-    let json; try { json = JSON.parse(await f.text()); } catch (_) { err.textContent = "That file is not readable."; return; }
+    let json; try { json = JSON.parse(await f.text()); } catch (_) { err.textContent = t("That file is not readable."); return; }
     const r = await api("POST", "/api/profile/import", json);
-    err.textContent = r.status === 200 ? "" : (r.data.error || "That did not work.");
+    err.textContent = r.status === 200 ? "" : (errMsg(r.data));
     if (r.status === 200) home();
   } });
   body.append(importInput);
@@ -471,24 +506,24 @@ async function settings() {
   box.checked = mem.data.enabled !== false;
   box.addEventListener("change", async () => {
     const r = await api("PUT", "/api/settings/memory", { enabled: box.checked });
-    if (r.status !== 200) { box.checked = !box.checked; err.textContent = r.data.error || "That did not work."; }
+    if (r.status !== 200) { box.checked = !box.checked; err.textContent = errMsg(r.data); }
   });
-  body.append(el("div", { class: "card stack" }, el("h2", {}, "Memory"),
-    el("div", { class: "row" }, box, el("label", { for: "memory-on", style: "margin:0" }, "The philosophers remember what I tell them")),
-    el("p", { class: "muted" }, "Each keeps short notes with your own words, only for himself, stored encrypted on this computer. Turning this off stops new notes and stops him using the old ones; it does not delete them. You can see and delete them from the Memory button inside a conversation.")));
+  body.append(el("div", { class: "card stack" }, el("h2", {}, t("Memory")),
+    el("div", { class: "row" }, box, el("label", { for: "memory-on", style: "margin:0" }, t("The philosophers remember what I tell them"))),
+    el("p", { class: "muted" }, t("Each keeps short notes with your own words, only for himself, stored encrypted on this computer. Turning this off stops new notes and stops him using the old ones; it does not delete them. You can see and delete them from the Memory button inside a conversation."))));
   const st = await api("GET", "/api/status");
-  body.append(el("div", { class: "card stack" }, el("h2", {}, "About"), logo(),
-    el("p", { class: "muted" }, "The philosophers are artificial characters made from what was written about them. They are not real people, and they are not a source of medical, legal or other professional advice."),
-    el("p", { class: "muted" }, "If you are thinking of hurting yourself, please call your local emergency number or a crisis line, or tell someone you trust."),
-    el("p", { class: "muted" }, "For people aged 16 and over. " + (st.data.version ? "Version " + st.data.version + "." : "")),
-    el("p", { class: "muted" }, "Problems, questions and reports: " + CONTACT + " (Hermes Software).")));
-  body.append(el("div", { class: "card stack" }, el("h2", {}, "Delete everything"),
-    el("p", { class: "muted" }, "Removes every conversation, your provider key and your settings from this computer. It cannot be undone."),
-    confirmButton("Delete everything", "danger", "Click again to delete everything", async () => {
+  body.append(el("div", { class: "card stack" }, el("h2", {}, t("About")), logo(),
+    el("p", { class: "muted" }, t("The philosophers are artificial characters made from what was written about them. They are not real people, and they are not a source of medical, legal or other professional advice.")),
+    el("p", { class: "muted" }, t("If you are thinking of hurting yourself, please call your local emergency number or a crisis line, or tell someone you trust.")),
+    el("p", { class: "muted" }, t("For people aged 16 and over. ") + (st.data.version ? t("Version {v}.", { v: st.data.version }) : "")),
+    el("p", { class: "muted" }, t("Problems, questions and reports: {address} (Hermes Software).", { address: CONTACT }))));
+  body.append(el("div", { class: "card stack" }, el("h2", {}, t("Delete everything")),
+    el("p", { class: "muted" }, t("Removes every conversation, your provider key and your settings from this computer. It cannot be undone.")),
+    confirmButton(t("Delete everything"), "danger", t("Click again to delete everything"), async () => {
       const r = await api("DELETE", "/api/profile", { confirm: "delete" });
-      if (r.status === 204) boot(); else err.textContent = r.data.error || "That did not work.";
+      if (r.status === 204) boot(); else err.textContent = errMsg(r.data);
     })));
-  mount(...screen("Settings", body, el("button", { class: "link", onclick: back }, "Done")));
+  mount(...screen(t("Settings"), body, el("button", { class: "link", onclick: back }, t("Done"))));
 }
 
 async function exportData() {
@@ -501,6 +536,6 @@ async function exportData() {
   document.body.append(a); a.click(); a.remove();
 }
 
-function start(root) { S.root = root || document.getElementById("root"); window.socratesBack = goBack; return boot(); }
+function start(root) { S.root = root || document.getElementById("root"); S.lang = detectedLang(); window.socratesBack = goBack; return boot(); }
 if (typeof module !== "undefined") module.exports = { start, el, api, S };
 else window.addEventListener("DOMContentLoaded", () => start());

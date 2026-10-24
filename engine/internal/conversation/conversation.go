@@ -34,6 +34,8 @@ const (
 	MemoryKey = "memory.enabled"
 	// AgeKey is the setting that records the user's one-time confirmation of the age limit.
 	AgeKey = "age.confirmed"
+	// LangKey is the language of the screens and of the application's own texts ("en" or "el"); unset until the person or the device chooses.
+	LangKey = "language"
 )
 
 var (
@@ -129,6 +131,40 @@ func (s *Service) SetMemoryEnabled(ctx context.Context, on bool) error {
 		v = "0"
 	}
 	return s.st.SetSetting(ctx, MemoryKey, v)
+}
+
+// Lang is the language of the application's own texts: the person's choice, or English until there is one.
+func (s *Service) Lang(ctx context.Context) string {
+	if l, ok := s.LangChosen(ctx); ok {
+		return l
+	}
+	return safety.LangEnglish
+}
+
+// LangChosen is the language that was set, if one was.
+func (s *Service) LangChosen(ctx context.Context) (string, bool) {
+	v, ok, err := s.st.Setting(ctx, LangKey)
+	if err != nil || !ok || !safety.KnownLang(v) {
+		return "", false
+	}
+	return v, true
+}
+
+// SetLang chooses the language of the screens and of the application's own texts. It does not change what the philosophers answer in: that
+// follows the language the person writes in.
+func (s *Service) SetLang(ctx context.Context, lang string) error {
+	if !safety.KnownLang(lang) {
+		return errors.New("there are no words in that language")
+	}
+	return s.st.SetSetting(ctx, LangKey, lang)
+}
+
+// milestoneText is the plain sentence that tells a person a question has been thought all the way through.
+func milestoneText(lang string, ph philosophers.Philosopher) string {
+	if lang == safety.LangGreek {
+		return "Εσύ και ο " + ph.Localized(lang).Name + " σκεφτήκατε ένα ερώτημα ώς το τέλος."
+	}
+	return "You and " + ph.Name + " thought one question all the way through."
 }
 
 func (s *Service) ConfirmAge(ctx context.Context) error { return s.st.SetSetting(ctx, AgeKey, "1") }
@@ -450,7 +486,7 @@ func (s *Service) send(ctx context.Context, conversationID, text string, suggest
 			s.afterTurn(client, conv, userSeq)
 			res.Offer = s.OfferState(ctx, conv.ID)
 			if n, err := s.st.TakeAnnouncements(ctx, conv.ID); err == nil && n > 0 {
-				res.Milestone = "You and " + ph.Name + " thought one question all the way through."
+				res.Milestone = milestoneText(s.Lang(ctx), ph)
 			}
 		}
 		return res, err

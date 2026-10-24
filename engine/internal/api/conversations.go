@@ -11,6 +11,7 @@ import (
 	"socrates/internal/llm"
 	"socrates/internal/philosophers"
 	"socrates/internal/progress"
+	"socrates/internal/safety"
 	"socrates/internal/store"
 	"socrates/internal/suggest"
 	"socrates/internal/transport"
@@ -67,6 +68,7 @@ func (h *handler) philosophers(w http.ResponseWriter, r *http.Request) {
 		Earned     bool   `json:"earned"`     // unlocked by progress alone, whether or not the rules are enforced
 		Needs      []need `json:"needs,omitempty"`
 	}
+	lang := h.conv.Lang(r.Context())
 	roster := h.d.Roster.All()
 	counts, err := h.d.Store.ChallengeCounts(r.Context())
 	if err != nil {
@@ -75,10 +77,10 @@ func (h *handler) philosophers(w http.ResponseWriter, r *http.Request) {
 	}
 	var out []view
 	for i, st := range progress.StatusOf(roster, counts) {
-		v := view{Philosopher: roster[i], Unlocked: h.conv.Allowed(r.Context(), entitlements.Philosopher(st.ID)), Challenges: st.Challenges, Earned: st.Unlocked}
+		v := view{Philosopher: roster[i].Localized(lang), Unlocked: h.conv.Allowed(r.Context(), entitlements.Philosopher(st.ID)), Challenges: st.Challenges, Earned: st.Unlocked}
 		for _, m := range st.Missing {
 			p, _ := h.d.Roster.Get(m.Philosopher)
-			v.Needs = append(v.Needs, need{ID: m.Philosopher, Name: p.Name, Done: m.Done, Required: progress.Required})
+			v.Needs = append(v.Needs, need{ID: m.Philosopher, Name: p.Localized(lang).Name, Done: m.Done, Required: progress.Required})
 		}
 		out = append(out, v)
 	}
@@ -140,6 +142,7 @@ func (h *handler) getConversation(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusInternalServerError, "the conversation could not be read")
 		return
 	}
+	h.localizeViews(h.conv.Lang(r.Context()), msgs)
 	transport.WriteJSON(w, http.StatusOK, map[string]any{"conversation": toJSON(c), "messages": msgs, "offer": h.conv.OfferState(r.Context(), c.ID), "learned": h.conv.Learned(r.Context(), c.ID)})
 }
 
@@ -169,11 +172,11 @@ func (h *handler) sendMessage(w http.ResponseWriter, r *http.Request) {
 		send = h.conv.SendSuggested
 	}
 	res, err := send(r.Context(), r.PathValue("id"), body.Text)
-	respondTurn(w, res, err)
+	h.respondTurn(w, r, res, err)
 }
 
 // respondTurn answers a request that ran a turn (a message, or the taking up of a challenge).
-func respondTurn(w http.ResponseWriter, res *conversation.Result, err error) {
+func (h *handler) respondTurn(w http.ResponseWriter, r *http.Request, res *conversation.Result, err error) {
 	switch {
 	case errors.Is(err, conversation.ErrEmpty):
 		fail(w, http.StatusBadRequest, "The message is empty.")
@@ -195,21 +198,53 @@ func respondTurn(w http.ResponseWriter, res *conversation.Result, err error) {
 		log.Printf("[api] a turn failed: %T", err)
 		fail(w, http.StatusInternalServerError, "the message could not be handled")
 	case res.Outcome == conversation.OutcomeUnavailable:
+		h.localize(r.Context(), res)
 		transport.WriteJSON(w, http.StatusServiceUnavailable, res)
 	default:
+		h.localize(r.Context(), res)
 		transport.WriteJSON(w, http.StatusOK, res)
+	}
+}
+
+// localize puts the application's own texts of a turn into the person's language: a marker is stored as its kind only and says its words
+// when it is shown. Replies of the philosophers are never touched.
+func (h *handler) localize(ctx context.Context, res *conversation.Result) {
+	lang := h.conv.Lang(ctx)
+	h.localizeViews(lang, res.Added)
+	switch res.Outcome {
+	case conversation.OutcomeUnavailable:
+		res.Text = safety.Unavailable(lang)
+	case conversation.OutcomeEnded:
+		res.Text = safety.TextForLang(safety.MarkerEndForAge, lang)
+	case conversation.OutcomeFixed:
+		for i := len(res.Added) - 1; i >= 0; i-- {
+			if res.Added[i].Role == "marker" && res.Added[i].Kind != "" {
+				res.Text = res.Added[i].Text
+				break
+			}
+		}
+	}
+}
+
+func (h *handler) localizeViews(lang string, views []conversation.View) {
+	for i := range views {
+		if views[i].Role == "marker" && views[i].Kind != "" {
+			if t := safety.TextForLang(safety.MarkerKind(views[i].Kind), lang); t != "" {
+				views[i].Text = t
+			}
+		}
 	}
 }
 
 // challenge asks the philosopher to pose a challenge (the person pressed the button, or took up his offer to hear one).
 func (h *handler) challenge(w http.ResponseWriter, r *http.Request) {
 	res, err := h.conv.Offer(r.Context(), r.PathValue("id"))
-	respondTurn(w, res, err)
+	h.respondTurn(w, r, res, err)
 }
 
 func (h *handler) acceptChallenge(w http.ResponseWriter, r *http.Request) {
 	res, err := h.conv.Accept(r.Context(), r.PathValue("id"))
-	respondTurn(w, res, err)
+	h.respondTurn(w, r, res, err)
 }
 
 func (h *handler) declineChallenge(w http.ResponseWriter, r *http.Request) {

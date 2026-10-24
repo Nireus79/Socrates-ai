@@ -41,7 +41,7 @@ type Op struct {
 	Quote      string `json:"quote"`
 }
 
-const system = `You keep the ledger of what a philosopher knows about the person he talks with. You see the ledger so far, the last few messages of the conversation, and the person's newest message. You answer with the changes the newest message calls for, if any. Most messages call for none.
+const system = `You keep the ledger of what a philosopher knows about the person he talks with. Write entries in the language of the person's words (English or Greek), and copy quotations exactly as they were written. You see the ledger so far, the last few messages of the conversation, and the person's newest message. You answer with the changes the newest message calls for, if any. Most messages call for none.
 
 The ledger has four kinds of entry:
 - claim: something the person asserted as their own view (not a question, not a joke, not something they only repeated or asked about).
@@ -454,7 +454,7 @@ func fold(s string) ([]rune, []int) {
 		case r == '“' || r == '”':
 			r = '"'
 		}
-		out, idx, space = append(out, unicode.ToLower(r)), append(idx, i), false
+		out, idx, space = append(out, greekFold(unicode.ToLower(r))), append(idx, i), false
 	}
 	for len(out) > 0 && out[len(out)-1] == ' ' {
 		out, idx = out[:len(out)-1], idx[:len(idx)-1]
@@ -533,4 +533,28 @@ func Context(entries []store.Entry) string {
 		b.WriteString(lines[i])
 	}
 	return strings.TrimRight(b.String(), "\n")
+}
+
+// greekFold makes the Greek letters that differ only by an accent or a final form the same, so that a quotation the model copies without a
+// stress mark or with a final sigma written differently is still found in the person's own words.
+func greekFold(r rune) rune {
+	switch r {
+	case 'ς':
+		return 'σ'
+	case 'ά':
+		return 'α'
+	case 'έ':
+		return 'ε'
+	case 'ή':
+		return 'η'
+	case 'ί', 'ϊ', 'ΐ':
+		return 'ι'
+	case 'ό':
+		return 'ο'
+	case 'ύ', 'ϋ', 'ΰ':
+		return 'υ'
+	case 'ώ':
+		return 'ω'
+	}
+	return r
 }

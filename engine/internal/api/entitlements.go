@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"socrates/internal/catalog"
-	"socrates/internal/conversation"
+	"socrates/internal/safety"
 	"socrates/internal/store"
 	"socrates/internal/transport"
 )
@@ -107,6 +107,6 @@ func (h *handler) reportReply(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		fail(w, http.StatusInternalServerError, "the reply could not be reported")
 	default:
-		transport.WriteJSON(w, http.StatusOK, map[string]string{"category": body.Category, "reply": text, "marker": conversation.ReportedText})
+		transport.WriteJSON(w, http.StatusOK, map[string]string{"category": body.Category, "reply": text, "marker": safety.TextForLang(safety.MarkerReported, h.conv.Lang(r.Context()))})
 	}
 }

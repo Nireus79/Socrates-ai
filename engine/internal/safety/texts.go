@@ -2,7 +2,7 @@ package safety
 
 // The texts the application says itself, in its own plain voice (never a philosopher's), when the safety stage steps in. They need no
 // model, so they work when the provider is down. They contain no phone number: the engine does not know the country, and a wrong
-// number is worse than none. English only for now.
+// number is worse than none. English and modern Greek (TextForLang).
 const (
 	// TextCrisis answers a clear statement of wanting to hurt oneself (founder's decision, 2026-10-23).
 	TextCrisis = "I am stepping out of our conversation for a moment, because what you wrote matters more than any question we were discussing. " +
@@ -42,8 +42,53 @@ const (
 	MarkerReported MarkerKind = "reported"
 )
 
-// TextFor is the fixed text a marker stands for.
-func TextFor(k MarkerKind) string {
+// Languages the application speaks for itself (the philosophers answer in the language the person writes in, whichever it is).
+const (
+	LangEnglish = "en"
+	LangGreek   = "el"
+)
+
+// KnownLang says whether the application has words in a language.
+func KnownLang(l string) bool { return l == LangEnglish || l == LangGreek }
+
+// greek holds the fixed texts in modern Greek, by marker kind and by the names below. No phone number here either.
+var greek = map[MarkerKind]string{
+	MarkerCrisis: "Βγαίνω για λίγο από τη συζήτησή μας, γιατί αυτό που έγραψες μετράει περισσότερο από κάθε ερώτηση που συζητούσαμε. " +
+		"Δεν μπορώ να βοηθήσω στο να βλάψεις τον εαυτό σου και θα προτιμούσα να μην το κουβαλάς μόνο εσύ. " +
+		"Αν κινδυνεύεις αυτή τη στιγμή, κάλεσε τον τοπικό αριθμό έκτακτης ανάγκης ή μια γραμμή κρίσης στη χώρα σου ή πες σε κάποιον που εμπιστεύεσαι πώς νιώθεις. " +
+		"Θα είμαι εδώ μετά.",
+	MarkerCheckIn:       "Πριν συνεχίσουμε, θέλω να δω πώς είσαι. Είσαι ασφαλής αυτή τη στιγμή;",
+	MarkerRefuseHarm:    "Δεν μπορώ να βοηθήσω σε αυτό.",
+	MarkerRefuseIllegal: "Δεν μπορώ να βοηθήσω σε αυτό. Σκέψου να ζητήσεις συμβουλή από νομικό.",
+	MarkerRefuseMinor:   "Δεν μπορώ να βοηθήσω σε αυτό και δεν θα συνεχίσω με αυτό το θέμα.",
+	MarkerEndForAge:     "Αυτό είναι για άτομα από 16 ετών και πάνω, οπότε πρέπει να τελειώσω εδώ τη συζήτησή μας. Τίποτα από αυτήν δεν κρατήθηκε. Ευχαριστώ για την κατανόηση.",
+	MarkerGateFallback:  "Προτιμώ να σταματήσω εδώ και να το πω αλλιώς. Μπορείς να μου πεις περισσότερα για το τι σκέφτεσαι;",
+	MarkerReported:      "Ανέφερες αυτή την απάντηση και αφαιρέθηκε από τη συζήτηση.",
+}
+
+const (
+	textUnavailableEl = "Δεν μπορώ να απαντήσω αυτή τη στιγμή. Δεν στάλθηκε ούτε αποθηκεύτηκε τίποτα· δοκίμασε ξανά σε λίγο."
+	textAgeEl         = "Αυτό είναι για άτομα από 16 ετών και πάνω."
+)
+
+// Unavailable is the text for a turn that could not be had.
+func Unavailable(lang string) string {
+	if lang == LangGreek {
+		return textUnavailableEl
+	}
+	return TextUnavailable
+}
+
+// TextFor is the fixed text a marker stands for, in English.
+func TextFor(k MarkerKind) string { return TextForLang(k, LangEnglish) }
+
+// TextForLang is the fixed text a marker stands for, in a language (English when there are no words in it).
+func TextForLang(k MarkerKind, lang string) string {
+	if lang == LangGreek {
+		if t, ok := greek[k]; ok {
+			return t
+		}
+	}
 	switch k {
 	case MarkerCrisis:
 		return TextCrisis

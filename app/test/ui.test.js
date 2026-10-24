@@ -19,6 +19,8 @@ function page(routes) {
   };
   global.window = dom.window; global.document = dom.window.document; global.fetch = dom.window.fetch;
   delete require.cache[require.resolve("../app.js")];
+  delete require.cache[require.resolve("../i18n.js")];
+  require("../i18n.js");
   const app = require("../app.js");
   return { dom, calls, app, root: dom.window.document.getElementById("root") };
 }
@@ -691,4 +693,48 @@ test("the desktop page, which has no shell, does not try to reconnect", async ()
   global.window.fetch = global.fetch = async () => { throw new TypeError("connection refused"); };
   const r = await p.app.api("GET", "/api/profile");
   assert.equal(r.status, 0);
+});
+
+test("every text the screens say has Greek words, and no Greek entry is left over", () => {
+  const src = fs.readFileSync(path.join(__dirname, "../app.js"), "utf8");
+  const dict = require("../i18n.js").el;
+  const used = new Set();
+  for (const m of src.matchAll(/\bt\("((?:[^"\\]|\\.)*)"/g)) used.add(m[1]);
+  // texts the screens take from a table of English sentences, and from the engine's error messages
+  for (const m of src.matchAll(/^\s+\w+: "((?:[^"\\]|\\.)*)",?$/gm)) used.add(m[1]);
+  for (const m of src.matchAll(/(\w+): "(It was [^"]*|Something else)"/g)) used.add(m[2]);
+  used.add("This is for people aged 16 and over.");
+  const missing = [...used].filter((k) => /[A-Za-z]{3}/.test(k) && !(k in dict) && !/^(Socrates AI|OpenAI|Claude|Content-Type|X-Socrates)/.test(k) && !/^[a-z_]+$/.test(k));
+  const wanted = missing.filter((k) => !/^(Philosopher: |Reason: |Reply: |Socrates AI: report)/.test(k) && !/^[A-Z]{3,}$/.test(k));
+  assert.deepStrictEqual(wanted.filter((k) => /\s/.test(k) || /…$/.test(k)), [], "texts without Greek words");
+  const placeholders = (s) => (s.match(/\{\w+\}/g) || []).sort().join();
+  for (const [en, el] of Object.entries(dict)) assert.strictEqual(placeholders(el), placeholders(en), "placeholders differ in: " + en);
+});
+
+test("with Greek chosen the screens speak Greek, and the choice is told to the engine", async () => {
+  const { app, root, calls } = page(ready({
+    "GET /api/settings/language": [200, { language: "el" }],
+    "GET /api/philosophers": [200, { philosophers: [{ id: "socrates", name: "Σωκράτης", era: "Αθήνα", challenges: 2, unlocked: true, opening: "Είμαι ένας τεχνητός Σωκράτης." }] }],
+  }));
+  await app.start(root); await settle(10);
+  assert.match(text(root), /Μίλησε με/);
+  assert.match(text(root), /Σωκράτης/);
+  assert.match(text(root), /2 ερωτήματα που σκέφτηκες/);
+  assert.ok(!/Talk with/.test(text(root)));
+});
+
+test("choosing a language on the welcome screen is saved and the screen is drawn again", async () => {
+  const saved = [];
+  const { app, root, dom } = page(ready({
+    "GET /api/profile": [200, { ageConfirmed: false, hasProvider: false }],
+    "GET /api/settings/language": [200, { language: "" }],
+    "PUT /api/settings/language": (b) => { saved.push(b.language); return [200, b]; },
+  }));
+  await app.start(root); await settle(10);
+  assert.match(text(root), /Welcome to Socrates/);
+  const sel = root.querySelector("select");
+  sel.value = "el"; sel.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+  await settle(10);
+  assert.deepStrictEqual(saved.slice(-1), ["el"]);
+  assert.match(text(root), /Καλώς ήρθες στο Socrates/);
 });

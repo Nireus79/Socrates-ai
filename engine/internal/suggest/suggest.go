@@ -27,7 +27,7 @@ type Completer interface {
 	Complete(ctx context.Context, req llm.Request) (*llm.Response, error)
 }
 
-const system = `You help a person who is stuck in a philosophical conversation. You are given the conversation so far, ending with a question that a philosopher put to the person. Write ` + "four" + ` different ways the person might answer it, so that they have somewhere to start.
+const system = `You help a person who is stuck in a philosophical conversation. Write the starting points in the language the person has been writing in (English or Greek). You are given the conversation so far, ending with a question that a philosopher put to the person. Write ` + "four" + ` different ways the person might answer it, so that they have somewhere to start.
 
 Each suggestion is one complete sentence in the first person, in plain everyday English, in the voice of an ordinary person, never in the voice of the philosopher. Each must come from a different angle. Choose four different ones among: a first attempt at a definition; a case from ordinary life; a consequence that follows if it were so; the view someone from an opposing way of thinking might hold; something from personal experience; an honest admission of doubt or of not knowing.
 

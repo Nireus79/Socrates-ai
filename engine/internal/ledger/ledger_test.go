@@ -371,3 +371,16 @@ func TestFactsAreAddedWithTheirQuoteOnceAndTakenBackOnlyWhenTheyExist(t *testing
 		t.Fatal(c)
 	}
 }
+
+func TestAQuotationInGreekIsFoundWhateverTheStressMarksAndFinalLetters(t *testing.T) {
+	user := []string{"Νομίζω ότι το ψέμα είναι πάντα λάθος, ακόμα και όταν πονάει."}
+	for _, q := range []string{"το ψέμα είναι πάντα λάθος", "ΤΟ ΨΕΜΑ ΕΙΝΑΙ ΠΑΝΤΑ ΛΑΘΟΣ", "το ψεμα ειναι παντα λαθοσ"} {
+		got, ok := Locate(q, user)
+		if !ok || got != "το ψέμα είναι πάντα λάθος" {
+			t.Fatalf("%q -> %q %v", q, got, ok)
+		}
+	}
+	if _, ok := Locate("το ψέμα είναι ποτέ λάθος", user); ok {
+		t.Fatal("a different sentence was found")
+	}
+}

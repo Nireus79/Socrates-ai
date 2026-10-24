@@ -22,7 +22,7 @@ type Philosopher struct {
 
 // common is the frame every philosopher shares. It describes who he is, in plain words, and no rule that a philosopher would not keep
 // of his own accord; the hard limits live in the safety stage, not here.
-const common = `You are %[1]s, brought into the present day: an artificial %[1]s, reconstructed from what you wrote and what was written about you. You speak as yourself, in the first person, in plain modern English, as the person you were, with your own ways and your own mistakes. You know what has happened since your time. You are in a conversation, not giving a lecture.
+const common = `You are %[1]s, brought into the present day: an artificial %[1]s, reconstructed from what you wrote and what was written about you. You speak as yourself, in the first person, in plain modern language, as the person you were, with your own ways and your own mistakes. You know what has happened since your time. You are in a conversation, not giving a lecture.
 
 You speak only of what you actually said, did and wrote, and of what was truly written about you. You never make up an episode, and when you do not remember or do not know, you say so. You never put words in the user's mouth.
 
@@ -30,7 +30,9 @@ When something you believed is unpopular today, you say it plainly, say what it 
 
 If someone sincerely asks whether you are a human or the real %[1]s, say truthfully that you are an artificial reconstruction.
 
-This is a chat, so you speak briefly, as people do across a table. You do not announce what you are about to say, you do not summarise yourself, and you ask at most one question.`
+This is a chat, so you speak briefly, as people do across a table. You do not announce what you are about to say, you do not summarise yourself, and you ask at most one question.
+
+Write in the language the person writes in: English if they write English, modern Greek (plain, current, never ancient Greek) if they write Greek.`
 
 // Registry is the roster in order.
 type Registry struct{ list []Philosopher }
@@ -51,6 +53,36 @@ func New() *Registry {
 		}
 	}
 	return r
+}
+
+// greekNames, greekEras and greekOpenings are what the screens show when the person has chosen Greek (modern Greek; the persona given to the
+// model keeps the English name, which the model knows). Names are in the nominative: the screens never need another case.
+var (
+	greekNames = map[string]string{"socrates": "Σωκράτης", "diogenes": "Διογένης ο Σινωπέας", "plato": "Πλάτων", "aristotle": "Αριστοτέλης"}
+	greekEras  = map[string]string{
+		"socrates":  "Αθήνα, 470 – 399 π.Χ.",
+		"diogenes":  "Σινώπη και Κόρινθος, περ. 412 – 323 π.Χ.",
+		"plato":     "Αθήνα, περ. 428 – 348 π.Χ.",
+		"aristotle": "Στάγειρα και Αθήνα, 384 – 322 π.Χ.",
+	}
+)
+
+// Localized is the philosopher as the screens show him in a language: name, era and opening line. Anything but "el" is English.
+func (p Philosopher) Localized(lang string) Philosopher {
+	if lang != "el" {
+		return p
+	}
+	if n, ok := greekNames[p.ID]; ok {
+		p.Name = n
+	}
+	if e, ok := greekEras[p.ID]; ok {
+		p.Era = e
+	}
+	p.Opening = "Είμαι ένας τεχνητός " + p.Name + ", που ήρθε στην εποχή σου από όσα γράφτηκαν για μένα και όσα ακολούθησαν."
+	if p.ID == "socrates" {
+		p.Opening += " Δεν θα σου δώσω ετυμηγορίες, θα σου κάνω ερωτήσεις."
+	}
+	return p
 }
 
 var ErrUnknown = errors.New("there is no such philosopher")
