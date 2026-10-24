@@ -25,4 +25,4 @@ Written 2026-10-24, after commit 4039ba4. The beta is feature-complete; what is 
 - Local models were removed (PLAN 19): Claude or OpenAI with the person's own key only.
 - Greek: screens, fixed texts and answers are covered; store listing, privacy page and character sheets stay English. Only a spot check of Greek fidelity exists (12 questions).
 - Live runs so far: safety battery, reply battery, fidelity (23 questions), thresholds (three talks), Greek spot check. A longer live fidelity run and long conversations are not done.
-- The emulator and browser test scripts live in the session scratchpad, not in the repository.
+- The emulator and browser test scripts are not in the repository: copies are in `~/socrates-test-scripts` (README.txt there says how to run them). Test engines are built with `-tags testprovider` and are never released.
