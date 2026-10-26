@@ -167,7 +167,7 @@ async function keyGate() {
   if (st.state === "needs_setup") {
     const pass = el("input", { type: "password", autocomplete: "new-password", "aria-label": t("New passphrase") });
     const opts = st.options || [];
-    const body = el("div", { class: "card stack" }, el("p", {}, t("Socrates keeps your conversations encrypted on this computer. Choose where the key is kept.")));
+    const body = el("div", { class: "card stack" }, el("p", {}, t("Socrates keeps your conversations encrypted on this device. Choose where the key is kept.")));
     if (opts.includes("keychain")) body.append(el("button", { class: "primary", onclick: async () => finish(await api("POST", "/api/keystore/setup", { mode: "keychain" })) }, t("Use the system keychain (recommended)")));
     if (opts.includes("passphrase")) body.append(el("label", {}, t("A passphrase (at least 12 characters; if you forget it, your conversations cannot be opened)")), pass,
       el("button", { class: opts.includes("keychain") ? "" : "primary", onclick: async () => finish(await api("POST", "/api/keystore/setup", { mode: "passphrase", passphrase: pass.value })) }, t("Use a passphrase")));
@@ -239,7 +239,7 @@ function providerScreen(first, back) {
   const err = errorLine();
   const provider = el("select", { "aria-label": t("Provider") }, el("option", { value: "claude" }, "Claude (Anthropic)"), el("option", { value: "openai" }, "OpenAI"));
   const key = el("input", { type: "password", autocomplete: "off", placeholder: t("Paste your API key"), "aria-label": t("API key") });
-  const keyBox = el("div", {}, el("label", {}, t("Your API key")), key, el("p", { class: "muted" }, t("The key stays on this computer, encrypted. It is tested once, then used only to talk to your provider.")));
+  const keyBox = el("div", {}, el("label", {}, t("Your API key")), key, el("p", { class: "muted" }, t("The key stays on this device, encrypted. It is tested once, then used only to talk to your provider.")));
   const help = el("div", {}, keyHelp(provider.value, err));
   provider.addEventListener("change", () => { help.replaceChildren(keyHelp(provider.value, err)); });
   const save = el("button", { class: "primary" }, t("Save and test"));
@@ -479,7 +479,7 @@ async function memory(who) {
   const entries = r.data.entries || [];
   const body = el("div", { class: "stack" });
   const err = errorLine(r.status === 200 ? "" : (errMsg(r.data)));
-  body.append(el("p", { class: "muted" }, t("{name} keeps short notes of what you tell him, with your own words. They are stored encrypted on this computer, are used only in your conversations with {name}, and are deleted with the conversation they came from. You can delete any of them.", { name: who.name })), err);
+  body.append(el("p", { class: "muted" }, t("{name} keeps short notes of what you tell him, with your own words. They are stored encrypted on this device, are used only in your conversations with {name}, and are deleted with the conversation they came from. You can delete any of them.", { name: who.name })), err);
   const remove = async (id) => {
     const d = await api("DELETE", "/api/ledger/" + encodeURIComponent(id));
     if (d.status === 204 || d.status === 404) return memory(who);
@@ -517,7 +517,7 @@ async function settings() {
     el("p", { class: "muted" }, p.data.provider ? t("{provider}, models {fast} and {reply}", { provider: p.data.provider, fast: p.data.fastModel, reply: p.data.replyModel }) : t("Not set up.")),
     el("button", { onclick: () => show(() => providerScreen(false, back)) }, t("Change provider or key"))));
   body.append(el("div", { class: "card stack" }, el("h2", {}, t("Your data")),
-    el("p", { class: "muted" }, t("Conversations are stored encrypted on this computer only. An export holds your conversations and never your key.")),
+    el("p", { class: "muted" }, t("Conversations are stored encrypted on this device only. An export holds your conversations and never your key.")),
     el("div", { class: "row" },
       el("button", { onclick: exportData }, t("Export conversations")),
       el("button", { onclick: () => importInput.click() }, t("Import"))),
@@ -539,7 +539,7 @@ async function settings() {
   });
   body.append(el("div", { class: "card stack" }, el("h2", {}, t("Memory")),
     el("div", { class: "row" }, box, el("label", { for: "memory-on", style: "margin:0" }, t("The philosophers remember what I tell them"))),
-    el("p", { class: "muted" }, t("Each keeps short notes with your own words, only for himself, stored encrypted on this computer. Turning this off stops new notes and stops him using the old ones; it does not delete them. You can see and delete them from the Memory button inside a conversation."))));
+    el("p", { class: "muted" }, t("Each keeps short notes with your own words, only for himself, stored encrypted on this device. Turning this off stops new notes and stops him using the old ones; it does not delete them. You can see and delete them from the Memory button inside a conversation."))));
   const st = await api("GET", "/api/status");
   body.append(el("div", { class: "card stack" }, el("h2", {}, t("About")), logo(),
     el("p", { class: "muted" }, t("The philosophers are artificial characters made from what was written about them. They are not real people, and they are not a source of medical, legal or other professional advice.")),
@@ -547,7 +547,7 @@ async function settings() {
     el("p", { class: "muted" }, t("For people aged 16 and over. ") + (st.data.version ? t("Version {v}.", { v: st.data.version }) : "")),
     el("p", { class: "muted" }, t("Problems, questions and reports: {address} (Hermes Software).", { address: CONTACT }))));
   body.append(el("div", { class: "card stack" }, el("h2", {}, t("Delete everything")),
-    el("p", { class: "muted" }, t("Removes every conversation, your provider key and your settings from this computer. It cannot be undone.")),
+    el("p", { class: "muted" }, t("Removes every conversation, your provider key and your settings from this device. It cannot be undone.")),
     confirmButton(t("Delete everything"), "danger", t("Click again to delete everything"), async () => {
       const r = await api("DELETE", "/api/profile", { confirm: "delete" });
       if (r.status === 204) boot(); else err.textContent = errMsg(r.data);
