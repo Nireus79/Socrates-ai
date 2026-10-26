@@ -2,9 +2,12 @@
   --bg: #faf8f4; --panel: #ffffff; --ink: #231f1a; --muted: #6b645a; --line: #e3ddd2;
   --accent: #7a5c2e; --accent-ink: #ffffff; --user: #efe7d8; --danger: #a33a2a; --notice: #f3ecdc;
 }
+/* Dark follows the device unless the person chose Light; Dark forces it (the Theme setting puts data-theme on the page). */
 @media (prefers-color-scheme: dark) {
-  :root { --bg: #17140f; --panel: #201c16; --ink: #ece6da; --muted: #a39a8a; --line: #3a342a; --accent: #c9a366; --accent-ink: #17140f; --user: #2e2819; --danger: #e0806f; --notice: #2a2418; }
+  :root:not([data-theme="light"]) { --bg: #17140f; --panel: #201c16; --ink: #ece6da; --muted: #a39a8a; --line: #3a342a; --accent: #c9a366; --accent-ink: #17140f; --user: #2e2819; --danger: #e0806f; --notice: #2a2418; color-scheme: dark; }
 }
+:root[data-theme="dark"] { --bg: #17140f; --panel: #201c16; --ink: #ece6da; --muted: #a39a8a; --line: #3a342a; --accent: #c9a366; --accent-ink: #17140f; --user: #2e2819; --danger: #e0806f; --notice: #2a2418; color-scheme: dark; }
+:root[data-theme="light"] { color-scheme: light; }
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
 body { background: var(--bg); color: var(--ink); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
@@ -53,3 +56,14 @@ h1:focus { outline: none; }
 .keyhelp h2 { margin: 0 0 4px; font-size: 1.05rem; }
 .keystep p { margin: 12px 0 6px; }
 .keystep .muted { margin-top: 4px; overflow-wrap: anywhere; }
+
+/* The login and register screen */
+.auth { max-width: 420px; margin: 0 auto; }
+.tabs { display: flex; gap: 0; margin: 4px 0 12px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.tab { flex: 1; border: none; border-radius: 0; background: var(--panel); padding: 10px 14px; }
+.tab[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); }
+.manage { margin-top: 8px; color: var(--muted); }
+.manage summary { cursor: pointer; padding: 6px 0; }
+input.check { width: auto; padding: 0; margin: 0; }
+label.inline { margin: 0; }
+.grow { flex: 1; }

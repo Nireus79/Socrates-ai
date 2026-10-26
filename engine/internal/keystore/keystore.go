@@ -102,20 +102,21 @@ type Status struct {
 }
 
 type Store struct {
-	mu      sync.Mutex
-	dir     string
-	dbPath  string
-	kr      Keyring
-	getenv  func(string) string
-	sleep   func(time.Duration)
-	state   State
-	backend Backend
-	reason  string
-	key     []byte
-	kcAvail bool
-	failed  int
-	ready   chan struct{}
-	once    sync.Once
+	mu       sync.Mutex
+	dir      string
+	dbPath   string
+	kr       Keyring
+	getenv   func(string) string
+	sleep    func(time.Duration)
+	state    State
+	backend  Backend
+	reason   string
+	key      []byte
+	kcAvail  bool
+	failed   int
+	passOnly bool // profiles of the desktop app: only a passphrase may protect the key
+	ready    chan struct{}
+	once     sync.Once
 }
 
 func newStore(dir, dbPath string, kr Keyring) *Store {
@@ -125,6 +126,22 @@ func newStore(dir, dbPath string, kr Keyring) *Store {
 // Open resolves the key for the database at dbPath, creating a key in the keychain for a fresh install when one is there.
 func Open(dir, dbPath string, kr Keyring) *Store {
 	s := newStore(dir, dbPath, kr)
+	s.resolve(true)
+	return s
+}
+
+// noKeyring is a keychain that is never there: the key of a profile is never stored outside its own folder.
+type noKeyring struct{}
+
+func (noKeyring) Get(string, string) (string, error) { return "", ErrKeyNotFound }
+func (noKeyring) Set(string, string, string) error   { return errors.New("not used by a profile") }
+func (noKeyring) Delete(string, string) error        { return nil }
+
+// OpenPassphraseOnly is Open for a profile of the desktop app: the system keychain and the key file are not offered, so the only way to
+// protect the data is a passphrase, asked at every start, and a profile does not depend on who is logged in to the computer.
+func OpenPassphraseOnly(dir, dbPath string) *Store {
+	s := newStore(dir, dbPath, noKeyring{})
+	s.passOnly = true
 	s.resolve(true)
 	return s
 }
@@ -177,7 +194,8 @@ func (s *Store) resolve(create bool) {
 	s.key = nil
 	// The key comes from the environment: for a shell that holds the key itself (the phone app) and for development. Anything that can set
 	// the environment of the engine can set this, so it is not offered to a person.
-	if v := s.getenv(envKey); strings.TrimSpace(v) != "" {
+	// A profile of the desktop app ignores it: only the passphrase opens a profile.
+	if v := s.getenv(envKey); strings.TrimSpace(v) != "" && !s.passOnly {
 		k, err := decodeKey(v)
 		if err != nil {
 			s.set(StateBroken, BackendEnv, envKey+": "+err.Error())
@@ -304,7 +322,9 @@ func (s *Store) Status() Status {
 	st := Status{State: s.state, Backend: s.backend, Reason: s.reason, KeychainAvailable: s.kcAvail}
 	if s.state == StateNeedsSetup {
 		st.Options = []string{"passphrase", "file"}
-		if s.kcAvail {
+		if s.passOnly {
+			st.Options = []string{"passphrase"}
+		} else if s.kcAvail {
 			st.Options = append([]string{"keychain"}, st.Options...)
 		}
 	}
@@ -331,6 +351,9 @@ func (s *Store) Setup(mode, passphrase string, confirmInsecure bool) error {
 	defer s.mu.Unlock()
 	if s.state != StateNeedsSetup {
 		return ErrNotNeeded
+	}
+	if s.passOnly && mode != "passphrase" {
+		return errors.New("this profile can only be protected by a passphrase")
 	}
 	if err := os.MkdirAll(s.dir, 0o700); err != nil {
 		return err

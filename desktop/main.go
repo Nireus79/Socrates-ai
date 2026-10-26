@@ -7,6 +7,7 @@ import (
 	"embed"
 	"errors"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -56,24 +57,39 @@ func enginePath() string {
 	return filepath.Join(filepath.Dir(exe), name)
 }
 
+// baseDir is where the profiles live: the same folder the engine always used.
+func baseDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		log.Fatal("cannot find the home folder")
+	}
+	return filepath.Join(home, ".socrates")
+}
+
 func main() {
-	var args []string
+	// With SOCRATES_DATA_DIR set (tests, development) there is one engine on that folder and no profiles. Otherwise the person chooses a
+	// profile and logs in to it; its engine starts then.
+	var handler http.Handler
 	if d := os.Getenv("SOCRATES_DATA_DIR"); d != "" {
-		args = append(args, "--data-dir", d)
+		eng, err := shell.Start(enginePath(), []string{"--data-dir", d}, nil, 30*time.Second)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer eng.Stop()
+		handler = eng.Proxy(nil)
+	} else {
+		m := shell.NewManager(baseDir(), enginePath())
+		defer m.Stop()
+		handler = m.Handler()
 	}
-	eng, err := shell.Start(enginePath(), args, nil, 30*time.Second)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer eng.Stop()
 	app := &App{}
-	err = wails.Run(&options.App{
+	err := wails.Run(&options.App{
 		Title:       "Socrates",
 		Width:       980,
 		Height:      760,
 		MinWidth:    420,
 		MinHeight:   520,
-		AssetServer: &assetserver.Options{Assets: assets, Handler: eng.Proxy(nil)},
+		AssetServer: &assetserver.Options{Assets: assets, Handler: handler},
 		OnStartup:   app.startup,
 		Bind:        []interface{}{app},
 		Linux:       &linux.Options{Icon: icon},

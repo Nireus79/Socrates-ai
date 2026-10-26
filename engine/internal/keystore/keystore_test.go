@@ -358,3 +358,49 @@ func TestAShortPassphraseIsRefusedAndNothingIsWritten(t *testing.T) {
 		t.Fatalf("state = %s", st.State)
 	}
 }
+
+// A profile of the desktop app is protected by a passphrase and by nothing else: the keychain is not used even when it works, and neither
+// the keychain nor the key file can be chosen.
+func TestPassphraseOnlyOffersOnlyAPassphraseAndNeverTouchesTheKeychain(t *testing.T) {
+	dir, db := setup(t)
+	s := OpenPassphraseOnly(dir, db)
+	st := s.Status()
+	if st.State != StateNeedsSetup || len(st.Options) != 1 || st.Options[0] != "passphrase" {
+		t.Fatalf("status = %+v", st)
+	}
+	for _, mode := range []string{"file", "keychain"} {
+		if err := s.Setup(mode, "", true); err == nil {
+			t.Fatalf("mode %q was accepted", mode)
+		}
+		if s.Status().State != StateNeedsSetup {
+			t.Fatalf("mode %q changed the state", mode)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, keyFile)); err == nil {
+		t.Fatal("a key file was written")
+	}
+	if err := s.Setup("passphrase", "a long enough passphrase", false); err != nil {
+		t.Fatal(err)
+	}
+	s2 := noSleep(OpenPassphraseOnly(dir, db))
+	if s2.Status().State != StateLocked {
+		t.Fatalf("status = %+v", s2.Status())
+	}
+	if err := s2.Unlock("a long enough passphrase"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPassphraseOnlyIgnoresAKeyInTheEnvironment(t *testing.T) {
+	dir, db := setup(t)
+	s := newStore(dir, db, noKeyring{})
+	s.passOnly = true
+	s.getenv = func(string) string { return strings.Repeat("ab", 32) }
+	s.resolve(true)
+	if s.Status().State != StateNeedsSetup {
+		t.Fatalf("a key from the environment opened a profile: %+v", s.Status())
+	}
+	if _, ok := s.Key(); ok {
+		t.Fatal("a key was given")
+	}
+}

@@ -101,3 +101,34 @@ func (h *handler) putLang(w http.ResponseWriter, r *http.Request) {
 	}
 	transport.WriteJSON(w, http.StatusOK, map[string]string{"language": body.Language})
 }
+
+// The theme of the screens: "auto" follows the device, otherwise "light" or "dark". It is the person's own setting, kept with the profile.
+const themeKey = "theme"
+
+func (h *handler) getTheme(w http.ResponseWriter, r *http.Request) {
+	v, ok, err := h.d.Store.Setting(r.Context(), themeKey)
+	if err != nil || !ok || !knownTheme(v) {
+		v = "auto"
+	}
+	transport.WriteJSON(w, http.StatusOK, map[string]string{"theme": v})
+}
+
+func (h *handler) putTheme(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Theme string `json:"theme"`
+	}
+	if !transport.ReadBody(w, r, &body) {
+		return
+	}
+	if !knownTheme(body.Theme) {
+		fail(w, http.StatusBadRequest, "The theme must be auto, light or dark.")
+		return
+	}
+	if err := h.d.Store.SetSetting(r.Context(), themeKey, body.Theme); err != nil {
+		fail(w, http.StatusInternalServerError, "That did not work.")
+		return
+	}
+	transport.WriteJSON(w, http.StatusOK, map[string]string{"theme": body.Theme})
+}
+
+func knownTheme(v string) bool { return v == "auto" || v == "light" || v == "dark" }

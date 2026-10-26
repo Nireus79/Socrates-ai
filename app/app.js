@@ -61,7 +61,7 @@ function providerProblem(d, tail = true) {
   return t(base) + (tail ? " " + t("Nothing was sent or saved.") : "");
 }
 
-const S = { philosophers: [], root: null, current: null, lang: "en" };
+const S = { philosophers: [], root: null, current: null, lang: "en", profiles: false, profile: null };
 // The words of the screens: the English text is the key (i18n.js holds the other languages); {name}-style placeholders take their values from vars.
 function t(key, vars) {
   const dict = (typeof window !== "undefined" && window.SocratesI18n && window.SocratesI18n[S.lang]) || {};
@@ -136,10 +136,173 @@ function screen(title, body, actions) {
 function errMsg(d) { return t((d && d.error) || "That did not work."); }
 function errorLine(text) { return el("p", { class: "error", role: "alert" }, text || ""); }
 
+// ---- theme
+
+// "auto" follows the device; "light" and "dark" are the person's own choice. The choice is kept by the engine with the profile, and a copy
+// is kept in the page so that the screens before the login (the profiles, the passphrase) already have it.
+const THEMES = [["auto", "Automatic (follows the device)"], ["light", "Light"], ["dark", "Dark"]];
+function applyTheme(v) {
+  const root = document.documentElement;
+  if (v === "light" || v === "dark") root.dataset.theme = v; else delete root.dataset.theme;
+  try { localStorage.setItem("theme", v === "light" || v === "dark" ? v : "auto"); } catch (_) { /* no storage: the choice lasts until the page closes */ }
+}
+function rememberedTheme() { try { return localStorage.getItem("theme") || "auto"; } catch (_) { return "auto"; } }
+async function loadTheme() {
+  const r = await api("GET", "/api/settings/theme");
+  if (r.status === 200) applyTheme(r.data.theme);
+}
+function themePicker() {
+  const now = document.documentElement.dataset.theme || "auto";
+  const sel = el("select", { "aria-label": t("Theme") }, ...THEMES.map(([c, n]) => el("option", { value: c, selected: c === now }, t(n))));
+  sel.addEventListener("change", async () => {
+    applyTheme(sel.value);
+    await api("PUT", "/api/settings/theme", { theme: sel.value });
+  });
+  return sel;
+}
+
+// ---- profiles (the desktop app: several people on one computer)
+
+// The desktop window answers /shell/profiles; the phone app and a plain browser do not, and then there are no profiles.
+async function desktopProfiles() {
+  if (shellInfo()) return null;
+  try {
+    const r = await fetch("/shell/profiles");
+    return r.status === 200 ? await r.json() : null;
+  } catch (_) { return null; }
+}
+async function shellPost(path, body) {
+  try {
+    const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+    return { status: r.status, data: await r.json() };
+  } catch (_) { return { status: 0, data: { error: "The engine does not answer." } }; }
+}
+async function logOut() {
+  await shellPost("/shell/close");
+  S.profile = null; S.opened = null; S.philosophers = [];
+  boot();
+}
+// Waits until the engine of the open profile answers about its key (it needs a moment after it starts).
+async function keyStatus() {
+  for (let i = 0; i < 60; i++) {
+    const r = await api("GET", "/api/keystore/status");
+    if (r.status === 200) return r.data || {};
+    await new Promise((ok) => setTimeout(ok, 250));
+  }
+  return null;
+}
+const MIN_PASSPHRASE = 12;
+
+// The first screen of the desktop app: log in to a profile on this computer, or register a new one. There is no server; a profile is a
+// folder with its own passphrase, and nothing here can be reset, which the register tab says.
+function authScreen(info, tab) {
+  const profiles = info.profiles || [];
+  tab = tab || (profiles.length ? "login" : "register");
+  const err = errorLine();
+  const busy = (b, on) => { b.disabled = on; };
+  const passField = (label, auto) => {
+    const input = el("input", { type: "password", autocomplete: auto, "aria-label": label });
+    return { label: el("label", {}, label), input };
+  };
+  const showBox = (inputs) => {
+    const box = el("input", { type: "checkbox", id: "show-pass", class: "check" });
+    box.addEventListener("change", () => { for (const i of inputs) i.type = box.checked ? "text" : "password"; });
+    return el("div", { class: "row" }, box, el("label", { for: "show-pass", class: "inline" }, t("Show the passphrase")));
+  };
+  const tabs = el("div", { class: "tabs", role: "tablist" },
+    ...[["login", t("Log in")], ["register", t("Register")]].map(([k, label]) =>
+      el("button", { type: "button", role: "tab", class: "tab", "aria-selected": String(k === tab), onclick: () => authScreen(info, k) }, label)));
+  let form;
+  if (tab === "login") {
+    const sel = el("select", { "aria-label": t("Profile") }, ...profiles.map((p) => el("option", { value: p.id }, p.legacy ? t("Existing data") : p.name)));
+    const pass = passField(t("Passphrase"), "current-password");
+    const note = el("p", { class: "muted" });
+    const isLegacy = () => (profiles.find((p) => p.id === sel.value) || {}).legacy;
+    const sync = () => {
+      const legacy = isLegacy();
+      pass.label.hidden = pass.input.hidden = legacy; // the data from before profiles has no passphrase: it opens the way it always did
+      note.textContent = legacy ? t("Made before profiles existed. It opens the way it always did.") : "";
+    };
+    sel.addEventListener("change", sync);
+    const go = el("button", { class: "primary", type: "submit" }, t("Log in"));
+    form = el("form", { class: "stack", onsubmit: async (e) => {
+      e.preventDefault();
+      err.textContent = "";
+      const p = profiles.find((x) => x.id === sel.value);
+      if (!p) return;
+      if (!p.legacy && !pass.input.value) { err.textContent = t("Enter your passphrase."); return; }
+      busy(go, true);
+      // A profile stays open after a wrong passphrase, so the engine's slowing down of wrong guesses is not undone by starting it again.
+      if (S.opened !== p.id) {
+        const o = await shellPost("/shell/open", { id: p.id });
+        if (o.status !== 200) { err.textContent = errMsg(o.data); busy(go, false); return; }
+        S.opened = p.id;
+      }
+      S.profile = p;
+      const st = await keyStatus();
+      if (!st) { err.textContent = t("The engine did not start."); busy(go, false); return; }
+      if (st.state === "locked") {
+        const u = await api("POST", "/api/keystore/unlock", { passphrase: pass.input.value });
+        if (u.status !== 200) { err.textContent = errMsg(u.data); busy(go, false); pass.input.value = ""; pass.input.focus(); return; }
+      }
+      S.opened = null;
+      boot(); // ready (the old data), or still to be set up: the engine's own gate screens take over
+    } },
+      el("label", {}, t("Profile")), sel, pass.label, pass.input, note, err, showBox([pass.input]), go);
+    sync();
+  } else {
+    const name = el("input", { type: "text", maxlength: "40", autocomplete: "username", "aria-label": t("Name") });
+    const one = passField(t("Passphrase"), "new-password"), two = passField(t("Repeat the passphrase"), "new-password");
+    const go = el("button", { class: "primary", type: "submit" }, t("Register"));
+    form = el("form", { class: "stack", onsubmit: async (e) => {
+      e.preventDefault();
+      err.textContent = "";
+      if (!name.value.trim()) { err.textContent = t("Give the profile a name."); return; }
+      if (one.input.value.length < MIN_PASSPHRASE) { err.textContent = t("A passphrase needs at least 12 characters."); return; }
+      if (one.input.value !== two.input.value) { err.textContent = t("The two passphrases are not the same."); return; }
+      busy(go, true);
+      const c = await shellPost("/shell/profiles", { name: name.value });
+      if (c.status !== 200) { err.textContent = errMsg(c.data); busy(go, false); return; }
+      const o = await shellPost("/shell/open", { id: c.data.id });
+      if (o.status !== 200) { err.textContent = errMsg(o.data); busy(go, false); return; }
+      S.profile = c.data;
+      const st = await keyStatus();
+      if (!st) { err.textContent = t("The engine did not start."); busy(go, false); return; }
+      const r = await api("POST", "/api/keystore/setup", { mode: "passphrase", passphrase: one.input.value });
+      if (r.status !== 200) { err.textContent = errMsg(r.data); busy(go, false); return; }
+      boot(); // the age confirmation and the provider follow, as for anyone new
+    } },
+      el("label", {}, t("Name")), name, one.label, one.input, two.label, two.input,
+      el("p", { class: "muted" }, t("Your conversations are encrypted with a passphrase only you know. If you forget it, they cannot be opened: there is no way to get it back.")),
+      err, showBox([one.input, two.input]), go);
+  }
+  const body = el("div", { class: "auth" }, logo(), tabs, el("div", { class: "card stack" }, form));
+  // Removing a profile is rare and final, so it sits out of the way, below the form.
+  const removable = profiles.filter((p) => !p.legacy);
+  if (removable.length) {
+    const rm = el("details", { class: "manage" }, el("summary", {}, t("Manage profiles")));
+    for (const p of removable) rm.append(el("div", { class: "row" }, el("span", { class: "grow" }, p.name),
+      confirmButton(t("Remove"), "link", t("Click again to remove everything of {name}", { name: p.name }), async () => {
+        const r = await shellPost("/shell/remove", { id: p.id });
+        if (r.status === 200) boot(); else err.textContent = errMsg(r.data);
+      })));
+    body.append(rm);
+  }
+  mount(...screen("Socrates", body));
+  const first = S.root.querySelector("form input:not([hidden]), form select");
+  if (first) first.focus({ preventScroll: true });
+}
+
 // ---- start: the engine, the key, the age, the provider
 
 async function boot() {
   unwind();
+  const pr = await desktopProfiles();
+  if (pr) {
+    S.profiles = true;
+    if (!pr.active) return authScreen(pr);
+    S.profile = S.profile || pr.profiles.find((p) => p.id === pr.active) || null;
+  }
   mount(...screen("Socrates", el("p", { class: "muted" }, t("Starting…"))));
   for (let i = 0; i < 120; i++) {
     const r = await api("GET", "/api/status");
@@ -160,13 +323,28 @@ async function keyGate() {
   };
   if (st.state === "locked") {
     const pass = el("input", { type: "password", autocomplete: "current-password", "aria-label": t("Passphrase") });
-    return mount(...screen(t("Unlock Socrates"), el("div", { class: "card stack" },
+    const who = S.profile && !S.profile.legacy ? S.profile.name : "";
+    return mount(...screen(who ? t("Welcome back, {name}", { name: who }) : t("Unlock Socrates"), el("div", { class: "card stack" },
       el("p", {}, t("Your conversations are encrypted. Enter your passphrase to open them.")), pass, err,
-      el("button", { class: "primary", onclick: async () => finish(await api("POST", "/api/keystore/unlock", { passphrase: pass.value })) }, t("Unlock")))));
+      el("button", { class: "primary", onclick: async () => finish(await api("POST", "/api/keystore/unlock", { passphrase: pass.value })) }, t("Unlock")),
+      S.profiles ? el("button", { class: "link", onclick: logOut }, t("Choose another profile")) : null)));
   }
   if (st.state === "needs_setup") {
     const pass = el("input", { type: "password", autocomplete: "new-password", "aria-label": t("New passphrase") });
     const opts = st.options || [];
+    if (opts.length === 1 && opts[0] === "passphrase") {
+      // A profile: the passphrase is the only protection, so it is asked twice (a slip would lock the person out of their own data).
+      const again = el("input", { type: "password", autocomplete: "new-password", "aria-label": t("Repeat the passphrase") });
+      const make = async () => {
+        if (pass.value !== again.value) { err.textContent = t("The two passphrases are not the same."); return; }
+        finish(await api("POST", "/api/keystore/setup", { mode: "passphrase", passphrase: pass.value }));
+      };
+      return mount(...screen(S.profile && !S.profile.legacy ? t("Choose a passphrase, {name}", { name: S.profile.name }) : t("Welcome"), el("div", { class: "card stack" },
+        el("p", {}, t("Your conversations are encrypted with a passphrase only you know. If you forget it, they cannot be opened: there is no way to get it back.")),
+        el("label", {}, t("A passphrase (at least 12 characters)")), pass, el("label", {}, t("Repeat the passphrase")), again, err,
+        el("button", { class: "primary", onclick: make }, t("Create profile")),
+        S.profiles ? el("button", { class: "link", onclick: logOut }, t("Choose another profile")) : null)));
+    }
     const body = el("div", { class: "card stack" }, el("p", {}, t("Socrates keeps your conversations encrypted on this device. Choose where the key is kept.")));
     if (opts.includes("keychain")) body.append(el("button", { class: "primary", onclick: async () => finish(await api("POST", "/api/keystore/setup", { mode: "keychain" })) }, t("Use the system keychain (recommended)")));
     if (opts.includes("passphrase")) body.append(el("label", {}, t("A passphrase (at least 12 characters; if you forget it, your conversations cannot be opened)")), pass,
@@ -183,6 +361,7 @@ async function keyGate() {
 
 async function afterReady() {
   await loadLang();
+  await loadTheme();
   const p = await api("GET", "/api/profile");
   if (p.status !== 200) return mount(...screen("Socrates", el("p", { class: "error" }, t("Your profile could not be read."))));
   if (!p.data.ageConfirmed) return ageScreen();
@@ -283,7 +462,7 @@ async function home() {
         el("h2", {}, k.title || t("New conversation")), el("div", { class: "muted" }, who)));
     }
   }
-  mount(...screen("Socrates", body, el("button", { class: "link", onclick: () => show(settings) }, t("Settings"))));
+  mount(...screen("Socrates", body, el("span", { class: "row" }, S.profiles ? el("button", { class: "link", onclick: logOut }, t("Log out")) : null, el("button", { class: "link", onclick: () => show(settings) }, t("Settings")))));
 }
 
 async function startWith(p) {
@@ -513,6 +692,10 @@ async function settings() {
   const body = el("div", { class: "stack" });
   const p = await api("GET", "/api/settings/llm");
   body.append(el("div", { class: "card stack" }, el("h2", {}, t("Language")), languagePicker(settings)));
+  body.append(el("div", { class: "card stack" }, el("h2", {}, t("Theme")), themePicker()));
+  if (S.profiles) body.append(el("div", { class: "card stack" }, el("h2", {}, t("Profile")),
+    el("p", { class: "muted" }, S.profile && !S.profile.legacy ? t("Signed in as {name}.", { name: S.profile.name }) : t("Signed in to the existing data.")),
+    el("button", { onclick: logOut }, t("Log out"))));
   body.append(el("div", { class: "card stack" }, el("h2", {}, t("AI provider")),
     el("p", { class: "muted" }, p.data.provider ? t("{provider}, models {fast} and {reply}", { provider: p.data.provider === "claude" ? "Claude (Anthropic)" : p.data.provider === "openai" ? "OpenAI" : p.data.provider, fast: p.data.fastModel, reply: p.data.replyModel }) : t("Not set up.")),
     el("button", { onclick: () => show(() => providerScreen(false, back)) }, t("Change provider or key"))));
@@ -531,14 +714,14 @@ async function settings() {
   } });
   body.append(importInput);
   const mem = await api("GET", "/api/settings/memory");
-  const box = el("input", { type: "checkbox", id: "memory-on", style: "width:auto" });
+  const box = el("input", { type: "checkbox", id: "memory-on", class: "check" });
   box.checked = mem.data.enabled !== false;
   box.addEventListener("change", async () => {
     const r = await api("PUT", "/api/settings/memory", { enabled: box.checked });
     if (r.status !== 200) { box.checked = !box.checked; err.textContent = errMsg(r.data); }
   });
   body.append(el("div", { class: "card stack" }, el("h2", {}, t("Memory")),
-    el("div", { class: "row" }, box, el("label", { for: "memory-on", style: "margin:0" }, t("The philosophers remember what I tell them"))),
+    el("div", { class: "row" }, box, el("label", { for: "memory-on", class: "inline" }, t("The philosophers remember what I tell them"))),
     el("p", { class: "muted" }, t("Each keeps short notes with your own words, only for himself, stored encrypted on this device. Turning this off stops new notes and stops him using the old ones; it does not delete them. You can see and delete them from the Memory button inside a conversation."))));
   const st = await api("GET", "/api/status");
   body.append(el("div", { class: "card stack" }, el("h2", {}, t("About")), logo(),
@@ -565,6 +748,6 @@ async function exportData() {
   document.body.append(a); a.click(); a.remove();
 }
 
-function start(root) { S.root = root || document.getElementById("root"); S.lang = detectedLang(); window.socratesBack = goBack; return boot(); }
+function start(root) { S.root = root || document.getElementById("root"); S.lang = detectedLang(); applyTheme(rememberedTheme()); window.socratesBack = goBack; return boot(); }
 if (typeof module !== "undefined") module.exports = { start, el, api, S };
 else window.addEventListener("DOMContentLoaded", () => start());

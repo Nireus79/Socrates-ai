@@ -60,6 +60,8 @@ func New(d Deps) (*http.ServeMux, *conversation.Service) {
 	mux.HandleFunc("PUT /api/settings/memory", h.putMemory)
 	mux.HandleFunc("GET /api/settings/language", h.getLang)
 	mux.HandleFunc("PUT /api/settings/language", h.putLang)
+	mux.HandleFunc("GET /api/settings/theme", h.getTheme)
+	mux.HandleFunc("PUT /api/settings/theme", h.putTheme)
 	mux.HandleFunc("GET /api/ledger", h.ledger)
 	mux.HandleFunc("DELETE /api/ledger/{id}", h.deleteEntry)
 	mux.HandleFunc("DELETE /api/ledger", h.clearLedger)

@@ -741,6 +741,236 @@ test("the desktop page, which has no shell, does not try to reconnect", async ()
   assert.equal(r.status, 0);
 });
 
+// ---- profiles and the theme
+
+// A window that serves /shell/profiles: `shell` is { profiles, active } and changes as the person logs in and out. `posted` records what
+// the window was asked to do, in order.
+function withProfiles(shell, extra = {}) {
+  const posted = [];
+  const routes = ready(Object.assign({
+    "GET /shell/profiles": () => [200, shell],
+    "POST /shell/open": (b) => { posted.push(["open", b.id]); shell.active = b.id; return [200, {}]; },
+    "POST /shell/close": () => { posted.push(["close"]); shell.active = ""; return [200, {}]; },
+    "POST /shell/profiles": (b) => { posted.push(["create", b.name]); const p = { id: "p" + (shell.profiles.length + 1), name: b.name }; shell.profiles.push(p); return [200, p]; },
+    "POST /shell/remove": (b) => { posted.push(["remove", b.id]); shell.profiles = shell.profiles.filter((p) => p.id !== b.id); return [200, {}]; },
+  }, extra));
+  const p = page(routes);
+  p.posted = posted;
+  return p;
+}
+const button = (root, label) => [...root.querySelectorAll("button")].find((b) => b.textContent === label);
+const submit = (p, form) => form.dispatchEvent(new p.dom.window.Event("submit", { bubbles: true, cancelable: true }));
+const status = (shell) => () => (shell.active ? [200, { status: "ok" }] : [409, { kind: "no_profile" }]);
+
+test("on the desktop the first screen is Log in when there are profiles and Register when there are none", async () => {
+  const none = withProfiles({ profiles: [], active: "" });
+  none.app.start(none.root); await settle();
+  assert.equal(none.root.querySelector('[role=tab][aria-selected=true]').textContent, "Register");
+  assert.ok(none.root.querySelector("form select") === null, "no profile to choose from");
+  const some = withProfiles({ profiles: [{ id: "p1", name: "Anna" }, { id: "p2", name: "Ben" }], active: "" });
+  some.app.start(some.root); await settle();
+  assert.equal(some.root.querySelector('[role=tab][aria-selected=true]').textContent, "Log in");
+  assert.deepStrictEqual([...some.root.querySelectorAll("form select option")].map((o) => o.textContent), ["Anna", "Ben"]);
+  assert.equal(some.calls.filter((c) => c.key.startsWith("GET /api/")).length, 0, "no engine request before a profile is open");
+  click([...some.root.querySelectorAll('[role=tab]')].find((x) => x.textContent === "Register")); await settle();
+  assert.ok(some.root.querySelector("form input[type=text]"), "the register form has a name");
+});
+
+test("logging in opens the profile, unlocks it with the passphrase and goes on; a wrong passphrase stays on the screen and does not restart the engine", async () => {
+  const shell = { profiles: [{ id: "p1", name: "Anna" }, { id: "p2", name: "Ben" }], active: "" };
+  const unlocks = [];
+  let unlocked = false;
+  const p = withProfiles(shell, {
+    "GET /api/status": () => (unlocked ? [200, { status: "ok" }] : [423, {}]),
+    "GET /api/keystore/status": () => [200, { state: unlocked ? "ready" : "locked" }],
+    "POST /api/keystore/unlock": (b) => { unlocks.push(b.passphrase); if (b.passphrase !== "right passphrase!") return [403, { error: "That passphrase is not right." }]; unlocked = true; return [200, {}]; },
+  });
+  p.app.start(p.root); await settle();
+  const form = p.root.querySelector("form");
+  p.root.querySelector("form select").value = "p2";
+  p.root.querySelector("input[type=password]").value = "nope";
+  submit(p, form); await settle(12);
+  assert.match(text(p.root), /That passphrase is not right\./);
+  assert.match(text(p.root), /Log in/, "still on the login screen");
+  assert.equal(p.root.querySelector("input[type=password]").value, "", "the wrong guess is cleared");
+  p.root.querySelector("input[type=password]").value = "right passphrase!";
+  submit(p, p.root.querySelector("form")); await settle(14);
+  assert.deepStrictEqual(p.posted, [["open", "p2"]], "the engine was started once, not again for the second try");
+  assert.deepStrictEqual(unlocks, ["nope", "right passphrase!"]);
+  assert.match(text(p.root), /Talk with/);
+});
+
+test("choosing another profile after a wrong guess opens that one", async () => {
+  const shell = { profiles: [{ id: "p1", name: "Anna" }, { id: "p2", name: "Ben" }], active: "" };
+  const p = withProfiles(shell, {
+    "GET /api/keystore/status": [200, { state: "locked" }],
+    "POST /api/keystore/unlock": [403, { error: "That passphrase is not right." }],
+  });
+  p.app.start(p.root); await settle();
+  p.root.querySelector("input[type=password]").value = "x";
+  submit(p, p.root.querySelector("form")); await settle(10);
+  p.root.querySelector("form select").value = "p2";
+  p.root.querySelector("input[type=password]").value = "y";
+  submit(p, p.root.querySelector("form")); await settle(10);
+  assert.deepStrictEqual(p.posted, [["open", "p1"], ["open", "p2"]]);
+});
+
+test("an empty passphrase is refused at once, and the old data opens with no passphrase", async () => {
+  const shell = { profiles: [{ id: "p1", name: "Anna" }, { id: "existing", name: "Existing data", legacy: true }], active: "" };
+  let ready_ = false;
+  const p = withProfiles(shell, {
+    "GET /api/status": () => (ready_ ? [200, { status: "ok" }] : [409, {}]),
+    "GET /api/keystore/status": () => { ready_ = true; return [200, { state: "ready" }]; },
+  });
+  p.app.start(p.root); await settle();
+  submit(p, p.root.querySelector("form")); await settle();
+  assert.match(text(p.root), /Enter your passphrase\./);
+  assert.deepStrictEqual(p.posted, [], "an empty passphrase started an engine");
+  const sel = p.root.querySelector("form select");
+  sel.value = "existing"; sel.dispatchEvent(new p.dom.window.Event("change", { bubbles: true }));
+  assert.equal(p.root.querySelector("input[type=password]").hidden, true, "the old data has no passphrase field");
+  submit(p, p.root.querySelector("form")); await settle(14);
+  assert.deepStrictEqual(p.posted, [["open", "existing"]]);
+  assert.match(text(p.root), /Talk with/);
+});
+
+test("registering checks the passphrase before anything is made, then makes the profile and its passphrase", async () => {
+  const shell = { profiles: [], active: "" };
+  const setups = [];
+  let state = "needs_setup";
+  const p = withProfiles(shell, {
+    "GET /api/status": () => (state === "ready" ? [200, { status: "ok" }] : [423, {}]),
+    "GET /api/keystore/status": () => [200, { state, options: ["passphrase"] }],
+    "POST /api/keystore/setup": (b) => { setups.push(b); state = "ready"; return [200, {}]; },
+    "GET /api/profile": [200, { ageConfirmed: false, hasProvider: false }],
+  });
+  p.app.start(p.root); await settle();
+  const form = () => p.root.querySelector("form");
+  const [pass, again] = p.root.querySelectorAll("input[type=password]");
+  const name = p.root.querySelector("input[type=text]");
+  submit(p, form()); await settle();
+  assert.match(text(p.root), /Give the profile a name\./);
+  name.value = "Anna";
+  pass.value = "short"; again.value = "short";
+  submit(p, form()); await settle();
+  assert.match(text(p.root), /at least 12 characters/);
+  pass.value = "a long enough passphrase"; again.value = "a long enough passphrasX";
+  submit(p, form()); await settle();
+  assert.match(text(p.root), /The two passphrases are not the same\./);
+  assert.deepStrictEqual(p.posted, [], "a bad passphrase created a profile");
+  again.value = "a long enough passphrase";
+  submit(p, form()); await settle(14);
+  assert.deepStrictEqual(p.posted, [["create", "Anna"], ["open", "p1"]]);
+  assert.deepStrictEqual(setups, [{ mode: "passphrase", passphrase: "a long enough passphrase" }]);
+  assert.match(text(p.root), /16 or older/, "a new person goes on to the age confirmation");
+});
+
+test("a name that is taken is told on the register screen and no engine is started", async () => {
+  const p = withProfiles({ profiles: [{ id: "p1", name: "Anna" }], active: "" }, { "POST /shell/profiles": [400, { error: "A profile with that name already exists." }] });
+  p.app.start(p.root); await settle();
+  click([...p.root.querySelectorAll("[role=tab]")].find((x) => x.textContent === "Register")); await settle();
+  p.root.querySelector("input[type=text]").value = "anna";
+  const [one, two] = p.root.querySelectorAll("input[type=password]");
+  one.value = two.value = "a long enough passphrase";
+  submit(p, p.root.querySelector("form")); await settle(10);
+  assert.match(text(p.root), /already exists/);
+  assert.deepStrictEqual(p.posted, []);
+});
+
+test("the passphrase can be shown while typing and is hidden again", async () => {
+  const p = withProfiles({ profiles: [{ id: "p1", name: "Anna" }], active: "" });
+  p.app.start(p.root); await settle();
+  const input = p.root.querySelector("input[type=password]");
+  const box = p.root.querySelector("#show-pass");
+  box.checked = true; box.dispatchEvent(new p.dom.window.Event("change"));
+  assert.equal(input.type, "text");
+  box.checked = false; box.dispatchEvent(new p.dom.window.Event("change"));
+  assert.equal(input.type, "password");
+});
+
+test("a profile that was never given a passphrase goes to the engine's own set-up screen", async () => {
+  const shell = { profiles: [{ id: "p1", name: "Anna" }], active: "" };
+  const p = withProfiles(shell, {
+    "GET /api/status": [423, {}],
+    "GET /api/keystore/status": [200, { state: "needs_setup", options: ["passphrase"] }],
+  });
+  p.app.start(p.root); await settle();
+  p.root.querySelector("input[type=password]").value = "whatever";
+  submit(p, p.root.querySelector("form")); await settle(14);
+  assert.match(text(p.root), /Choose a passphrase, Anna/);
+});
+
+test("a locked profile found already open (a reload) greets the person by name and can be left for another", async () => {
+  const shell = { profiles: [{ id: "p1", name: "Anna" }, { id: "p2", name: "Ben" }], active: "p1" };
+  const p = withProfiles(shell, { "GET /api/status": [423, {}], "GET /api/keystore/status": [200, { state: "locked" }] });
+  p.app.start(p.root); await settle(10);
+  assert.match(text(p.root), /Welcome back, Anna/);
+  click(button(p.root, "Choose another profile")); await settle(10);
+  assert.deepStrictEqual(p.posted, [["close"]]);
+  assert.equal(p.root.querySelector('[role=tab][aria-selected=true]').textContent, "Log in");
+});
+
+test("logging out from the home screen or Settings closes the profile and shows the login again", async () => {
+  const shell = { profiles: [{ id: "p1", name: "Anna" }], active: "p1" };
+  const p = withProfiles(shell, { "GET /api/status": status(shell) });
+  p.app.start(p.root); await settle(10);
+  assert.match(text(p.root), /Talk with/);
+  click(button(p.root, "Settings")); await settle(10);
+  assert.match(text(p.root), /Signed in as Anna\./);
+  click(button(p.root, "Log out")); await settle(10);
+  assert.deepStrictEqual(p.posted, [["close"]]);
+  assert.ok(p.root.querySelector('[role=tab]'), "the login screen is shown");
+  assert.ok(!/Talk with/.test(text(p.root)), "the conversations are still on the screen");
+});
+
+test("removing a profile is under Manage profiles, asks twice, and the old data has no remove button", async () => {
+  const shell = { profiles: [{ id: "p1", name: "Anna" }, { id: "existing", name: "Existing data", legacy: true }], active: "" };
+  const p = withProfiles(shell);
+  p.app.start(p.root); await settle();
+  const manage = p.root.querySelector("details.manage");
+  assert.ok(manage, "Manage profiles");
+  const removers = [...manage.querySelectorAll("button")];
+  assert.equal(removers.length, 1, "only the profile of a person can be removed here");
+  click(removers[0]); await settle();
+  assert.deepStrictEqual(p.posted, [], "one click removed a profile");
+  click(removers[0]); await settle(10);
+  assert.deepStrictEqual(p.posted, [["remove", "p1"]]);
+});
+
+test("without a desktop window (the phone, a browser) there are no profiles and no log out", async () => {
+  const p = page(ready());
+  p.app.start(p.root); await settle(10);
+  assert.match(text(p.root), /Talk with/);
+  assert.ok(!button(p.root, "Log out"));
+  assert.ok(p.root.querySelector("[role=tab]") === null);
+  click(button(p.root, "Settings")); await settle(10);
+  assert.ok(!/Signed in/.test(text(p.root)));
+});
+
+test("the theme is the profile's own choice: the saved one is applied, a new one is saved and applied, automatic follows the device", async () => {
+  const saved = [];
+  const p = page(ready({
+    "GET /api/settings/theme": [200, { theme: "dark" }],
+    "PUT /api/settings/theme": (b) => { saved.push(b.theme); return [200, b]; },
+  }));
+  p.app.start(p.root); await settle(10);
+  assert.equal(p.dom.window.document.documentElement.dataset.theme, "dark");
+  click(button(p.root, "Settings")); await settle(10);
+  const sel = [...p.root.querySelectorAll("select")].find((s) => [...s.options].some((o) => o.value === "light"));
+  assert.equal(sel.value, "dark", "the picker shows the saved choice");
+  sel.value = "light"; sel.dispatchEvent(new p.dom.window.Event("change", { bubbles: true })); await settle();
+  assert.equal(p.dom.window.document.documentElement.dataset.theme, "light");
+  sel.value = "auto"; sel.dispatchEvent(new p.dom.window.Event("change", { bubbles: true })); await settle();
+  assert.equal(p.dom.window.document.documentElement.dataset.theme, undefined, "automatic leaves the device to decide");
+  assert.deepStrictEqual(saved, ["light", "auto"]);
+});
+
+test("the stylesheet follows the device in dark unless Light was chosen, and Dark forces it", () => {
+  const css = fs.readFileSync(path.join(__dirname, "../style.css"), "utf8");
+  assert.match(css, /prefers-color-scheme: dark\)\s*\{\s*:root:not\(\[data-theme="light"\]\)/);
+  assert.match(css, /:root\[data-theme="dark"\]\s*\{[^}]*--bg: #17140f/);
+});
+
 test("every text the screens say has Greek words, and no Greek entry is left over", () => {
   const src = fs.readFileSync(path.join(__dirname, "../app.js"), "utf8");
   const dict = require("../i18n.js").el;
@@ -783,4 +1013,11 @@ test("choosing a language on the welcome screen is saved and the screen is drawn
   await settle(10);
   assert.deepStrictEqual(saved.slice(-1), ["el"]);
   assert.match(text(root), /Καλώς ήρθες στο Socrates/);
+});
+
+// The content security policy blocks inline styles, so a style written on an element in the screens does nothing: layout belongs in the stylesheet.
+test("the screens never rely on an inline style (the page's policy would ignore it)", () => {
+  const src = fs.readFileSync(path.join(__dirname, "../app.js"), "utf8");
+  assert.ok(!/\bstyle: "/.test(src), "an element gets a style attribute");
+  assert.match(fs.readFileSync(path.join(__dirname, "../index.html"), "utf8"), /style-src 'self'(?! 'unsafe-inline')/);
 });

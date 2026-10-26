@@ -45,6 +45,7 @@ func dataDir() string {
 func run() error {
 	dir := flag.String("data-dir", dataDir(), "the folder of the database and the key settings")
 	port := flag.Int("port", 0, "the loopback port (0: a free one chosen by the system)")
+	passOnly := flag.Bool("passphrase-only", false, "protect the data with a passphrase only (a profile of the desktop app); no keychain and no key file")
 	showVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
 	if *showVersion {
@@ -101,7 +102,12 @@ func run() error {
 
 	// Until the database key is available only the key gate answers.
 	dbPath := filepath.Join(*dir, "socrates.db")
-	keys := keystore.Open(*dir, dbPath, keystore.SystemKeyring{})
+	var keys *keystore.Store
+	if *passOnly {
+		keys = keystore.OpenPassphraseOnly(*dir, dbPath)
+	} else {
+		keys = keystore.Open(*dir, dbPath, keystore.SystemKeyring{})
+	}
 	if keys.Status().State != keystore.StateReady {
 		log.Printf("[engine] waiting for the database key (%s)", keys.Status().State)
 		gate := transport.KeyGate(keys, version)
