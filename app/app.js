@@ -514,7 +514,7 @@ async function settings() {
   const p = await api("GET", "/api/settings/llm");
   body.append(el("div", { class: "card stack" }, el("h2", {}, t("Language")), languagePicker(settings)));
   body.append(el("div", { class: "card stack" }, el("h2", {}, t("AI provider")),
-    el("p", { class: "muted" }, p.data.provider ? t("{provider}, models {fast} and {reply}", { provider: p.data.provider, fast: p.data.fastModel, reply: p.data.replyModel }) : t("Not set up.")),
+    el("p", { class: "muted" }, p.data.provider ? t("{provider}, models {fast} and {reply}", { provider: p.data.provider === "claude" ? "Claude (Anthropic)" : p.data.provider === "openai" ? "OpenAI" : p.data.provider, fast: p.data.fastModel, reply: p.data.replyModel }) : t("Not set up.")),
     el("button", { onclick: () => show(() => providerScreen(false, back)) }, t("Change provider or key"))));
   body.append(el("div", { class: "card stack" }, el("h2", {}, t("Your data")),
     el("p", { class: "muted" }, t("Conversations are stored encrypted on this device only. An export holds your conversations and never your key.")),
