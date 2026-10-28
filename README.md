@@ -19,4 +19,8 @@ docs/      plan, character sheets, threat model, safety design, session records
 The earlier Python project that lived in this repository (a Socratic assistant for software projects, version 0.1.1) was removed on
 2026-10-22. It remains in the git history. The research prototype is [Nireus79/Socrates](https://github.com/Nireus79/Socrates).
 
+Development: written by an independent programmer in Greece, working with AI coding assistants (Claude Code). I design the product, review the code and test it.
+
+Contact: Hermes_creative@proton.me. All products: [nireus79.github.io](https://nireus79.github.io/).
+
 License: MIT, see [LICENSE](LICENSE).
