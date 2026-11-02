@@ -1,0 +1,32 @@
+# The gate on every push and pull request: the engine's `make check` on the Go version the project declares (a newer local Go once hid a bug
+# that only the declared version showed), and the screens' tests.
+name: ci
+on:
+  push:
+    branches: [master]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  engine:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version-file: engine/go.mod }
+      - run: make -C engine check
+  app:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci && npm test
+        working-directory: app
+  desktop-shell:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version-file: desktop/go.mod }
+      - run: make -C desktop test
