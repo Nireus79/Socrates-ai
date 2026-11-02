@@ -1,0 +1,330 @@
+# The dialectic game: research note
+
+Status: research and design, 2026-11-01. Nothing here is built. It follows the founder's two sample dialogues (Plato, Socrates, on eugenics and the Republic) and the discussion of the greedy-algorithm problem. The founder's decision: the game of dialectic is the core of the product.
+Part of [PLAN.md](PLAN.md) (principle 9 and section 18 still apply: this note is analysis for design and tests, not text for prompts, and it adds no list of rules for the philosophers to follow step by step).
+
+## 1. The problem, in two forms
+
+Both come from answering the latest message as well as possible and nothing else (a greedy choice, one step deep).
+
+1. **Projection of a passage.** Asked "are you for eugenics?", the philosopher answers from the most salient passage of the work and does not weigh what the same work says later (the city "in words", a pattern in heaven, the Laws). Socrates in the second dialogue did this entirely. Plato brought the frame only after the founder did.
+2. **Drift under pressure.** Plato's replies in the first dialogue: "I meant them seriously" (turn 2), "the city is a model, not a programme" (turn 4, after the founder pushed), "no, not merely an example" (turn 5). Each is locally responsive to the last push; together they do not hold. The conversation was won, in effect, by the one who pushed.
+
+The opposite error is the same mistake: answering "it was all irony" is also a one-passage reading. The question of the Republic is contested; the honest answer says so.
+
+## 2. Why this is a game, and which one
+
+Aristotle's *Topics* (book 8 in particular) and *Sophistical Refutations* describe a formal exchange: a **questioner** tries to bring the **answerer** to contradict himself; the answerer has taken on a thesis and defends it. Medieval logic formalised it as *obligationes* (a position is laid down, the answerer must stay consistent with what he has granted). Modern argumentation theory calls the record of what a party has granted a **commitment store** (Hamblin, Walton). (Cited from memory; to be checked against the texts before anything is quoted.)
+
+The product maps onto it directly:
+- **Socrates** plays the questioner. He takes no thesis, so he cannot be trapped by his own commitments; his risks are different (leading questions, section 6).
+- **Plato, Aristotle, Diogenes** play the answerer: they assert, and so they can be caught.
+- **The person** is the answerer with Socrates and may be the questioner with the others, who can also be an adversary on purpose.
+
+A trap is a questioner's move. The philosopher needs to see it coming: that is a search problem, not a question of style.
+
+## 3. What the philosopher is committed to
+
+Not every sentence is a commitment. Three kinds, which are philosophical distinctions and not new rules:
+
+| Kind | Example of the kind | Binds him as a present belief? |
+|---|---|---|
+| Report | what he wrote or did, what others said of him | No. It binds him only to be accurate |
+| Thesis offered for testing | "this is where I came to, and why" (the Plato sheet already says so) | Yes, but revisably |
+| Concession | something he granted to the questioner to follow the argument | Yes, for the argument, until retracted |
+
+**Change of mind is allowed; change without a reason is the fault.** Plato revised himself in the *Parmenides* and in the *Laws*; revising is part of the character. A retraction needs a reason that can be stated ("because X, I withdraw Y"). A retraction caused only by repetition or displeasure is capitulation.
+
+**False dilemma.** The commonest trap in the founder's sample was a forced yes or no. The classical defence is to separate the senses of the question ("it is said in many ways", which is Aristotle's own move), not to refuse it. Other classical traps (Sophistical Refutations): ambiguity, a question that packs two, a conclusion drawn from what was granted in another sense, appeal to what he said earlier taken out of its context. They are named here for building the tests, not for prompts.
+
+## 4. What chess engines teach, and what they do not
+
+Useful:
+- **Horizon effect**: an engine that looks one move ahead falls into traps that need three. This is our failure in section 1.
+- **The opponent in the evaluation**: a position is judged by the opponent's best reply (minimax), not by what looks good to the mover. For us: "what is the strongest challenge a questioner can build from this sentence together with what I have already granted?"
+- **Quiescence**: do not judge a position in the middle of an exchange; settle it first. For us: do not answer a forced yes or no mid-argument; first state what each answer would commit him to.
+- **Transposition table / state**: remember positions already seen. For us: the commitment store.
+- **Opening book**: a prepared stance per player. For us: each philosopher's way of committing, as data (the sheets), not as rules.
+
+Not transferable:
+- No objective evaluation function. The evaluator is the same model, with the same blind spots.
+- No finite, small tree. Realistic depth is one or two plies, not ten.
+- In chess the opponent must not win. Here the philosopher is not trying to win, and withdrawing for a reason is not losing.
+- Search cost: each ply is a model call.
+
+## 5. Design, in layers (nothing chosen yet)
+
+1. **The philosopher's own store.** Today the ledger records only the person's claims, terms, tensions and facts (PLAN 4.2, 16). Add a kind for the philosopher's own commitments in this conversation (provisionally `stance`: the thesis or concession, kept with his own words, per conversation, deleted with it). It would be written by the same background call, and handed back to the next reply as "what you have already said here". No extra model call. To check: how the existing ledger code and validation would accept a kind whose author is the philosopher and not the person (the rule that every entry quotes the person does not apply).
+2. **One ply of lookahead before the reply**, gated by a judge so that it runs only when a draft contains a commitment: "given the store and this draft, what is the strongest challenge, and does the draft survive it?" If not, one rewrite, as the output gate does today. Optional: build only if layer 1 and layer 3 are not enough.
+3. **The principle in the common frame**: a retraction needs a reason; a report is not a thesis; what is contested is said to be contested; a forced choice may be answered by separating its senses. Written as the character's tendency, in the style of CHARACTERS_COMMON, not as a procedure.
+4. **A map of the whole** when the question is about a work or a position (the earlier "enumerate all paths" idea): the places in the work and later works that state, frame or reverse it. Possible within the same call as layer 2 if both are needed.
+
+## 6. Socrates is not safe either
+He takes no thesis, but his questions can lead (PLAN 17.3 already has the output gate check questions), and his "own view when the user is stuck" is a thesis and goes into the store like anyone's. A user can also try to make him assert something by a chain of leading yes or no questions on his side; the same store protects him.
+
+## 7. Tests
+
+The test must be an adversary, not a cooperative simulated person (the 2026-10-24 talks showed such a person is too kind, SESSION 61).
+- **Adversary role**: a second model, told to play the questioner against the philosopher for 8 to 10 turns with a goal (get a flat verdict; get a contradiction; get a reversal by repetition). The setups are the founder's own questions, plus held-out ones marked "held out:" that appear in no prompt.
+- **Labels for a judge**: contradiction between two of his statements with no stated reason; a reversal caused only by pressure; a passage presented as the settled view when the work frames it otherwise; a contested reading presented as certain; an evasion that answers nothing (the opposite fault: a philosopher who never commits is not a character).
+- **Measures per run**: counts of the labels above, and a hand reading by the founder. Compare variants: the present state, layer 3 only, layers 1 and 3, all layers. Each with three replays.
+- **Simulated part**: the scripted mock model can test the plumbing (the store is written, handed back, deleted with the conversation, absent when memory is off, never reaches a log), not the behaviour. The behaviour needs live models, so it waits for the final tests (the founder's key, on his word).
+
+## 8. Risks
+- **Evasion.** A cautious philosopher is a bad product, above all for Diogenes. The measure must count evasion as a failure too.
+- **Shared blind spots.** The adversary and the lookahead rest on the same model memory as the philosopher; they catch projection and drift, not a fact the model does not know.
+- **Cost and delay.** Layer 2 adds a call on turns with a commitment.
+- **Privacy.** The store holds the philosopher's own sentences, which will paraphrase the person's claims; it is sealed like the rest, scoped to the conversation, and goes when the conversation goes.
+- **Principle 9.** This analysis must not turn into a rule list inside prompts. The prompt receives the store and the principle, not these tables.
+
+## 9. Decisions of the founder, 2026-11-01
+- **Trapping is not a mode.** The person can trap a philosopher without choosing to; there is no setting and no feature for it. The philosopher must understand the danger and have a horizon (look ahead), as a matter of his own competence.
+- **Scoring waits** until every philosopher works correctly; the criteria are decided then.
+- **When he is caught, he neither revises nor insists.** He will be caught at one point; he escapes by showing the larger picture. That is one strategy among several: the dialectic has others, and the answer to this problem is to be found in the repertoire (section 10).
+
+## 10. The repertoire of dialectic (research, to be checked against the texts)
+
+Status of the reading (2026-11-01): Topics VIII was read in full in the Pickard-Cambridge translation (Internet Classics Archive); On Sophistical Refutations parts 1 to 10 were read verbatim, parts 11 to 34 only through a machine summary (not yet verified); Schopenhauer, Agrippa's modes and Hamblin and Walton are from secondary reports or memory. Section 10A records what the primary text says; sections B to E below were written before that reading and are marked where it corrects them.
+
+### 10A. What the primary texts say
+
+**Topics VIII (questioner).** Three stages: choose the ground, arrange the points privately, put them to the other. The necessary premisses are not asked directly ("soar as far aloof from them as possible"); the questioner secures extra premisses to get the universal by induction, to add weight, to hide the conclusion, or to make it clear. Concealment: prosyllogisms, grounds without conclusions, conclusions drawn later one by one, alternating the admissions for two conclusions, securing a definition of the co-ordinates and not the terms themselves, making a proposition look like an illustration, securing a consequence in place of the point, leaving unclear whether the proposition or its opposite is wanted, objecting to oneself now and then, padding with irrelevant detail "as those who draw false geometrical figures". Against ill-tempered answerers put the point first. Induction for the crowd, syllogism for the dialectician. Coin one word for all the cases so that nobody can dispute whether one belongs. Do not state the conclusion as a question; present it as a consequence. Asking the same thing again and again marks a bad inquirer. Avoid reductio ad impossibile unless the falsehood is plain.
+
+**Topics VIII (answerer).** His business is "to make it appear that it is not he who is responsible for the absurdity ... but only his position" (ch. 4). He grants only premisses more generally accepted than the conclusion; the standard of "generally accepted" is that of the thesis: his own view, or the view of the person whose thesis he defends (ch. 5, the Heraclitus example). Per kind of question (ch. 6): grant what is accepted and irrelevant, noting it is the accepted view; grant the unaccepted and irrelevant, noting it is not accepted, so as not to seem a simpleton; grant the relevant and accepted while saying it lies too close to the original proposition and the problem collapses if it is given; grant a relevant and too-rejected consequence conditionally, protesting that it is too absurd. For ambiguity (ch. 7): say "I do not understand"; give a qualified assent or denial naming the two senses; if the questioner takes the other sense, say "that was not what I had in view when I admitted it". Refusing a well-supported universal with no counter-instance and no counter-argument is ill-temper (ch. 8). Solve a fallacy by demolishing the premiss it depends on, not any false premiss; there are four ways to hinder a conclusion: undo the point it turns on, object to the questioner, object to the questions, object to the time (ch. 10). Criticise the argument separately from the questioner (ch. 11).
+
+**Topics VIII (kinds of exchange and training).** Aristotle says plainly that rules are missing for training and examination, that teaching differs from competition and from joint inquiry, and that in competition the questioner tries to produce an effect and the answerer to appear unaffected (ch. 5). Training (ch. 14): argue both sides of every thesis, alone if need be; keep a stock of ready arguments for common questions and memorise general premisses rather than whole arguments; turn an argument into several by universalising; take from each practice a syllogism, a refutation, a proposition or an objection; show induction against a young man and deduction against an expert; do not argue with everyone, and avoid those who argue contentiously. He also says that to put a proposition is to make many things one, and to object is to make one thing many.
+
+**Sophistical Refutations (verbatim parts 1 to 10).** Four kinds of argument (part 2): didactic (from the principles of the subject, the learner taking things on trust), dialectical (from generally accepted premisses to the contradictory of a thesis), examining (from what the answerer accepts and anyone claiming knowledge must know), contentious (from premisses that seem generally accepted and are not). The sophist's aims (part 3), in order of worth: refutation, fallacy, paradox, solecism, and last, babbling (making the answerer repeat himself). Thirteen sources of apparent refutation: six in the language (ambiguity, amphiboly, combination, division, accent, form of expression) and seven outside it (accident; the absolute and the qualified; ignorance of what refutation is; the consequent; begging the question; false cause; many questions made one). Each is a breach of the definition of refutation: the same thing, "in the same respect and relation and manner and time" (part 6). The deception lies "in the smallness of the difference" (part 7); the dialectician needs only the common topics (part 9). Parts 11 to 34 (the solutions, and the closing claim that this art had no predecessor) are to be read verbatim.
+
+**What this changes in sections B to E below**
+- Aristotle's answerer protects the *person* from the *position* ("not he, but his position"). It is the oldest form of the founder's remark that a philosopher may be caught at one point without being lost: it is a stated move of the art, with its own wording.
+- "Revise or insist" is not what the answerer is told to do. He is told to grant with a note, to grant conditionally, to ask what is meant, or to say which sense he had in view.
+- The questioner's craft is concealment and order. The philosopher's foresight (the founder's "horizon") is to see the conclusion that is being hidden, which is why the record of what he has granted matters (E).
+- A questioner who repeats the same question is, in Aristotle's words, a bad inquirer: repetition is not an argument. This bears on the "drift under pressure" of section 1.
+- Socrates' own method is the reductio, which Aristotle advises the questioner to avoid unless the falsehood is plain. Aristotle is describing a school game, not what Socrates did; the difference is itself a matter for the character sheets.
+
+**A. Know what game is being played** (before any move). Aristotle separates teaching, dialectical argument, examining (peirastic) and contentious (eristic) argument (Sophistical Refutations 2). Walton and Krabbe add persuasion, inquiry, negotiation, deliberation, information-seeking and eristic, and explain several fallacies as an illicit shift from one type to another. A person asking in earnest, a person testing, and a person hunting for a gotcha call for different moves; the philosopher can tell without accusing anyone. This is the largest part of "horizon": modelling what the other side is trying to get, as a chess engine models its opponent.
+
+**B. Moves of the answerer** (defence)
+1. *Show the larger picture*: place the sentence in the whole work, the later work, the time (the founder's escape).
+2. *Distinguish the senses* of the question (Aristotle: "it is said in many ways"; the classical cure of equivocation, composition and division, and the question that packs two).
+3. *Qualify the thesis*: limit it ("in this respect, for this purpose") rather than defend or drop it.
+4. *Say it is a hypothesis*: granted "for the argument's sake", which binds him only inside the argument.
+5. *Ask what is meant*, or ask for the ground, before granting (a question is also a move).
+6. *Refuse the frame*: a loaded or forced question is answered by naming what it presupposes.
+7. *Counter-instance*: one case that does not fit.
+8. *Reverse it* (retorsion): turn the argument back on the one who made it. The reduction to absurdity is Socrates' version; the verbal image is Diogenes'.
+9. *Concede the hit and hold the position*: a local point conceded as such, with what it does not touch (Aristotle: the absurdity should look like a fault of the position and not of the way it was defended, Topics VIII).
+10. *Humour and deflection*, when the exchange has stopped being an inquiry (Diogenes).
+11. *Suspension of judgement* where the arguments on both sides weigh equally (the Pyrrhonists).
+12. *Stop the regress*: to "and what is your ground for that?", answer from what is commonly accepted (the received opinions, *endoxa*) or from what is evident; the regress, circle and hypothesis are the sceptics' traps (Agrippa's modes).
+
+**C. Moves of the questioner** (what the philosopher must foresee; Schopenhauer's catalogue is the longest, 38 in the Saunders and Grayling editions, each with a counter in his text)
+1. Obtain small concessions that look harmless, then assemble them (induction from cases; Topics VIII: do not reveal the conclusion; hide the key premise among others).
+2. Stretch the claim beyond its limits and refute the stretched version.
+3. Use a word in two senses.
+4. Pack two questions in one; demand yes or no.
+5. Quote the answerer's earlier words out of their sense.
+6. Attack the person and not the thesis (ad hominem, *tu quoque*), or invoke an authority.
+7. Raise a long string of questions to exhaust or confuse; interrupt the rhythm; provoke anger.
+8. Move the ground (change the subject, change the dialogue type).
+9. Use vagueness: the sorites (where does the heap begin) and the line-drawing demand.
+
+**D. The two kinds of speaker, as a tendency of the character and not a rule.** Socrates takes no thesis and answers by questioning (his risk is the leading question). Plato leads upward and offers a thesis for testing (the larger picture and the image are his natural escapes). Aristotle sorts (separating the senses is his). Diogenes reverses and jokes (retorsion and deflection). The sheets already describe these as ways of being; the research says they are also each a school of defence. The model decides when a move fits; nothing is listed in a prompt.
+
+**E. Consequence for the design.** The "commitment store" of section 5 is only the notebook: the record of what he has already said in this conversation, so that he can see a chain being built (C1) before it closes, as a player keeps the moves already played in view. It is a tool for foresight and not the core. The core is A and B: recognising the game and having a repertoire wider than one escape. The test of section 7 gains a column: which defence the philosopher used, and whether it fitted the attack.
+
+## 11. Open questions after 2026-11-01
+1. **Decided by the founder (2026-11-01):** each philosopher has his own strategies, and whether he shows what he has discerned (openly, by implication, or not at all) is a matter of character and is itself a strategy. The sheets must say so for each; the earlier suggestion that it is never named is withdrawn.
+1b. Where do the strategies of each philosopher come from? The founder's principle against stereotypes (PLAN 3.9) says from what he did and what those who knew him reported, not from a school-book list. Aristotle's *Topics* is primary for Aristotle; for Socrates, Plato and Diogenes the evidence is in the dialogues and anecdotes, and the research has to read it there.
+2. Is the `stance` store (section 5, layer 1) acceptable as a notebook, shown or hidden on the Memory screen? Now that it is only a notebook, it may be internal and not shown.
+3. Which of the strategies of section 10 belong to which philosopher, if any: the sheets give tendencies only. Left to the founder to correct.
+
+## 12. What Socrates and Plato actually do under pressure (observations from the texts, 2026-11-01)
+
+Method: the dialogues were read in Jowett's translation (Internet Classics Archive) and Xenophon's *Memorabilia* in Dakyns's (Gutenberg), by reading assistants that reported what the speakers do, not what scholars say. This is the founder's rule (PLAN 3.9): the character comes from the texts and the testimony of those who knew him, not from a school-book list. The pages carry no Stephanus numbers; locators are by content and are to be checked in a paginated edition.
+
+**Coverage and gaps (stated plainly).** Read verbatim: Apology (cross-examination of Meletus), Meno (complete), Gorgias (to the middle of Callicles' last speech; the end, including any refusal by Callicles to go on, is unread), Protagoras (to the Simonides discussion; the rest unread), Euthydemus (to near the end; the last part unread), Parmenides (first half), Theaetetus (first half; the digression 172-177 unread), Republic (large parts of Books I, V, VI, VII, IX, in chunks; the end of Book I and the "dreamers" line in V not verified), Memorabilia (Book I; II.1-6; III.5-14; IV.1-7). Not read: Phaedo, Phaedrus, Symposium, Laws, Sophist, the other dialogues, and everything for Diogenes and for Aristotle outside the *Topics* and *Sophistical Refutations*. Whatever the assistants wrote as "inference" is marked so below and is not evidence.
+
+### 12.1 Socrates in Plato
+
+**He states the rules of the game, and applies them to himself.** Short answers ("keep your promise and answer shortly"); frankness ("knowledge, good-will, outspokenness" in the one who tests); being refuted is the greater gain ("I am one of those who are very willing to be refuted ... very willing to refute"); a witness is the person he is arguing with, not the crowd (against Polus' appeal to Nicias and the house of Pericles; "I am not a public man"); and he admits his own breach when he makes a long speech (Gorgias). On Meno he separates two ways of arguing: the contentious, and the dialectician who uses premisses the interrogated person is willing to admit.
+
+**He sometimes states a position under challenge, with its status attached.** "I deny it" to Polus; he would rather suffer than do injustice; "rhetoric is not an art ... a sort of experience" (Gorgias). The common description "he never takes a position" does not match these sources. What he does is to refuse a question *until a prior one is answered* ("I shall not tell him whether rhetoric is a fine thing or not until I have first answered") and to say honestly what he does not know ("I literally do not know what virtue is", Meno; "I have never had any acquaintance with Archelaus", Gorgias).
+
+**How he refuses and what he puts in its place.** Asked for the good itself: "let us not at present ask what is the actual nature of the good ... an effort too great for me", with the fear of ridicule given as a reason, and then an image offered, the sun as "the child of the good" (Republic VI). Asked a question that is two questions: "you ask two questions at once" (Polus), and he answers both. Against the paradox of inquiry (Meno): "I know what you mean; but just see what a tiresome dispute you are introducing", then a story of recollection, with the remark that the sophistic argument "will make us idle".
+
+**When he is pressed to defend his own proposal (Republic V, the three waves).** He says he hesitates and fears the whole may be "a dream only"; asks to be allowed to "feast the mind with the dream as day-dreamers do"; compares the objections to waves that may drown him; distinguishes the word from the deed ("does the word express more than the fact?") and the best from the possible (the painter who draws an ideal man is no worse for it; "the approximation will be enough"); and still says it: "yet shall the word be spoken, even though the wave break and drown me in laughter and dishonour" (473). The status of the city is given in two places only, in the answer to Glaucon (472) and at the end of Book IX (592: a pattern laid up in heaven "which he who desires may behold, and beholding, may set his own house in order"). Nobody who reads the passages of Books V and VII alone meets either.
+
+**When he is the one trapped.** In the Euthydemus he is trapped by the brothers' tricks and does not argue back: he plays dull ("I have but a dull conception"), asks what a word means ("I know not what to make of this word 'nonplussed'"), concedes under protest, and calls the talk "a pretty clatter". In the Meno he restarts ("ought I not to ask the question over again?"), says he and Meno "are not good for much", and sends the matter on to Anytus. In the Theaetetus, having spoken for Protagoras, he says "we were satisfied with mere verbal consistency ... I suspect we have unconsciously fallen into the error of that ingenious class of persons", and calls the pair "a good-for-nothing cock" that crows without winning.
+
+**Against a hostile or eristic opponent.**
+- Thrasymachus forbids him to answer in the usual ways, calls his method irony, accuses him of cheating, changes the subject with an insult ("have you got a nurse?"). Socrates names the trap ("if you ask what makes twelve and forbid every answer, no one can answer you"), asks him to say what he thinks, answers the insult with a question, and the company will not let Thrasymachus go.
+- Polus appeals to witnesses and to shame ("great want of manners"); Socrates declines the crowd and offers a friends-and-children image. Callicles shifts between nature and convention and calls the earlier exchange a "trap"; Socrates answers from Callicles' own account of what "the many" think, and asks him what he means by "the better".
+- Protagoras refuses to give short answers; Socrates says he has a bad memory (Alcibiades says he may be pretending), threatens to leave, accepts the mediators (Callias, Alcibiades, Critias, Prodicus, Hippias), refuses an arbiter, and proposes to swap roles.
+- Meletus: Socrates asks a chain (who improves the young?), forces a dilemma ("either I do not corrupt them or I do it unwillingly"), and names the trap: "Has he not compounded a riddle, thinking to try me?"
+- The brothers: the youth is shielded first (to Cleinias: "they are playing with you ... the first part of the sophistical ritual"); to the brothers he gives irony and apparent submission.
+
+**Whether he names what he has seen.** All the following occur in the texts:
+- *openly*, to Gorgias ("I noted with surprise the inconsistency"), preceded by a hint ("I am afraid to point this out to you, lest you think I have animosity"); to Polus ("you are raising hobgoblins instead of refuting me", "I cannot make out whether you are giving an opinion or asking a question", and his method named as the rhetoricians' manner in the courts); to Thrasymachus and to Meletus (above);
+- *to the young and sympathetic*, but not to the brothers (Euthydemus);
+- *by joking*, with the name of a fish (the torpedo, Meno) or a wrestler (Antaeus, Theaetetus);
+- *not at all*, when he plays dull (Euthydemus). The assistant's reading, marked as inference and not as text: he tends to tell the vulnerable what is being done and to perform deference to the hostile.
+
+**How exchanges end.** With an offer to stop ("if you would rather have done, no matter"), a challenge ("refute me or answer yourself"), a deferral to someone else (Anytus), a stalemate named as one ("we came out again at the beginning ... like children after larks"), or the company holding the other back.
+
+### 12.2 Socrates in Xenophon
+(The frame is apologetic: Xenophon is defending him; his claims about motives are his.)
+- Accused by Hippias of never giving his own view (IV.4): "I am in a chronic condition of proclaiming what I regard as just and upright", in deed if not in words; then he states a thesis outright (the lawful is the just), argues it, and ends: "if you hold a contrary view, instruct us." To the taunt that he repeats himself he answers that Hippias does too.
+- Accused by Antiphon (I.6): does not dispute the charge of always asking; answers the substance, and answers "why not do politics?" with a question.
+- Charicles and Critias forbid him to talk to the young (I.2): he asks what age counts as young, whether he may ask a vendor the price, and so narrows the ban until Charicles retorts with the cattle remark.
+- Euthydemus (IV.2): the ledger of R and W; when the man objects ("I thought you were limiting the question to friends") he says "let us make a new definition"; "anything rather than make a false entry on our lists".
+- Method of the end of IV.6: to proceed "step by step from one point of general agreement to another ... the real security of reasoning", with Homer's Odysseus as the "safe, unerring orator".
+- Naming: to Critias openly ("a swinish affection"); to Glaucon and Charmides as warnings; to Euthydemus by acting out a mock speech to cure him of vanity; in some cases not at all, and the narrator names the motive instead.
+- The ends: with a question or an exhortation, never with a victory.
+
+### 12.3 Plato as the author, and what the dialogues do to their own theses
+Plato is not one voice. What the texts show is how he lets positions be treated:
+- **He puts his own theory under refutation.** The old Parmenides puts regress, participation and resemblance objections to the young Socrates' Forms; the young man concedes ("the theory has to be given up"), retreats to another version, concedes again, and accepts the diagnosis that the difficulty comes from "attempting to define the beautiful, the just, the good, and the ideas generally, without sufficient previous training". The remedy is not a defence but an exercise: "consider not only the consequences which flow from a given hypothesis, but also the consequences which flow from denying the hypothesis." Parmenides names his own reluctance (the old racehorse), and consents "because we are alone".
+- **He labels the status of a proposal.** The Meno's hypothesis (virtue is knowledge, if so it can be taught); the Republic's line of the hypotheses of the geometers; the city that is a pattern "to be looked at"; the "approximation will be enough".
+- **He lets the interlocutors name the technique.** Callicles names Socrates' slide between nature and convention; Thrasymachus names irony; Meno names the torpedo.
+- **He shows contest and inquiry as two different things inside one dialogue** (Theaetetus: "the disputer may trip up his opponent as often as he likes ... the dialectician will be in earnest").
+
+### 12.4 Consequences for the design (observations, not yet decisions)
+1. **The sources themselves place the frame in particular places.** The city is called a dream, a pattern in heaven and a model at the moments where he is pressed; a model that quotes the breeding passages and meets none of them has read the work as the greedy reader would.
+2. **"Takes no position" is false for Socrates in both sources.** He takes one when challenged and says how firmly he holds it. A Socrates who never commits would not be the Socrates of the Gorgias or of Xenophon IV.4.
+3. **Refusing a question is a legitimate move, with a substitute.** Not "I will not answer", but "not that yet; here is something to look at".
+4. **Naming is audience-dependent.** Openly to the honest or the powerless (Gorgias with a hint first, Cleinias), by joke or by silence to the hostile. For the product this is a design question for each character's sheet and not a rule: the founder's point that naming is itself a strategy matches the texts.
+5. **A trapped Socrates is not ashamed.** He restarts, concedes under protest, says the talk was a cock without a victory, or defers. The Plato of the Parmenides lets his own theory be taken apart.
+6. **Plato's strategies are mostly the author's:** a model, a hypothesis, an image, a deliberate self-objection. What a revived Plato does when pressed has to be read from these devices, and not from one speaker's manner.
+
+### 12.5 Still to read
+Gorgias (end), Protagoras (end), Euthydemus (end), Theaetetus 172-177 and the second half of the Parmenides; Phaedo, Phaedrus, Symposium, Sophist, Laws (Plato's later practice), the Seventh Letter (doubtful, marked so); Aristotle's own practice in the treatises (starting from received opinions and puzzles, *aporiai*), Diogenes (Diogenes Laertius VI, Dio Chrysostom, Epictetus on the Cynic); and the second half of *Sophistical Refutations* (the solutions) verbatim.
+
+## 13. Correction by the founder: irony is the centre of Socrates (2026-11-01)
+
+The founder's objection to section 12: it missed what matters most in Socrates, his irony (*eironeia*) in the ancient sense, which does not insult. In the Republic he builds a whole sophistry with the others in order to overturn it at the end. That is Socrates' irony.
+
+**Why the research missed it.** It asked for what the speakers do *under pressure* (moves, traps, naming). Irony is not one move among them but the architecture of a whole conversation: the construction is taken seriously while it is built, followed to its end, and shown at the end to be something to look at. The readers' reports touched it only in passing and filed it as tactics (playing dull in the Euthydemus, Thrasymachus calling his manner "irony", "I learn from you that I am utterly at fault").
+
+**What the sources show about the word (from the reports and memory, to be checked).** In the Republic Thrasymachus uses "irony" as an accusation (dissembling, refusing to answer plainly). Aristotle (Nicomachean Ethics IV.7, from memory) sets the self-deprecating man against the boaster and finds him the more graceful, and uses Socrates as the example. So the sense that does not insult is Socrates' own and Aristotle's, and the other sense was already alive in his lifetime; the character has to be clear which he means.
+
+**On the Republic, with the limits of what the text proves.** The text places the status of the city in words at 472 and 592 (a pattern in heaven, to be looked at). That the city was built in order to be overturned is the founder's reading and a strong one; it is not settled by the text and is contested among scholars. The product need not settle it: the character can do what the irony does (build with the person, carry the construction to its end, show it at the end) without our asserting what Plato intended. This keeps the earlier decision of CHARACTER_SOCRATES section 2 (the product takes no side on whether the eugenics is ironic) and gives it a place to live.
+
+**What the code does now (checked 2026-11-01).** The persona has no irony: the only place the word appears in the engine is the output gate, which says that sharpness or irony is not hatred. The shared frame (`internal/philosophers/philosophers.go`, `common`) tells every philosopher to say an unpopular belief "plainly" and "why it seemed right to you then", which presumes that he held it sincerely. For Socrates that is the opposite of his character, and it explains the second sample dialogue (he answered "this was written there" and stopped at the passage). The reveal that CHARACTER_SOCRATES section 4 (7) and section 9 (2) decided on was lost when the persona was reduced to a minimal frame.
+
+**What it changes in sections 5 and 12.4.**
+- For Socrates the "larger picture" is not an escape from a trap but the shape of the conversation. He is not trapped by his own words because he did not hold the thesis: he asked what would follow if it did. The risk is the opposite one: the person takes the construction as his view, or takes the reveal for a dodge.
+- The horizon of Socrates is therefore a horizon in time: where the construction is going, and when it is right to show it. Irony lives only in questions and in the consequences the person finds (CHARACTER_SOCRATES section 7); it never asserts anything harmful.
+- The other three do not have this defence. Their irony, if any, is of other kinds (Diogenes' self-mockery, Plato's offering a thesis for testing, Aristotle's dryness) and is to be read from their own texts, not borrowed from Socrates.
+
+**To read next, for this point:** the Republic as a whole (how Book I ends in aporia, how the city is built stage by stage, how it is left); the Apology (37e, where he says the jury will think he is being ironical); the Symposium (Alcibiades on Socrates' life of irony, the Silenus statues); the Gorgias passage where Callicles says "you are ironical"; Aristotle on the *eiron*; Theophrastus' *Characters* (the ironical man); Xenophon's Socrates for the same trait or its absence.
+
+### 13.1 The founder's further points (2026-11-01)
+
+1. **The modern word is a different thing.** Today "irony" means saying one thing and meaning another, usually to mock. The ancient sense, as the founder uses it for Socrates, is a *practice*: he does not mock anyone; he knows where the conversation is going and walks the other way, in earnest, as far as it will go, in order to overturn it. The nearest relative in drama is tragic irony: the one who speaks knows what the figure on stage does not, and the story goes on against that knowledge until it turns.
+2. **The Cratylus is the demonstration (from memory, to be read).** Socrates produces long etymologies of the names of gods, virtues and things, some of them plainly absurd, says he is "inspired" by Euthyphro and will be purged of it the next day, and ends by arguing that things are to be learnt from the things themselves and not from their names. So the dialogue teaches by performance that words are not interpreted by their derivation. A reader who takes the etymologies literally has believed the opposite of what the dialogue shows.
+3. **Literal reading yields the opposite conclusion.** The founder's examples are two: that Socrates is "for eugenics" (taking the construction of the Republic as his thesis) and that every word has an absolute meaning found in its derivation (taking the Cratylus' game as his doctrine). The greatest misunderstandings of Socrates, he says, come from this.
+4. **The technique.** He leads the person in the opposite direction until the person is indignant and sees which way is right. Truth arrives with the loss of illusion. The founder links this to the existentialists. (A concrete link that can be checked: Kierkegaard's *The Concept of Irony* on Socrates, and his indirect communication; the claim that the existentialists hold that truth comes through indignation is the founder's and is not yet checked.)
+
+**What this means for the earlier analysis.**
+- The failure seen in the two sample dialogues is literalism. The model reads each sentence of a work as the speaker's assertion. For Socrates, and for a Plato who knows what he staged, that is the one reading the works warn against. The greedy projection of a passage (section 1) and literalism are the same fault seen from two sides.
+- Section 12.4 (2) needs refining, not withdrawal. Socrates does state positions under challenge ("I deny it", "I would rather suffer than do injustice", Xenophon IV.4). Those are what he holds. The constructions (the city, the etymologies, the sophistries the brothers play) are what he carries on in order to overturn. The hard part for the model is to know, at each point, which of the two it is speaking from; the signal is where the construction is going, not any single sentence. This is a horizon in time (section 13), not a rule.
+- **Tension with safety, to be worked out and not hidden.** A conversation that leads someone in the opposite direction until they recoil must never make the philosopher assert something harmful (CHARACTER_SOCRATES section 7), must keep the care that makes the overturning "for the other's soul and never humiliation", and must not be mistaken for the real thing by the output gate, which flags questions that presuppose a harmful conclusion. The test of section 7 therefore needs both directions: the gate must not stop a sound irony, and the irony must not become a way round the gate. The safety stage stays above the character in every case, and a person who may be hurting gets warmth and no leading (PLAN 17.3).
+- **Etymology.** The philosopher is not to treat the derivation of a word as proof of its meaning; the Cratylus is the standing warning. (An easy temptation in Greek.)
+
+**Founder's answer (2026-11-01, later).** Socrates was probably a real person, but we know him through Plato; both hold, and Plato may have presented him as he wished, or not. What must be kept, whichever it was, is the technique: he leads in the opposite direction in order to overturn, and whoever takes him literally has lost. This settles that the technique is the product's core and that the historical question need not be decided. How a revived Plato speaks of his own intent is not yet settled: the proposal under discussion is that he says what is on the page, says that his own intent is not recorded in anything he can point to, and asks the person (to be confirmed; texts to read first: the *Phaedrus* on writing, which cannot defend itself, and the Seventh Letter, of doubtful authenticity). The Socratic problem (the Republic's Socrates as largely Plato's voice, agreed on 2026-10-23) and the present reading (the practice is Socrates') are left side by side, and the product takes no side.
+
+**An open question for the founder, which is a product decision.** The revived Plato knows what he staged. If the Republic's city was built to be overturned, then "I meant it seriously" (the answer in the first sample) is the wrong answer for the author as well as for Socrates. Does the founder want Plato to speak as the author who staged the irony, with the question of how far he meant it left to the person, or to hold that the Republic's proposals were meant seriously? The reading of the dialogues does not settle it, and the product has so far taken no side (section 13, above).
+
+### 13.2 The Cratylus, read (2026-11-01)
+
+Read in Jowett's translation, the whole dialogue (Internet Classics Archive for the first part, Project Gutenberg #1616 for the rest). No Stephanus numbers on either; locators are by content. Jowett's own introduction was not read in full and is not used.
+
+**The founder's claim is confirmed by the text.** After the long etymologies Socrates concludes that names cannot decide truth: "if some names are true and others false, we can only decide between them, not by counting words, but by appealing to things. And, if so, we must allow that things may be known without names; for names ... are the images of things; and the higher knowledge is of things, and is not to be derived from names." Cratylus held that "he who knows names knows things"; Socrates asks how the first namer, who gave names "according to his conception, and that may have been erroneous", could have learnt things from names before there were any.
+
+**What the performance looks like while it is going on.**
+- He announces the game and its end: he "caught the infection from Euthyphro", will "yield to the inspiration to-day" and be purified "to-morrow"; "before to-morrow's dawn I shall be wiser than I ought to be."
+- He warns the listener during it: "watch me and see that I do not play tricks with you"; "I am run away with"; "I dare say that I am talking great nonsense"; his notions on the first names are "wild and ridiculous", "crude".
+- He tells the method's weakness while using it: "if you are permitted to put in and pull out any letters which you please, names will be too easily made, and any name may be adapted to any object"; "something to say about them may easily be found"; and when stuck he uses the "contrivance" of calling a word of foreign origin, and later calls that and two like excuses "only ingenious excuses for having no reasons".
+- He marks the register: some derivations are given "in fun" and the gods "love a joke" (Dionysus, Aphrodite); others in a graver tone (Zeus, Apollo); his listener notices ("You are not improvising now; you must have heard this from some one else"; "a very shabby etymology"; "you are making your mouth into a flute").
+- **He leads each partner away from where he stood.** Hermogenes holds that names are by convention; Socrates builds the case for names by nature and says "Cratylus is right". Cratylus holds that names are always right; Socrates then tests that (the namer can be a good or a bad artist, names imply opposite views, a namer in the whirlpool of flux drags others after him). (This is the shape of the dialogue as read; the pairing with "leading to the opposite direction" is the founder's description and is borne out by the structure.)
+
+**What the text does not contain.** No place where Socrates says his etymologies were a play or were mistaken. The reveal here is not spoken: it is the argument at the end that names do not give knowledge. So the explicit one-sentence reveal decided in CHARACTER_SOCRATES section 9 (2) is one way; the Cratylus shows another, in which the construction is left to fail under its own light and the reader who took it literally is left with the opposite of what the dialogue shows. Whether, and how, a character shows what he is doing is, as the founder said, itself a strategy.
+
+**How it ends.** Open. Socrates: "reflect while you are young, and find out the truth, and when you know come and tell me"; "this doctrine may be true, Cratylus, but is also very likely to be untrue". Cratylus: "after a good deal of thinking I incline to Heracleitus." Socrates: "another day ... you shall give me a lesson." No winner is declared.
+
+**Consequence.** The model must not take derivation as proof of meaning. More generally, a long passage in which Socrates is carried along ("I am run away with") is not his doctrine, and the text itself says so in three different ways while it is going on. A literal reader has to skip all of them to reach the wrong conclusion.
+
+**Not read:** Jowett's introduction beyond its first lines, any other translation, and the Greek.
+
+## 14. A source given by the founder: the blog of Diamantis Koutoulas (read 2026-11-01)
+
+https://diamantiskoutoulas.blogspot.com/ (727 posts, 2016 to 2026). A personal blog, not a peer-reviewed source: everything below is **the author's claim**, as reported by a reading assistant, and not checked against the Greek texts; Stephanus numbers are as he prints them. Useful as a set of leads to the texts, to be verified there like any secondary source. Read in full: 17 posts. Searches by lowercase word ("ειρωνεία", "ευγονική") returned nothing, but posts with those words in capitals exist, so the search is probably case-sensitive and older posts may have been missed. About 570 posts from 2016 to 2025 were not enumerated one by one.
+
+**Posts read that bear on this note**
+- *Η ΕΙΡΩΝΕΙΑ ΤΟΥ ΠΛΑΤΩΝΑ* (18 Apr 2023). Plato is "κατεξοχὴν εἰρωνικὸς καὶ σατιρικὸς συγγραφέας"; the Republic is "κλασσικὸ δεῖγμα εἰρωνείας", a "μεγάλη σοφιστεία" (he follows Castoriadis); without allowing for the playfulness of the author "ΔΕΝ ΜΠΟΡΟΥΜΕ ΝΑ ΚΑΤΑΝΟΗΣΟΥΜΕ ΤΗΝ ΣΚΕΨΗ ΤΟΥ". His textual hooks in the Republic: 457d (the women all common); 460a ("κομψοὶ κλῆροι", clever, rigged lots so that the lesser blame Chance); 460c (the children of inferiors and the disabled hidden "ὡς πρέπει"); 461b (a child of unsanctioned unions "νόθον καὶ ἀνέγγυον καὶ ἀνίερον"); 546c-d (mating out of season leads to decay in Book VIII); 592d (the city "λόγοις κειμένη", "ἐν οὐρανῷ ἴσως παράδειγμα"). Elsewhere: the Menexenus (Aspasia is said to have composed Pericles' funeral oration, an obvious anachronism, which he reads as a deliberate lie exposing the deceit of political oratory), the Parmenides (every hypothesis undone; the end as irony or parody of rationalism as the criterion of truth), the Gorgias (Callicles as the "limit of parody"), and the Sophist and Parmenides as Plato's own criticism of the Ideas.
+- *ΕΥΓΟΝΙΚΗ & ΦΥΛΕΤΙΣΜΟΣ ΣΤΗΝ "ΠΟΛΙΤΕΙΑ" ΤΟΥ ΠΛΑΤΩΝΑ;* (9 Aug 2020). The Republic is "τὸ πλέον παρεξηγήσιμο ἔργο" if read "ΚΥΡΙΟΛΕΚΤΙΚΑ"; it is a great sophistry full of irony, or an allegory of the soul. Plato uses the Socratic dialectic to push Glaucon to "τὶς ἄκρες συνέπειες". Hidden aim (his claim): to show why one should choose to suffer injustice rather than do it, without Socrates proving it. Book VIII's decline (the failed marriage number) is part of the allegory.
+- *Η ΔΙΑΣΤΡΕΒΛΩΣΗ ΤΟΥ ΠΛΑΤΩΝΙΚΟΥ "ΚΡΑΤΥΛΟΥ"* (24 Apr 2026). The dialogue is a Socratic irony: the etymologies are "παρετυμολογήσεις" on phonetic likeness, and the conclusion is that no etymology gives knowledge of the thing. This is the reading the founder gave, and it agrees with the text as read in 13.2.
+- *Πῶς ὁ Πλάτων στὸν "Γοργία" ἀπαντᾶ μέσῳ τοῦ Καλλικλῆ στὸν Νίτσε* (29 Jun 2024). "Ὅλοι οἱ πλατωνικοὶ διάλογοι περιέχουν δύο θέματα· τὸ φαινομενικὸ καὶ τὸ πραγματικό": the Gorgias seems to be about rhetoric and is about the ethics of "the right of the stronger".
+- *ΑΓΡΑΦΑ ΔΟΓΜΑΤΑ* (17 Oct 2026). Plato had an oral, esoteric teaching differing from the dialogues (Aristotle, Physics 209b14-15; Metaphysics 987b20; Epistle VII 341c-e: no treatise of his exists, and in the dialogues he leaves hints for the few). (The Tübingen reading of the unwritten doctrines is contested, and Epistle VII is of doubtful authenticity.)
+- *Ψυχὴ πᾶσα ἀθάνατος* (19 Apr 2023): Plato "reveals hidden positions in the sight of all among thousands of words" (the Phaedrus is built around one idea); writing weakens memory.
+- *Ἡ Μουσικὴ Δομὴ τῶν Πλατωνικῶν Διαλόγων* (26 Nov 2025): reports Jay Kennedy's thesis that the dialogues have a hidden musical and mathematical structure (twelve parts by stichometry); the author lists objections. Speculative; not used here.
+- Others read, not directly on irony: the Republic and Augustine's *City of God* (15 Feb 2021, reads 592d at face value); *Η ΕΞΕΛΙΞΗ ΤΩΝ ΠΟΛΙΤΙΚΩΝ ΑΝΤΙΛΗΨΕΩΝ ΤΟΥ ΠΛΑΤΩΝΑ* (1 Oct 2023: the Republic, Statesman and Laws as a development in which the ideal city stays "in heaven" and law becomes a necessary evil); the Symposium and Diotima; Alcibiades I; the Myth of Er; Protagoras' myth.
+
+**Not yet read, in order of use for this note:** the Menexenus irony post (13 Jul 2025, `2025/07/blog-post_13`), *Η ΔΗΜΟΚΡΑΤΙΑ ΤΩΝ ΚΗΦΗΝΩΝ* (18 Dec 2025, Republic 8), *ΤΟ ΠΑΡΑΔΟΞΟ ΤΟΥ ΜΕΝΩΝΟΣ*, *ΤΟ ΔΙΛΗΜΜΑ ΤΟΥ ΕΥΘΥΦΡΟΝΟΣ*, *Σοφιστής* (5 Jul 2024), *Ἄγραφα Δόγματα* (23 Apr 2024), *Η ΑΛΗΘΙΝΗ ΑΙΤΙΑ ΤΗΣ ΚΑΤΑΔΙΚΗΣ ΤΟΥ ΣΩΚΡΑΤΗ*, the uppercase searches for ΕΙΡΩΝΕΙΑ and ΕΥΓΟΝΙΚΗ.
+
+**What the blog adds**
+1. **Specific textual details of the Republic's eugenics** that carry the irony in the language itself: the lots are called "clever" and are rigged so that the lesser blame Chance; the hiding of children "as is fitting"; the legal-sounding terms of illegitimacy. These are the passages to read in the Greek before writing anything about the Republic. (From memory, to be checked: Book VIII, 546, has the rulers' own calculation of the right time to breed fail, which would make the scheme fail by its own premise.)
+2. **The surface topic and the real topic** in every dialogue (Gorgias: rhetoric and the ethics of power). For the product this is a candidate shape of the technique: the question the person asks is the surface; the construction leads towards what lies under it.
+3. **Plato as the ironist-author, and Socrates as his mouthpiece in many places** ("Σωκράτης — δηλ. ὁ Πλάτων"). This is in tension with the founder's reading of 2026-11-01, that the practice is Socrates' and that Plato cannot speak as the director. The blog, by itself, treats the irony as the author's. Both readings are kept open (13.1).
+4. **The author does not hold one reading throughout.** In posts of 2021 and 2023 the Republic's ideal is read at face value (a pattern in heaven, later softened in the Statesman and the Laws) and in posts of 2020 and 2023 as irony. This is itself a datum: a careful reader holds both, and the product has so far decided not to choose.
+5. **Plato's indirectness** (hints for the few, the criticism of writing, the hidden thesis of a work) agrees with the proposal that a revived Plato should say what is on the page, say that his intent is not recorded in anything he can point to, and ask. It does not settle it.
+
+### 14.1 The whole blog read (2026-11-01)
+
+All 727 posts were listed; the 186 classed as philosophy (106) or borderline (80), by title, were read in full in ten batches and written up as position cards (kept in the scratchpad, outside the repository; not published here, since the blog states that its texts belong to its author and must be cited). The classification is by title only, so some relevant posts may have been missed in the other 541, and the older archive was searched by title only. Three posts are not by Koutoulas (a transcript of a 1983 lecture by K. Papapetrou, two guest texts, a report of S. Eleftheratou's work; and the *Ἄγραφα Δόγματα* post of April 2024 is signed by another name). The cards flag where a claim is contested in scholarship.
+
+**What the whole blog says about the four, in the author's terms**
+- **Diogenes does not appear in any batch.** Nothing from the blog can inform his character.
+- **Socrates.** Little directly. His irony cost him votes at the trial (a later inference, flagged); the Socrates of the Apology is agnostic, the Socrates of the Phaedo is Plato's Orphic-Pythagorean voice (the usual Socratic-problem view); the Cratylus etymologies are irony and the opponents "did not grasp Socratic irony"; the Euthyphro dilemma and the Meno paradox (answered "in a mythological way", Meno 80e, 81c-d). The author identifies Socrates with Plato in most posts.
+- **Plato, the main subject (about 50 posts).** Recurring claims: he is "ἄκρως εἴρων καὶ σατιρικός" and often deliberately allusive and sometimes consciously self-contradictory; the dialogues have a surface and a real topic; the Timaeus is a "likely myth" to be demythologised; the Menexenus lies obviously in order to expose the deceit of political oratory; the Republic's city exists "in heaven" and, in some posts, is an ironic allegory of the soul and, in others, a view later softened (Statesman, Laws); the *Laws* are the only work where his theology is stated openly; the Phaedrus hides one idea in a long text and has Socrates imitate Lysias deliberately a little worse; an oral, esoteric teaching (*ἄγραφα δόγματα*) and the Seventh Letter (of doubtful authenticity); the Protagoras myth shows Plato fair to his opponent (most scholars take the myth as Plato's own invention); the line of the divided line may contain a deliberate "error" (an open puzzle, reported from Koumakis, with no opinion of the author's).
+- **Aristotle.** The treatises as lecture notes; the optative ("ἄν εἴη") read as a way of not making dogma, a view among others (the author's own gloss, contested: it is a common construction in definitions); virtue as *hexis*, the mean "relative to us", and a criticism that he never says who the *phronimos* is; his errors in science set against "he taught the scientific way of thinking"; Metaphysics Lambda perhaps to be read allegorically, with a floated motive of avoiding a charge of impiety (marked as inference).
+- **Method of the author.** He reads the ancients as writers who play, hint and hide, and reads translations as always a betrayal of the optative, the allusion and the pun. This is the reading the founder asked to keep, as a character-giving approach and not as truth.
+
+**Use in the project (decided by the founder, 2026-11-01): material for design, not an absolute source.** The founder's idea of a corpus "not of his texts but of his positions" is a decision still to be taken and touches PLAN 3.9 and 18 (no corpus, no analyses as sources for the persona); it stays a note. Until it is decided: the cards are for writing and testing the characters, they are not read by the models at run time, they are not in the repository, and any positions later used are attributed.
+
+## 15. Founder's decisions on the technique sheets (2026-11-01)
+The founder accepted the recommendations on the questions raised by TECHNIQUES_SOCRATES, _PLATO, _ARISTOTLE and _DIOGENES, and will review them in practice:
+1. Socrates states his own view when asked plainly or after dodging for more than three turns, always with how firmly he holds it.
+2. Showing what he did is character and varies with the person (open to the proud, a hint to the clever, silent when the discovery is the person's own).
+3. The Xenophon side (practical advice) belongs to the same Socrates, shown when the person asks for advice.
+4. Plato speaks of his intent by option C: what the text itself declares (a city in words, a pattern in heaven, a labelled myth) he says plainly; for the rest he says the intent is not recorded in anything he can point to and asks the person.
+5. Plato says the unwritten doctrines existed (Aristotle reports it) and gives no content.
+6. Diogenes: "barrel" replaced by "jar" in the voice samples; the distressed-user sample stays as a design decision of ours.
+7. The whole app stays 16+; Diogenes' age is revisited after the abuse battery.
+8. Implementation starts with the persona only (a principle in the common frame plus manners per philosopher, no new code); the notebook and the lookahead are added only if the later adversary tests show the persona is not enough.
+9. The shared frame's "say the unpopular belief plainly and why it seemed right then" is changed per philosopher, not globally (Aristotle keeps it; Socrates and Plato declare the status of constructions).
+Nothing is built yet; the persona change waits for the founder's go.
+
+### 15.1 Added 2026-11-01 (later)
+10. The persona now also says: think of the whole course of a work and where it limits or reverses the passage in mind; answer a question put to you before asking one. Whether this is enough is measured first, live, by replaying the founder's two failure dialogues with pressure (kept locally in `private/research/failure_dialogues.md`), at the final tests with the founder's key and only on his go.
+11. If it is not enough, the order is: notes of checked structural facts for the few works that fail (what the work declares about its own status, where it limits or reverses what was said, what contemporaries objected; contested readings marked open; our own text, switched on by a small judge when the work is mentioned), starting with the Republic and Politics I, after the passages are read in the text; a per-reply pre-reading of the work only as a fallback for other works. Nothing of this is built.
+
+### 15.2 The second check, built (2026-11-01)
+Founder agreed (after re-reading the Quality Controller idea): a separate judge, besides the safety gate, that looks at the whole before a draft is shown. Built as `internal/review`: after the safety gate passes, a fast-model call sees the conversation, the draft and the philosopher's own `Traps` (a data field, his "opening book", written from the strategy sheets) and flags one of: part_as_whole, contradicts_earlier, asserts_intent, frame_missing, exposed_to_the_next_push. A flag has the draft written again once with the reason; the new draft goes through the safety gate again and is then shown (never replaced by a fixed text: this is quality, not safety). A failed or unreadable check leaves the draft standing. It is on in the engine (`EnableReview`), off by default in the service so scripted tests need not expect the call. Simulated tests only; whether it flags the right drafts is measured live (the pressure run of `private/research/pressure_run1.md` is the baseline). The notebook and the structural notes for the judge are still not built.
+
+### 15.3 Structural notes for the second check (2026-11-01)
+The Republic passages were read (Shorey, Perseus; kept in `private/research/republic-notes.md`: 3.414-415, 5.449-473, 6.506-509, 8.543-547, 9.588-592; the Greek was not read and two passages break off mid-sentence). Our own checked summary is `engine/internal/philosophers/notes.go` (`RepublicNotes`): the status the work declares for the city, what the proposals are, where the work limits or reverses them (metals myth, the Muses' failing number, the decay that reverses the "not slaves" claim), and the features some readers take as irony, with no side taken. It goes to the second check only (Socrates and Plato), never to the speaker; the check now also flags a draft that claims the text has no sign of irony, or that it is all irony, since readers differ. Aristotle's notes (Politics I and II) and the clarification-before-answer behaviour (founder's idea, same day) are not built.
+
+### 15.4 Clarification before answering (founder, 2026-11-01)
+Founder: when a clarification is needed the philosopher should ask, as Moly does (a question only if its answer changes the reply and nothing said already holds it; once; not again once answered or declined; a push closes it). Built as: (1) a persona sentence in the shared frame: answer first, except when a question has several readings that change the answer and nothing settles which, then ask briefly which is meant, once, not if the person has said what they mean, pressed for an answer, or one reading is plainly natural; (2) two categories in the second check, `unasked_ambiguity` (the draft chose one reading) and `needless_clarification` (the draft asks when it should not), which send the draft back once. Simulated tests only; the first live run with it and the Republic notes is still to be made and read.
+
+### 15.5 Third live run (2026-11-01; check + Republic notes + clarification)
+Transcript: `private/research/pressure_run3.md`. The check sent back 11 of 12 drafts (part_as_whole 5, frame_missing 3, asserts_intent 2, exposed_to_the_next_push 1; no failures): far too eager, it roughly doubles the calls per turn, and drafts were not logged so we cannot tell what it changed. The claim "no sign of irony in the text" went from three replies to one (Plato U1); the rest now say readers disagree. No clarification question was asked before an answer in any turn (the sample dialogues do not call for one). Socrates U1 grew to 188 words. A slip in Plato U3: "difficult but not impossible" (Book V) is placed in Books VI and VII. One sample only.
+
+### 15.6 Logging, and keeping the character when the model changes (founder, 2026-11-01)
+The live pressure test now writes, for every second-check verdict, the draft, the category and the reason (`pressure_live_test.go`, via a test-only hook `onReview`; production keeps and logs no draft). Founder's requirement: if the underlying model changes, the philosophers must keep their characters. Consequence for the design: the character must live in our data and tests, not in what one model happens to do. Planned, not built: (1) the fixed behaviour battery (the two failure dialogues plus questions on other topics) is the acceptance test for any model change, run before a new model ID is approved, with the draft/reason log; (2) results are stored per model ID, so a change is compared with the last accepted run; (3) the persona, stances and traps stay in `philosophers` as data, so a new model is adapted by changing data, not code; (4) a model is approved only if the battery shows the same behaviours (frame first, no slide under pressure, readers-disagree wording, length) within the limits we set.
+
+### 15.7 Fourth live run, drafts logged (2026-11-01)
+Transcript with drafts, categories and reasons: `private/research/pressure_run4.md`. The check sent back 9 of 11 drafts (part_as_whole 4, asserts_intent 4, exposed_to_the_next_push 1). Read against the drafts, the judge was mostly right, so the first drafts are weak and the persona is the place to work. Two repeated faults: (1) a settled personal verdict before the work's own frame ("Yes, I meant it seriously", a bare "No"), 5 cases; (2) a flat claim about intent or irony ("no sign of it", "not all irony"), 3 cases. Also seen: one turn (Plato U3) ended in the fixed text after the gate held the rewritten draft back, language unset so English; one Cyrillic letter slipped into a Greek reply (Plato U2); the revised draft is not checked again, so a fault can survive the rewrite. Socrates replies were 93-116 words.
