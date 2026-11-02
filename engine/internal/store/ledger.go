@@ -49,7 +49,9 @@ const (
 	MaxLedgerSize = 500 // entries per philosopher
 )
 
-func (o *Ops) sealOpt(col, id, v string) ([]byte, error) {
+// sealOpt seals a value, or gives an untyped nil for an empty one so that the database stores NULL on every Go version (a typed nil
+// []byte was stored as an empty blob by some, and then failed its integrity check when read).
+func (o *Ops) sealOpt(col, id, v string) (any, error) {
 	if v == "" {
 		return nil, nil
 	}
@@ -113,7 +115,7 @@ func (o *Ops) scanEntry(sc interface{ Scan(...any) error }) (Entry, error) {
 		return Entry{}, err
 	}
 	open := func(col string, blob []byte) (string, error) {
-		if blob == nil {
+		if len(blob) == 0 {
 			return "", nil
 		}
 		p, err := o.c.open("ledger", col, e.ID, blob)
