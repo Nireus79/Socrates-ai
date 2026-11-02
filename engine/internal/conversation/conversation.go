@@ -76,6 +76,7 @@ type Service struct {
 	onReview    func(draft string, v review.Verdict)
 	onGate      func(draft string, v safety.GateVerdict) // tests only, like onReview
 	reviewStats ReviewStats                              // counts only, never text; guarded by mu
+	selector    bool                                     // pick the relevant maps, objections and tales each turn (select.go); off unless EnableSelector is called
 	review      bool                                     // the second check on a draft (internal/review); off unless EnableReview is called, so a scripted model need not expect it
 }
 
@@ -473,7 +474,7 @@ func (s *Service) send(ctx context.Context, conversationID, text string, suggest
 		return s.fixed(ctx, conversationID, d, &text, suggested)
 
 	case safety.ActionAskBeforeRefusing:
-		q, err := s.guarded(ctx, client, ph.System()+"\n\n"+philosophers.ReflectiveQuestion, contextFor(history, text), toLLM(history), text, "", "", "")
+		q, err := s.guarded(ctx, client, ph.Core()+"\n\n"+philosophers.ReflectiveQuestion, contextFor(history, text), toLLM(history), text, "", "", "")
 		if err != nil && !errors.Is(err, errHeldBack) {
 			return unavailable(err), nil
 		}
@@ -485,7 +486,7 @@ func (s *Service) send(ctx context.Context, conversationID, text string, suggest
 		return s.commit(ctx, conversationID, d, nil, q, false)
 
 	default: // proceed, proceed gently
-		system := ph.System()
+		system := s.persona(ctx, client, ph, conversationID, history, text)
 		if d.Action == safety.ActionProceedGently {
 			system += "\n\n" + philosophers.Gentle
 		}

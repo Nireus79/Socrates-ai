@@ -197,6 +197,9 @@ var migrations = []string{
 	`ALTER TABLE inquiry_entry ADD COLUMN inherited INTEGER NOT NULL DEFAULT 0;`,
 	// 9: how many of the person's turns an inquiry has been examined over (a question is not thought through in two messages).
 	`ALTER TABLE inquiry ADD COLUMN turns INTEGER NOT NULL DEFAULT 0;`,
+	// 10: which entries of the philosopher's own thinking were handed to his replies in a conversation (sealed; NULL when none), so that none
+	// is told twice in it, even after the engine has stopped and started again.
+	`ALTER TABLE conversations ADD COLUMN picked BLOB;`,
 }
 
 // dbtx is what both *sql.DB and *sql.Tx offer.

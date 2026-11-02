@@ -120,7 +120,7 @@ func (s *Service) Offer(ctx context.Context, conversationID string) (*Result, er
 		return nil, err
 	}
 
-	system := ph.System()
+	system := ph.Whole()
 	if s.MemoryEnabled(ctx) {
 		if known, err := s.st.Entries(ctx, ph.ID, false); err == nil {
 			if c := ledger.Context(known); c != "" {

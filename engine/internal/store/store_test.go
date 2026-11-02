@@ -473,3 +473,44 @@ func TestMessagesAfterAndFirstMessagesReadOnlyWhatIsAskedFor(t *testing.T) {
 		t.Fatalf("%+v", first)
 	}
 }
+
+func TestPickedEntriesAreSealedSurviveReopeningAndGoWithTheConversation(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "d", "s.db")
+	key := bytes.Repeat([]byte{3}, 32)
+	st, err := Open(path, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var id string
+	if err := st.Update(ctx, func(o *Ops) error {
+		c, err := o.CreateConversation(ctx, "diogenes")
+		id = c.ID
+		if err != nil {
+			return err
+		}
+		if got, err := o.Picked(ctx, id); err != nil || len(got) != 0 {
+			t.Fatalf("none yet: %v %v", got, err)
+		}
+		return o.SetPicked(ctx, id, []string{"i3", "o2", "t1"})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	st.Close()
+	raw, _ := os.ReadFile(path)
+	if bytes.Contains(raw, []byte("i3,o2,t1")) {
+		t.Error("the picked list is in plain text on disk")
+	}
+	st, err = Open(path, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	got, err := st.Picked(ctx, id)
+	if err != nil || strings.Join(got, ",") != "i3,o2,t1" {
+		t.Fatalf("after reopening: %v %v", got, err)
+	}
+	if err := st.Update(ctx, func(o *Ops) error { return o.SetPicked(ctx, "nope", []string{"i1"}) }); !errors.Is(err, ErrNotFound) {
+		t.Errorf("unknown conversation: %v", err)
+	}
+}

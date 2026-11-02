@@ -971,3 +971,99 @@ func TestATestCanReadWhatTheOutputGateFlagged(t *testing.T) {
 		t.Fatalf("%+v", seen)
 	}
 }
+
+// ---- the selector (DIALECTIC.md 16.9)
+
+const selectorMark = "numbered list of what he knows about his own thinking"
+
+func selectorRequests(e *env) (sel, reply []llm.Request) {
+	for _, r := range e.mock.Requests {
+		switch {
+		case strings.Contains(r.System, selectorMark):
+			sel = append(sel, r)
+		case r.Role == llm.RoleReply:
+			reply = append(reply, r)
+		}
+	}
+	return
+}
+
+func TestTheSelectorGivesTheReplyOnlyTheEntriesItPicksAndNeverTwice(t *testing.T) {
+	e := newEnv(t,
+		llm.Say(judgeOK), llm.Say(`{"objections":[3],"tales":[2,99]}`), llm.Say("Reply one."), llm.Say(gateOK), llm.Say("T"), llm.Say("S"),
+		llm.Say(judgeOK), llm.Say(`{"objections":[3],"tales":[2]}`), llm.Say("Reply two."), llm.Say(gateOK), llm.Say("S"))
+	e.svc.EnableSelector()
+	ph, _ := e.svc.roster.Get("diogenes")
+	conv, err := e.svc.Start(bg, "diogenes")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		if _, err := e.svc.Send(bg, conv.ID, userWords); err != nil {
+			t.Fatal(err)
+		}
+		e.svc.Wait()
+	}
+	sel, reply := selectorRequests(e)
+	if len(sel) != 2 || len(reply) != 2 {
+		t.Fatalf("selector calls %d, replies %d", len(sel), len(reply))
+	}
+	if !strings.Contains(sel[0].Messages[0].Content, "2. "+short(ph.Stories[1], 100)) {
+		t.Error("the first call should offer every tale")
+	}
+	if strings.Contains(sel[1].Messages[0].Content, "2. "+short(ph.Stories[1], 100)) {
+		t.Error("the second call should not offer the tale already picked")
+	}
+	if !strings.Contains(reply[0].System, ph.Stories[1]) || strings.Contains(reply[0].System, ph.Stories[0]) {
+		t.Error("the first reply must carry the picked tale and none of the others")
+	}
+	if strings.Contains(reply[0].System, ph.Library[0].Said) || !strings.Contains(reply[0].System, ph.Library[2].Said) {
+		t.Error("an objection that was not picked is in the persona, or the picked objection is missing")
+	}
+	for _, m := range ph.Maps {
+		if !strings.Contains(reply[0].System, m.Name) || !strings.Contains(reply[1].System, m.Name) {
+			t.Errorf("the whole must always travel with the reply; missing %q", m.Name)
+		}
+	}
+	if strings.Contains(reply[1].System, ph.Stories[1]) {
+		t.Error("a tale picked once is not handed over again in the conversation")
+	}
+}
+
+func TestWhenTheSelectorFailsTheReplyStillComesFromTheCorePersona(t *testing.T) {
+	e := newEnv(t, llm.Say(judgeOK), llm.Fail(errors.New("down")), llm.Say("Reply."), llm.Say(gateOK), llm.Say("T"), llm.Say("S"))
+	e.svc.EnableSelector()
+	ph, _ := e.svc.roster.Get("diogenes")
+	conv, _ := e.svc.Start(bg, "diogenes")
+	res, err := e.svc.Send(bg, conv.ID, userWords)
+	if err != nil || res.Outcome != OutcomeReplied {
+		t.Fatalf("%v %+v", err, res)
+	}
+	e.svc.Wait()
+	_, reply := selectorRequests(e)
+	if len(reply) != 1 || strings.Contains(reply[0].System, ph.Stories[0]) || !strings.Contains(reply[0].System, ph.Maps[0].Name) {
+		t.Error("with the selector down the persona must be the whole (core and maps) and no tale")
+	}
+}
+
+func TestPicksAreOnlyNumbersFromTheListAndNothingElseIsAnAnswer(t *testing.T) {
+	if _, ok := parsePicks("I think entry 3 is good"); ok {
+		t.Error("prose is not an answer")
+	}
+	pk, ok := parsePicks("```json\n{\"objections\":[1,1,50],\"tales\":[2]}\n```")
+	if !ok {
+		t.Fatal("a fenced object should be read")
+	}
+	ph, _ := philosophers.New().Get("diogenes")
+	l := ph.Limit(pk)
+	if len(l.Objections) != 1 || l.Objections[0] != 1 || len(l.Stories) != 1 {
+		t.Errorf("limit: %+v", l)
+	}
+}
+
+func short(s string, n int) string {
+	if r := []rune(s); len(r) > n {
+		return string(r[:n]) + "..."
+	}
+	return s
+}

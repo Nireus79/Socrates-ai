@@ -43,6 +43,9 @@ func (f *fakeClaude) handler() http.Handler {
 		case strings.Contains(sys, "safety judge"):
 			out, f.verdicts = f.verdicts[0], f.verdicts[1:]
 			f.prompts = append(f.prompts, "judge")
+		case strings.Contains(sys, "numbered list of what he knows about his own thinking"):
+			out = `{"objections":[],"tales":[]}`
+			f.prompts = append(f.prompts, "select")
 		case strings.Contains(sys, "You check a draft reply"):
 			out = `{"flagged":false,"category":"none","reason":"fine"}`
 			f.prompts = append(f.prompts, "gate")
@@ -134,10 +137,10 @@ func TestAWholeJourneyThroughTheRealEngine(t *testing.T) {
 	if len(remembered) != 1 || remembered[0].(map[string]any)["quote"] != secretUser {
 		t.Fatalf("ledger: %v", remembered)
 	}
-	// the order of the calls was judge, reply, gate (then title and summary in the background), judge for the crisis and nothing else
-	want := []string{"judge", "reply", "gate"}
+	// the order of the calls was judge, select, reply, gate (then title and summary in the background), judge for the crisis and nothing else
+	want := []string{"judge", "select", "reply", "gate"}
 	fake.mu.Lock()
-	got := append([]string(nil), fake.prompts[:3]...)
+	got := append([]string(nil), fake.prompts[:4]...)
 	fake.mu.Unlock()
 	for i := range want {
 		if got[i] != want[i] {

@@ -26,8 +26,10 @@ type Deps struct {
 	// EnforceUnlocks puts the production rule in place of the beta's bypass: a philosopher is available only once the person has finished
 	// the required challenges with the ones before him (package progress).
 	EnforceUnlocks bool
-	Version        string
-	LLMOptions     []llm.Option // only tests change these (a stand-in provider, no waiting between retries)
+	// Selector picks the relevant maps, objections and tales for each reply (conversation/select.go); the program turns it on, scripted tests leave it off.
+	Selector   bool
+	Version    string
+	LLMOptions []llm.Option // only tests change these (a stand-in provider, no waiting between retries)
 }
 
 // New builds the routes. The caller adds the shutdown route and puts the door (transport.Policy) and the rate limit in front.
@@ -38,6 +40,9 @@ func New(d Deps) (*http.ServeMux, *conversation.Service) {
 	}
 	h := &handler{d: d}
 	h.conv = conversation.New(d.Store, h.models, d.Roster)
+	if d.Selector {
+		h.conv.EnableSelector()
+	}
 	if d.Rights == nil && d.EnforceUnlocks {
 		// earning and what was bought or granted are two sources of one answer
 		d.Rights = entitlements.Any{progress.Source{St: d.Store, Roster: d.Roster}, catalog.Granted{St: d.Store, Roster: d.Roster}}

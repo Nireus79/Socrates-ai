@@ -53,6 +53,9 @@ func TestLiveReplies(t *testing.T) {
 	defer st.Close()
 	svc := New(st, func(context.Context) (Completer, error) { return client, nil }, philosophers.New())
 	svc.ConfirmAge(bg)
+	if os.Getenv("BATTERY_SELECTOR") != "" {
+		svc.EnableSelector()
+	}
 	if l := os.Getenv("BATTERY_LANG"); l != "" {
 		if err := svc.SetLang(bg, l); err != nil {
 			t.Fatal(err)

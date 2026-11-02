@@ -1,6 +1,7 @@
 package philosophers
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -87,8 +88,9 @@ func TestOnlyThoseWhoMayBeQuestionedOnTheRepublicHaveItsNotesAndTheyReachTheChec
 	r := New()
 	for _, p := range r.All() {
 		want := p.ID == "socrates" || p.ID == "plato"
-		if strings.Contains(p.System(), "nowhere on earth") {
-			t.Errorf("%s: the notes must reach the check only (stage B was tried and dropped)", p.ID)
+		if strings.Contains(p.System(), "use these only if the conversation concerns it") {
+			// the notes themselves go to the check only; what the work says of its own status reaches the speaker through his maps, in the maps' own words (2026-11-02)
+			t.Errorf("%s: the notes text itself must reach the check only", p.ID)
 		}
 		if want && (p.Notes != RepublicNotes || !strings.Contains(p.Notes, "readers differ")) {
 			t.Errorf("%s lacks the notes", p.ID)
@@ -146,7 +148,7 @@ func TestEachPhilosopherConversesInHisOwnWayAndNoneReportsHisBooks(t *testing.T)
 	want := map[string][]string{
 		"plato":     {"lead the person upward", "A book is where you met the thought, not the thought", "offer a picture and ask what they see in it", "You do not recite your books"},
 		"aristotle": {"what people usually say", "one step of the sorting at a time", "You do not lecture"},
-		"diogenes":  {"You are short", "turn it on the idea, never on the person's body", "You do not tell stories about yourself as facts"},
+		"diogenes":  {"You are short", "turn it on the idea, never on the person's body", "saying \"they say\" when you are not sure"},
 	}
 	for id, parts := range want {
 		p, _ := r.Get(id)
@@ -208,6 +210,132 @@ func TestTheAimOfEveryoneIsAConversationAboutTheMatterAndNotAnAccountOfTheBooks(
 	for _, p := range New().All() {
 		if !strings.Contains(p.System(), "a real philosophical conversation with this person about the matter itself") {
 			t.Errorf("%s: the aim is missing", p.ID)
+		}
+	}
+}
+
+func TestEveryoneListensForWhatThePersonIsReallyAskingAndNoneStaysOnTheSurfaceOrTheBooks(t *testing.T) {
+	for _, p := range New().All() {
+		sys := p.System()
+		if !strings.Contains(sys, "really") || !(strings.Contains(sys, "behind") || strings.Contains(sys, "Behind")) {
+			t.Errorf("%s: he must listen for what lies behind the question", p.ID)
+		}
+	}
+}
+
+func TestTheLibraryIsHisOwnCriticismAndIsHandedOverAsDoubtsToBePutAsQuestionsNeverAsClaims(t *testing.T) {
+	r := New()
+	ok := map[string]bool{StatusText: true, StatusDebated: true, StatusOneReader: true}
+	for _, id := range []string{"socrates", "plato", "aristotle", "diogenes"} {
+		p, _ := r.Get(id)
+		if len(p.Library) < 4 {
+			t.Errorf("%s: too few objections: %d", id, len(p.Library))
+		}
+		sys := p.System()
+		for _, o := range p.Library {
+			if strings.TrimSpace(o.Said) == "" || strings.TrimSpace(o.Objection) == "" || !ok[o.Status] {
+				t.Errorf("%s: an objection needs what he said, the objection and how settled it is: %+v", id, o)
+			}
+			if !strings.Contains(sys, o.Said) || !strings.Contains(sys, o.Objection) || !strings.Contains(sys, o.Status) {
+				t.Errorf("%s: %q does not reach the persona with its status", id, o.Objection)
+			}
+		}
+		for _, w := range []string{"doubts about your own thinking", "you never state as your claim", "you put it to the person as a question", "never present as settled", "the person can answer no", "Do not invent anything about what you said or did"} {
+			if !strings.Contains(sys, w) {
+				t.Errorf("%s: the library lacks %q", id, w)
+			}
+		}
+	}
+	x := Philosopher{ID: "x", Name: "X"}
+	if strings.Contains(x.System(), "doubts about your own thinking") {
+		t.Error("a philosopher without a library gets no such block")
+	}
+}
+
+func TestEachPhilosopherHasAMapOfTheLargeQuestionsAndAnswersFromTheWholeNotThePassage(t *testing.T) {
+	for _, p := range New().All() {
+		if len(p.Maps) < 6 {
+			t.Errorf("%s: too few maps: %d", p.ID, len(p.Maps))
+		}
+		sys := p.System()
+		for _, i := range p.Maps {
+			if strings.TrimSpace(i.Name) == "" || strings.TrimSpace(i.Held) == "" || strings.TrimSpace(i.Tension) == "" || strings.TrimSpace(i.Readers) == "" {
+				t.Errorf("%s: an incomplete map: %q", p.ID, i.Name)
+			}
+			if !strings.Contains(sys, i.Held) || !strings.Contains(sys, i.Tension) {
+				t.Errorf("%s: %q does not reach the persona", p.ID, i.Name)
+			}
+		}
+		for _, w := range []string{"as a whole", "answer from the whole of it and not from the passage", "Do not recite it, list it or announce it", "say that plainly and do not state it as fact", "If you do not remember or do not know, say so"} {
+			if !strings.Contains(sys, w) {
+				t.Errorf("%s: the maps lack %q", p.ID, w)
+			}
+		}
+	}
+}
+
+func TestOnlyDiogenesCarriesTalesAndTheyAreHandedOverAsTold(t *testing.T) {
+	r := New()
+	for _, id := range []string{"socrates", "plato", "aristotle", "diogenes"} {
+		p, _ := r.Get(id)
+		has := strings.Contains(p.System(), storiesIntro)
+		if (p.ID == "diogenes") != has {
+			t.Errorf("%s: tales in persona = %v", p.ID, has)
+		}
+		for _, s := range p.Stories {
+			if !strings.HasPrefix(s, "They say") {
+				t.Errorf("%s: a tale not marked as told: %q", p.ID, s)
+			}
+			for _, w := range []string{"irony", "ironic", "elenchus", "maieutic", "dialectic"} {
+				if strings.Contains(strings.ToLower(s), w) {
+					t.Errorf("%s: technique label %q in a tale", p.ID, w)
+				}
+			}
+		}
+	}
+}
+
+func TestTheWholeAlwaysTravelsAndOnlyObjectionsAndTalesAreChosen(t *testing.T) {
+	r := New()
+	for _, id := range []string{"socrates", "plato", "aristotle", "diogenes"} {
+		p, _ := r.Get(id)
+		for _, got := range []string{p.Whole(), p.Compose(Picks{})} {
+			for _, m := range p.Maps {
+				if !strings.Contains(got, m.Name) {
+					t.Errorf("%s: the map %q is missing from the whole", id, m.Name)
+				}
+			}
+			for _, o := range p.Library {
+				if strings.Contains(got, o.Said) {
+					t.Errorf("%s: an objection is in the persona though none was picked", id)
+				}
+			}
+		}
+	}
+	plato, _ := r.Get("plato")
+	if !strings.Contains(plato.Core(), "as a thinker about the thing itself, not as a reader of your books") {
+		t.Error("Plato must answer about the thing, not about the book")
+	}
+}
+
+// A philosopher is not a philologist (founder, 2026-11-02): nothing handed to him is a citation, a book number or a talk about what a text says.
+func TestNothingHandedToAPhilosopherIsACitationOrAPassageNumber(t *testing.T) {
+	cite := regexp.MustCompile(`\b\d{3}[a-e]\b|\bBooks? [IVX]+\b|\bStephanus\b|\bchapter \d`)
+	r := New()
+	for _, id := range []string{"socrates", "plato", "aristotle", "diogenes"} {
+		p, _ := r.Get(id)
+		var all []string
+		for _, o := range p.Library {
+			all = append(all, o.Said, o.Objection)
+		}
+		for _, i := range p.Maps {
+			all = append(all, i.Name, i.Held, i.Tension, i.Readers)
+		}
+		all = append(all, p.Stories...)
+		for _, s := range all {
+			if cite.MatchString(s) {
+				t.Errorf("%s: a citation in what he is handed: %q", id, s)
+			}
 		}
 	}
 }
