@@ -462,7 +462,34 @@ async function home() {
         el("h2", {}, k.title || t("New conversation")), el("div", { class: "muted" }, who)));
     }
   }
-  mount(...screen("Socrates", body, el("span", { class: "row" }, S.profiles ? el("button", { class: "link", onclick: logOut }, t("Log out")) : null, el("button", { class: "link", onclick: () => show(settings) }, t("Settings")))));
+  mount(...screen("Socrates", body, el("span", { class: "row" }, S.profiles ? el("button", { class: "link", onclick: logOut }, t("Log out")) : null, el("button", { class: "link", onclick: () => show(progressScreen) }, t("Progress")), el("button", { class: "link", onclick: () => show(settings) }, t("Settings")))));
+}
+
+// ---- progress: how far the person has come with every philosopher, unlocked or not
+
+function listNames(names) { return names.join(", "); }
+
+async function progressScreen() {
+  const r = await api("GET", "/api/philosophers");
+  if (r.status === 200) S.philosophers = r.data.philosophers || [];
+  const body = el("div", { class: "stack" });
+  body.append(el("p", { class: "muted" }, t("A question counts when you have thought it through to the end with a philosopher, in your own words. Meeting each later philosopher takes 5 of them with every philosopher before him.")));
+  for (const p of S.philosophers) {
+    const n = p.challenges || 0, need = p.required || 5;
+    const card = el("div", { class: "card stack" }, el("h2", {}, p.name));
+    card.append(el("div", { class: "muted" }, t("Questions thought through: {n}", { n })));
+    if (p.leads && p.leads.length) {
+      const names = listNames(p.leads), got = Math.min(n, need);
+      card.append(el("label", { for: "prog-" + p.id }, t("Toward meeting {names}: {done} of {need}", { names, done: got, need })),
+        el("progress", { id: "prog-" + p.id, value: String(got), max: String(need) }));
+    }
+    if (p.inProgress > 0) {
+      card.append(el("label", { for: "open-" + p.id }, t("A question in progress")),
+        el("progress", { id: "open-" + p.id, value: String(p.inProgress), max: "1000" }));
+    }
+    body.append(card);
+  }
+  mount(...screen(t("Progress"), body, el("button", { class: "link", onclick: back }, t("Done"))));
 }
 
 async function startWith(p) {

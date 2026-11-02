@@ -521,3 +521,23 @@ func TestForgettingAConversationAlsoRemovesATensionOtherConversationsHeldOnItsCl
 		t.Fatalf("%+v", all)
 	}
 }
+
+func TestOpenBankedIsTheNewestUnfinishedQuestionPerPhilosopherAndAFinishedOneDoesNotCount(t *testing.T) {
+	s, _, _ := open(t)
+	c := mustConv(t, &s.Ops, "socrates")
+	old := newInquiry(t, s, c, "old question")
+	s.Bank(ctx, old.ID, 800)
+	s.CompleteInquiry(ctx, old.ID)
+	d := mustConv(t, &s.Ops, "diogenes")
+	if m, err := s.OpenBanked(ctx); err != nil || len(m) != 0 {
+		t.Fatalf("a finished question or no question must not show: %v %v", m, err)
+	}
+	cur := newInquiry(t, s, c, "new question")
+	s.Bank(ctx, cur.ID, 350)
+	dq := newInquiry(t, s, d, "his question")
+	s.Bank(ctx, dq.ID, 120)
+	m, err := s.OpenBanked(ctx)
+	if err != nil || m["socrates"] != 350 || m["diogenes"] != 120 || len(m) != 2 {
+		t.Fatalf("%v %v", m, err)
+	}
+}

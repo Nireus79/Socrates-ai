@@ -66,10 +66,13 @@ func (h *handler) philosophers(w http.ResponseWriter, r *http.Request) {
 	}
 	type view struct {
 		philosophers.Philosopher
-		Unlocked   bool   `json:"unlocked"`   // may the person talk with him now
-		Challenges int    `json:"challenges"` // finished with him
-		Earned     bool   `json:"earned"`     // unlocked by progress alone, whether or not the rules are enforced
-		Needs      []need `json:"needs,omitempty"`
+		Unlocked   bool     `json:"unlocked"`        // may the person talk with him now
+		Challenges int      `json:"challenges"`      // finished with him
+		Earned     bool     `json:"earned"`          // unlocked by progress alone, whether or not the rules are enforced
+		Required   int      `json:"required"`        // challenges with him that count toward meeting each later philosopher
+		InProgress int      `json:"inProgress"`      // maturity of the newest unfinished question with him, 0 to 1000
+		Leads      []string `json:"leads,omitempty"` // the later philosophers whose way in he is part of
+		Needs      []need   `json:"needs,omitempty"`
 	}
 	lang := h.conv.Lang(r.Context())
 	roster := h.d.Roster.All()
@@ -78,9 +81,18 @@ func (h *handler) philosophers(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusInternalServerError, "the roster could not be read")
 		return
 	}
+	open, err := h.d.Store.OpenBanked(r.Context())
+	if err != nil {
+		fail(w, http.StatusInternalServerError, "the roster could not be read")
+		return
+	}
 	var out []view
 	for i, st := range progress.StatusOf(roster, counts) {
-		v := view{Philosopher: roster[i].Localized(lang), Unlocked: h.conv.Allowed(r.Context(), entitlements.Philosopher(st.ID)), Challenges: st.Challenges, Earned: st.Unlocked}
+		v := view{Philosopher: roster[i].Localized(lang), Unlocked: h.conv.Allowed(r.Context(), entitlements.Philosopher(st.ID)), Challenges: st.Challenges, Earned: st.Unlocked,
+			Required: progress.Required, InProgress: towardFinish(open[st.ID], progress.ProfileFor(st.ID))}
+		for _, later := range roster[i+1:] {
+			v.Leads = append(v.Leads, later.Localized(lang).Name)
+		}
 		for _, m := range st.Missing {
 			p, _ := h.d.Roster.Get(m.Philosopher)
 			v.Needs = append(v.Needs, need{ID: m.Philosopher, Name: p.Localized(lang).Name, Done: m.Done, Required: progress.Required})
@@ -88,6 +100,19 @@ func (h *handler) philosophers(w http.ResponseWriter, r *http.Request) {
 		out = append(out, v)
 	}
 	transport.WriteJSON(w, http.StatusOK, map[string]any{"philosophers": out})
+}
+
+// towardFinish scales a banked maturity (thousandths) to the finish line of the philosopher's profile, so that a full bar means the maturity
+// is there (the turns and own-words rules are still needed to finish).
+func towardFinish(banked int, p progress.Profile) int {
+	line := int(p.Threshold*1000 + 0.5)
+	if banked <= 0 || line <= 0 {
+		return 0
+	}
+	if banked >= line {
+		return 1000
+	}
+	return banked * 1000 / line
 }
 
 type conversationJSON struct {

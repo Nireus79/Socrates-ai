@@ -1021,3 +1021,28 @@ test("the screens never rely on an inline style (the page's policy would ignore 
   assert.ok(!/\bstyle: "/.test(src), "an element gets a style attribute");
   assert.match(fs.readFileSync(path.join(__dirname, "../index.html"), "utf8"), /style-src 'self'(?! 'unsafe-inline')/);
 });
+
+test("the progress screen shows every philosopher, unlocked or not, with the questions thought through and the question in progress", async () => {
+  const p = page(ready({
+    "GET /api/philosophers": [200, { philosophers: [
+      { id: "socrates", name: "Socrates", era: "Athens", unlocked: true, challenges: 7, required: 5, leads: ["Diogenes", "Plato"], inProgress: 0 },
+      { id: "diogenes", name: "Diogenes", era: "Corinth", unlocked: true, challenges: 1, required: 5, leads: ["Plato"], inProgress: 640 },
+      { id: "plato", name: "Plato", era: "Athens", unlocked: true, challenges: 0, required: 5 },
+    ] }],
+  }));
+  p.app.start(p.root); await settle();
+  const link = [...p.root.querySelectorAll("button.link")].find((b) => b.textContent === "Progress");
+  assert.ok(link, "the home screen needs a way to the progress screen");
+  click(link); await settle();
+  const cards = [...p.root.querySelectorAll(".card")];
+  assert.equal(cards.length, 3, "every philosopher has a card, even when unlocked");
+  assert.match(cards[0].textContent, /Questions thought through: 7/);
+  const bars = (c) => [...c.querySelectorAll("progress")].map((b) => [b.getAttribute("value"), b.getAttribute("max")]);
+  assert.deepEqual(bars(cards[0]), [["5", "5"]], "the count toward the next ones stops at the goal");
+  assert.deepEqual(bars(cards[1]), [["1", "5"], ["640", "1000"]]);
+  assert.deepEqual(bars(cards[2]), [], "the last philosopher leads nowhere and has no open question");
+  assert.match(cards[0].textContent, /Toward meeting Diogenes, Plato: 5 of 5/);
+  assert.ok(!p.root.querySelector("[style]"), "the page's policy blocks inline styles");
+  click([...p.root.querySelectorAll("button.link")].find((b) => b.textContent === "Done")); await settle();
+  assert.ok(p.root.querySelector(".card.click"), "Done goes back to the philosophers");
+});

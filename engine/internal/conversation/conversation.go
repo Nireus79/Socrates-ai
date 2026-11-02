@@ -771,7 +771,7 @@ func (s *Service) remember(ctx context.Context, client Completer, conv store.Con
 	changes, _ := ledger.Validate(reading.Ops, shown, userTexts, newest.Content, newest.Suggested, conv.PhilosopherID, conv.ID)
 	if action == nil && len(changes) == 0 {
 		// nothing new was said, but an inquiry that qualified beyond the day's limit is counted on the first turn after it
-		if haveCur && !cur.Completed && cur.Banked >= int(progress.Default.Threshold*1000) {
+		if haveCur && !cur.Completed && cur.Banked >= int(progress.ProfileFor(cur.PhilosopherID).Threshold*1000) {
 			if err := s.st.Update(ctx, func(o *store.Ops) error { return s.score(ctx, o, cur) }); err != nil {
 				log.Printf("[conversation] the ledger could not be saved")
 			}
@@ -853,7 +853,8 @@ func (s *Service) score(ctx context.Context, o *store.Ops, inq store.Inquiry) er
 	if err != nil {
 		return err
 	}
-	r := progress.Score(entries, progress.Default)
+	prof := progress.ProfileFor(inq.PhilosopherID)
+	r := progress.Score(entries, prof)
 	turns, err := o.AddInquiryTurn(ctx, inq.ID)
 	if err != nil {
 		return err
@@ -862,7 +863,7 @@ func (s *Service) score(ctx context.Context, o *store.Ops, inq store.Inquiry) er
 	if err := o.Bank(ctx, inq.ID, r.Thousandths()); err != nil {
 		return err
 	}
-	if inq.Completed || inq.Turns < progress.Default.MinTurns || !r.Complete(progress.Default) {
+	if inq.Completed || inq.Turns < prof.MinTurns || !r.Complete(prof) {
 		return nil
 	}
 	if inq.ParentID != "" { // a deepening is not finished by what it inherited: its own thinking has to reach the line again
@@ -876,7 +877,7 @@ func (s *Service) score(ctx context.Context, o *store.Ops, inq store.Inquiry) er
 				fresh = append(fresh, e)
 			}
 		}
-		if !progress.Score(fresh, progress.Default).Complete(progress.Default) {
+		if !progress.Score(fresh, prof).Complete(prof) {
 			return nil
 		}
 	}

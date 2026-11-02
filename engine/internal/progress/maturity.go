@@ -23,6 +23,18 @@ type Profile struct {
 // Default is the profile of every philosopher until one is given his own.
 var Default = Profile{Threshold: 0.6, MinSettled: 2, MinOwn: 2, MinTurns: 5, CapTerms: 5, CapClaims: 6, CapTensions: 3, Suggested: 0.4}
 
+// profiles holds a philosopher's own numbers where he has them. Every philosopher starts on Default; a philosopher gets his own entry
+// here when beta data shows his inquiries finish too early or too late (no number is guessed in advance).
+var profiles = map[string]Profile{}
+
+// ProfileFor is the profile of one philosopher: his own if he has one, otherwise Default.
+func ProfileFor(id string) Profile {
+	if p, ok := profiles[id]; ok {
+		return p
+	}
+	return Default
+}
+
 // Result is the reading of one inquiry.
 type Result struct {
 	Maturity float64 // 0 to 1

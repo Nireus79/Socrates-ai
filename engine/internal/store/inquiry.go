@@ -235,6 +235,28 @@ func (o *Ops) ChallengeCounts(ctx context.Context) (map[string]int, error) {
 	return out, rows.Err()
 }
 
+// OpenBanked is, for each philosopher, the maturity (thousandths) the newest unfinished inquiry with him has reached. A philosopher with
+// no unfinished inquiry is absent. It carries no text.
+func (o *Ops) OpenBanked(ctx context.Context) (map[string]int, error) {
+	rows, err := o.q.QueryContext(ctx, "SELECT philosopher_id, banked FROM inquiry WHERE completed = 0 ORDER BY updated_at DESC, rowid DESC")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]int{}
+	for rows.Next() {
+		var id string
+		var n int
+		if err := rows.Scan(&id, &n); err != nil {
+			return nil, err
+		}
+		if _, seen := out[id]; !seen {
+			out[id] = n
+		}
+	}
+	return out, rows.Err()
+}
+
 // Challenge is a finished challenge as it travels in an export: no text, only whom it was with and when.
 type Challenge struct {
 	PhilosopherID string

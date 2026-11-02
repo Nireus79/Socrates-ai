@@ -155,3 +155,16 @@ func TestTheDayStartsAtLocalMidnight(t *testing.T) {
 		t.Fatal(d)
 	}
 }
+
+func TestEveryPhilosopherHasAProfileAndOneWithHisOwnNumbersKeepsThem(t *testing.T) {
+	for _, id := range []string{"socrates", "diogenes", "plato", "aristotle", "nobody"} {
+		if ProfileFor(id) != Default {
+			t.Errorf("%s should start on the default profile", id)
+		}
+	}
+	profiles["plato"] = Profile{Threshold: 0.9}
+	defer delete(profiles, "plato")
+	if ProfileFor("plato").Threshold != 0.9 || ProfileFor("socrates") != Default {
+		t.Fatal("a philosopher's own profile must be his alone")
+	}
+}
