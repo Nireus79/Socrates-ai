@@ -19,6 +19,7 @@ import (
 	"socrates/internal/llm"
 	"socrates/internal/philosophers"
 	"socrates/internal/progress"
+	"socrates/internal/review"
 	"socrates/internal/safety"
 	"socrates/internal/store"
 	"socrates/internal/suggest"
@@ -70,7 +71,53 @@ type Service struct {
 	bgLocks map[string]*sync.Mutex // one piece of background work at a time per conversation; never held by a turn
 	bg      sync.WaitGroup
 	reports map[string]int // how many replies were reported in a conversation; a summary written across a report is thrown away
+
+	// onReview is set by tests only, to read the draft and the verdict of the second check. Production code never sets it, so no draft is kept or logged.
+	onReview    func(draft string, v review.Verdict)
+	onGate      func(draft string, v safety.GateVerdict) // tests only, like onReview
+	reviewStats ReviewStats                              // counts only, never text; guarded by mu
+	review      bool                                     // the second check on a draft (internal/review); off unless EnableReview is called, so a scripted model need not expect it
 }
+
+// ReviewStats counts what the second check did: how many drafts it looked at, how many it sent back (by category), how many times it could
+// not be had. Counts only, so that it can be read without any user text.
+type ReviewStats struct {
+	Checked int            `json:"checked"`
+	Revised map[string]int `json:"revised"`
+	Failed  int            `json:"failed"`
+}
+
+// ReviewStats is a copy of the counts so far.
+func (s *Service) ReviewStats() ReviewStats {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := ReviewStats{Checked: s.reviewStats.Checked, Failed: s.reviewStats.Failed, Revised: map[string]int{}}
+	for k, v := range s.reviewStats.Revised {
+		out.Revised[k] = v
+	}
+	return out
+}
+
+func (s *Service) countReview(checked bool, failed bool, category string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.reviewStats.Revised == nil {
+		s.reviewStats.Revised = map[string]int{}
+	}
+	if checked {
+		s.reviewStats.Checked++
+	}
+	if failed {
+		s.reviewStats.Failed++
+	}
+	if category != "" {
+		s.reviewStats.Revised[category]++
+	}
+}
+
+// EnableReview turns on the second check on every philosopher's reply: whether the draft keeps the whole in view (DIALECTIC.md 15). It is a
+// quality check, not a safety one: if it cannot be had or does not flag, the draft stands; if it flags, the draft is written again once.
+func (s *Service) EnableReview() { s.review = true }
 
 func New(st *store.Store, models ModelSource, roster *philosophers.Registry) *Service {
 	return &Service{st: st, models: models, roster: roster, rights: entitlements.Beta{}, now: time.Now, locks: map[string]*sync.Mutex{}, bgLocks: map[string]*sync.Mutex{}, reports: map[string]int{}}
@@ -426,7 +473,7 @@ func (s *Service) send(ctx context.Context, conversationID, text string, suggest
 		return s.fixed(ctx, conversationID, d, &text, suggested)
 
 	case safety.ActionAskBeforeRefusing:
-		q, err := s.guarded(ctx, client, ph.System()+"\n\n"+philosophers.ReflectiveQuestion, contextFor(history, text), toLLM(history), text)
+		q, err := s.guarded(ctx, client, ph.System()+"\n\n"+philosophers.ReflectiveQuestion, contextFor(history, text), toLLM(history), text, "", "", "")
 		if err != nil && !errors.Is(err, errHeldBack) {
 			return unavailable(err), nil
 		}
@@ -461,7 +508,7 @@ func (s *Service) send(ctx context.Context, conversationID, text string, suggest
 		if sum, _, ok, _ := s.st.Summary(ctx, conversationID); ok {
 			system += "\n\nWhat has been said earlier in this conversation, in short:\n" + sum
 		}
-		reply, err := s.guarded(ctx, client, system, contextFor(history, text), toLLM(history), text)
+		reply, err := s.guarded(ctx, client, system, contextFor(history, text), toLLM(history), text, ph.Traps, ph.Notes, ph.Reminder())
 		switch {
 		case errors.Is(err, errHeldBack): // held back twice: the user's message is kept, the reply is a fixed text
 			d.Marker = safety.MarkerGateFallback
@@ -564,15 +611,26 @@ func trimCutOff(t string) string {
 	return t
 }
 
+// withReminder puts the philosopher's own reminder after the newest message of the person, marked as his, not theirs, so that his questions
+// stay near the end of the context in a long conversation. The stored message is untouched; only this one request carries it.
+func withReminder(msgs []llm.Message, reminder string) []llm.Message {
+	if reminder == "" || len(msgs) == 0 || msgs[len(msgs)-1].Role != "user" {
+		return msgs
+	}
+	out := append([]llm.Message(nil), msgs...)
+	out[len(out)-1].Content += "\n\n[Your own reminder, not the person's words: " + reminder + "]"
+	return out
+}
+
 // guarded writes a reply and checks it before anyone sees it. A draft that is flagged is written again once, with the reason; flagged
 // twice, errHeldBack. A draft that cannot be checked, or a model that fails, is an error of the provider kind: nothing is shown.
-func (s *Service) guarded(ctx context.Context, client Completer, system string, msgs []llm.Message, judgeCtx []llm.Message, newest string) (string, error) {
+func (s *Service) guarded(ctx context.Context, client Completer, system string, msgs []llm.Message, judgeCtx []llm.Message, newest string, traps, notes, reminder string) (string, error) {
 	write := func(extra string) (string, error) {
 		sys := system
 		if extra != "" {
 			sys += "\n\n" + extra
 		}
-		resp, err := client.Complete(ctx, llm.Request{Role: llm.RoleReply, System: sys, Messages: msgs, MaxTokens: 4000})
+		resp, err := client.Complete(ctx, llm.Request{Role: llm.RoleReply, System: sys, Messages: withReminder(msgs, reminder), MaxTokens: 4000})
 		if err != nil {
 			return "", err
 		}
@@ -587,7 +645,8 @@ func (s *Service) guarded(ctx context.Context, client Completer, system string, 
 	}
 	gateContext := append(append([]llm.Message(nil), judgeCtx...), llm.Message{Role: "user", Content: newest})
 	extra := ""
-	for attempt := 0; attempt < 2; attempt++ {
+	flagged, reviewed := 0, false
+	for {
 		draft, err := write(extra)
 		if err != nil {
 			return "", err
@@ -596,11 +655,36 @@ func (s *Service) guarded(ctx context.Context, client Completer, system string, 
 		if err != nil {
 			return "", err
 		}
-		if !gv.Flagged {
-			return draft, nil
+		if s.onGate != nil {
+			s.onGate(draft, gv)
 		}
-		log.Printf("[conversation] a draft was held back (%s)", gv.Category) // the category only, never the draft or the reason
-		extra = philosophers.HeldBack(gv.Reason)
+		if gv.Flagged {
+			log.Printf("[conversation] a draft was held back (%s)", gv.Category) // the category only, never the draft or the reason
+			if flagged++; flagged >= 2 {
+				break
+			}
+			extra = philosophers.HeldBack(gv.Reason)
+			continue
+		}
+		if s.review && traps != "" && !reviewed {
+			reviewed = true // one revision at most; a failed check leaves the draft as it is
+			rv, rerr := review.Check(ctx, client, traps, notes, gateContext, draft)
+			if rerr == nil && s.onReview != nil {
+				s.onReview(draft, rv)
+			}
+			switch {
+			case rerr != nil:
+				s.countReview(false, true, "")
+			case rv.Revise:
+				s.countReview(true, false, string(rv.Category))
+				log.Printf("[conversation] a draft was written again (%s)", rv.Category)
+				extra = review.Note(rv)
+				continue
+			default:
+				s.countReview(true, false, "")
+			}
+		}
+		return draft, nil
 	}
 	return "", errHeldBack
 }

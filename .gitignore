@@ -20,3 +20,4 @@ desktop/*.syso
 engine/internal/conversation/battery/
 
 mobile/.test-engine-build
+engine/internal/conversation/pressure_live_test.go

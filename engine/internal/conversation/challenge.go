@@ -141,7 +141,7 @@ func (s *Service) Offer(ctx context.Context, conversationID string) (*Result, er
 		return unavailable(err), nil
 	}
 	pitchSystem := system + "\n\n" + posingNote(topic)
-	pitch, err := s.guarded(ctx, client, pitchSystem, contextFor(history, asked), toLLM(history), asked)
+	pitch, err := s.guarded(ctx, client, pitchSystem, contextFor(history, asked), toLLM(history), asked, "", "", "")
 	switch {
 	case errors.Is(err, errHeldBack):
 		return unavailable(errHeldBack), nil

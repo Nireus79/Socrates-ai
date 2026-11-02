@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"path/filepath"
+	"socrates/internal/review"
 	"strings"
 	"sync"
 	"testing"
@@ -129,8 +130,14 @@ func TestANormalTurnKeepsTheUsersWordsAndTheReplyAndShowsTheModelsWhatTheyNeed(t
 	if judge.Role != llm.RoleFast || reply.Role != llm.RoleReply || gate.Role != llm.RoleFast {
 		t.Fatalf("roles of the calls: %s %s %s", judge.Role, reply.Role, gate.Role)
 	}
-	if !strings.Contains(reply.System, "artificial Socrates") || len(reply.Messages) != 1 || reply.Messages[0].Content != userWords {
+	if !strings.Contains(reply.System, "artificial Socrates") || len(reply.Messages) != 1 || !strings.HasPrefix(reply.Messages[0].Content, userWords) {
 		t.Fatalf("the reply request: %+v", reply)
+	}
+	if m := reply.Messages[0].Content; !strings.Contains(m, "Your own reminder, not the person's words") || !strings.Contains(m, "Does my next step come out of the person's own words") {
+		t.Fatalf("the philosopher's own questions did not reach the newest message: %q", m)
+	}
+	if strings.Contains(judge.Messages[0].Content, "Your own reminder") || strings.Contains(gate.Messages[0].Content, "Your own reminder") {
+		t.Fatal("the reminder reached the safety stage")
 	}
 	if !strings.Contains(gate.Messages[0].Content, "Tell me first what you mean by it.") {
 		t.Fatal("the gate did not see the draft")
@@ -865,5 +872,102 @@ func TestAnUnreadableMemorySettingCountsAsOff(t *testing.T) {
 	e.st.SetSetting(bg, MemoryKey, "1")
 	if !e.svc.MemoryEnabled(bg) {
 		t.Fatal("1 is on")
+	}
+}
+
+const (
+	reviewOK   = `{"revise": false, "category": "none", "reason": ""}`
+	reviewFlag = `{"revise": true, "category": "part_as_whole", "reason": "it takes one step for the whole"}`
+)
+
+func TestTheSecondCheckHasADraftWrittenAgainOnceAndTheNewDraftIsShown(t *testing.T) {
+	e := newEnv(t, llm.Say(judgeOK), llm.Say("First draft."), llm.Say(gateOK), llm.Say(reviewFlag), llm.Say("Second draft."), llm.Say(gateOK), llm.Say("A title"))
+	e.svc.EnableReview()
+	res := e.send(t, userWords)
+	if res.Outcome != OutcomeReplied || res.Added[1].Text != "Second draft." {
+		t.Fatalf("%+v", res)
+	}
+	reply2 := e.mock.Requests[4]
+	if reply2.Role != llm.RoleReply || !strings.Contains(reply2.System, "it takes one step for the whole") {
+		t.Fatalf("the second draft was not told what to put right: %+v", reply2)
+	}
+	if got := e.mock.Requests[3].Messages[0].Content; !strings.Contains(got, "A middle step of a construction") || !strings.Contains(got, "Status of the city") {
+		t.Fatal("the review was not given what this philosopher must foresee and the checked facts about the work")
+	}
+	if strings.Contains(e.logs.String(), "First draft") || strings.Contains(e.logs.String(), "one step for the whole") {
+		t.Fatal("the log holds the draft or the reason")
+	}
+}
+
+func TestTheSecondCheckIsAskedOnlyOnceAndNeverSwapsAReplyForAFixedText(t *testing.T) {
+	// flagged once, and the second draft is not reviewed again: it is shown as it is
+	e := newEnv(t, llm.Say(judgeOK), llm.Say("First."), llm.Say(gateOK), llm.Say(reviewFlag), llm.Say("Second."), llm.Say(gateOK), llm.Say("T"))
+	e.svc.EnableReview()
+	if res := e.send(t, userWords); res.Added[1].Text != "Second." {
+		t.Fatalf("%+v", res)
+	}
+	if got, _ := e.st.Conversation(bg, e.conv.ID); got.Title != "T" {
+		t.Fatalf("a second review took the title's turn in the script: %q", got.Title)
+	}
+	if e.mock.Remaining() != 0 {
+		t.Fatal("the script was not used up")
+	}
+}
+
+func TestAReviewThatFailsOrIsOffLeavesTheDraftStanding(t *testing.T) {
+	e := newEnv(t, llm.Say(judgeOK), llm.Say("The draft."), llm.Say(gateOK), llm.Fail(errors.New("down")), llm.Say("T"))
+	e.svc.EnableReview()
+	if res := e.send(t, userWords); res.Outcome != OutcomeReplied || res.Added[1].Text != "The draft." {
+		t.Fatalf("%+v", res)
+	}
+	off := newEnv(t, llm.Say(judgeOK), llm.Say("The draft."), llm.Say(gateOK), llm.Say("T"))
+	if res := off.send(t, userWords); res.Added[1].Text != "The draft." || off.mock.Remaining() != 0 {
+		t.Fatalf("a disabled review made a call: %+v", res)
+	}
+}
+
+func TestARevisedDraftStillGoesThroughTheSafetyGate(t *testing.T) {
+	e := newEnv(t, llm.Say(judgeOK), llm.Say("First."), llm.Say(gateOK), llm.Say(reviewFlag), llm.Say("Second."), llm.Say(gateFlag), llm.Say("Third."), llm.Say(gateOK), llm.Say("T"))
+	e.svc.EnableReview()
+	if res := e.send(t, userWords); res.Outcome != OutcomeReplied || res.Added[1].Text != "Third." {
+		t.Fatalf("%+v", res)
+	}
+}
+
+func TestTheSecondCheckCountsWhatItDidAndNothingElse(t *testing.T) {
+	e := newEnv(t, llm.Say(judgeOK), llm.Say("First draft."), llm.Say(gateOK), llm.Say(reviewFlag), llm.Say("Second draft."), llm.Say(gateOK), llm.Say("T"))
+	e.svc.EnableReview()
+	e.send(t, userWords)
+	st := e.svc.ReviewStats()
+	if st.Checked != 1 || st.Failed != 0 || st.Revised["part_as_whole"] != 1 {
+		t.Fatalf("%+v", st)
+	}
+	f := newEnv(t, llm.Say(judgeOK), llm.Say("The draft."), llm.Say(gateOK), llm.Fail(errors.New("down")), llm.Say("T"))
+	f.svc.EnableReview()
+	f.send(t, userWords)
+	if st := f.svc.ReviewStats(); st.Failed != 1 || st.Checked != 0 {
+		t.Fatalf("%+v", st)
+	}
+}
+
+func TestATestCanReadTheDraftAndTheVerdictOfTheSecondCheck(t *testing.T) {
+	e := newEnv(t, llm.Say(judgeOK), llm.Say("First draft."), llm.Say(gateOK), llm.Say(reviewFlag), llm.Say("Second draft."), llm.Say(gateOK), llm.Say("T"))
+	e.svc.EnableReview()
+	var drafts []string
+	var revise []bool
+	e.svc.onReview = func(d string, v review.Verdict) { drafts = append(drafts, d); revise = append(revise, v.Revise) }
+	e.send(t, userWords)
+	if len(drafts) != 1 || drafts[0] != "First draft." || !revise[0] {
+		t.Fatalf("%v %v", drafts, revise)
+	}
+}
+
+func TestATestCanReadWhatTheOutputGateFlagged(t *testing.T) {
+	e := newEnv(t, llm.Say(judgeOK), llm.Say("A draft."), llm.Say(`{"flagged": true, "category": "hatred", "reason": "r"}`), llm.Say("A better draft."), llm.Say(gateOK), llm.Say("T"))
+	var seen []safety.GateVerdict
+	e.svc.onGate = func(d string, v safety.GateVerdict) { seen = append(seen, v) }
+	e.send(t, userWords)
+	if len(seen) != 2 || !seen[0].Flagged || seen[1].Flagged {
+		t.Fatalf("%+v", seen)
 	}
 }
