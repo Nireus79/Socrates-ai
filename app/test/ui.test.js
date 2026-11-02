@@ -967,8 +967,26 @@ test("the theme is the profile's own choice: the saved one is applied, a new one
 
 test("the stylesheet follows the device in dark unless Light was chosen, and Dark forces it", () => {
   const css = fs.readFileSync(path.join(__dirname, "../style.css"), "utf8");
-  assert.match(css, /prefers-color-scheme: dark\)\s*\{\s*:root:not\(\[data-theme="light"\]\)/);
+  assert.match(css, /prefers-color-scheme: dark\)\s*\{\s*:root:not\(\[data-theme="light"\]\):not\(\[data-device="light"\]\)/);
   assert.match(css, /:root\[data-theme="dark"\]\s*\{[^}]*--bg: #17140f/);
+  assert.match(css, /:root\[data-device="dark"\]:not\(\[data-theme="light"\]\)/, "the window's own reading of the system must be able to make the page dark");
+});
+
+test("in the desktop window the page follows the system's own dark or light, and the person's choice still wins", async () => {
+  const p = page(ready({ "GET /api/settings/theme": [200, { theme: "auto" }] }));
+  let answer = "dark";
+  p.dom.window.go = { main: { App: { SystemTheme: async () => answer } } };
+  p.app.start(p.root); await settle(10);
+  const root = p.dom.window.document.documentElement;
+  assert.equal(root.dataset.device, "dark", "the system said dark");
+  assert.equal(root.dataset.theme, undefined, "the person's choice is still automatic");
+  click(button(p.root, "Settings")); await settle(10);
+  const sel = [...p.root.querySelectorAll("select")].find((s) => [...s.options].some((o) => o.value === "light"));
+  assert.equal(sel.value, "auto", "the picker must not show the system's answer as if it were a choice");
+  answer = "light"; p.dom.window.dispatchEvent(new p.dom.window.Event("focus")); await settle();
+  assert.equal(root.dataset.device, "light", "coming back to the window re-reads the system");
+  answer = ""; p.dom.window.dispatchEvent(new p.dom.window.Event("focus")); await settle();
+  assert.equal(root.dataset.device, undefined, "no answer leaves the web view to decide");
 });
 
 test("every text the screens say has Greek words, and no Greek entry is left over", () => {
@@ -1045,4 +1063,22 @@ test("the progress screen shows every philosopher, unlocked or not, with the que
   assert.ok(!p.root.querySelector("[style]"), "the page's policy blocks inline styles");
   click([...p.root.querySelectorAll("button.link")].find((b) => b.textContent === "Done")); await settle();
   assert.ok(p.root.querySelector(".card.click"), "Done goes back to the philosophers");
+});
+
+test("the chat shows the questions thought through and the question under way, and reads them again after every reply", async () => {
+  let inProgress = 200, done = 2;
+  const p = page(ready({
+    "GET /api/philosophers": () => [200, { philosophers: [{ id: "socrates", name: "Socrates", era: "Athens", unlocked: true, challenges: done, required: 5, inProgress }] }],
+    "POST /api/conversations/c1/messages": () => { inProgress = 700; done = 3; return [200, { outcome: "replied", added: [{ role: "user", text: "Hm." }, { role: "philosopher", text: "And then?" }] }]; },
+  }));
+  p.app.start(p.root); await settle();
+  click(p.root.querySelector(".card.click")); await settle(10);
+  const line = () => p.root.querySelector(".progressline");
+  assert.ok(line(), "the chat has a progress line");
+  assert.match(line().textContent, /Questions thought through: 2/);
+  assert.equal(line().querySelector("progress").getAttribute("value"), "200");
+  const ta = p.root.querySelector("textarea");
+  ta.value = "Hm."; p.root.querySelector("form").dispatchEvent(new p.dom.window.Event("submit", { cancelable: true })); await settle(10);
+  assert.match(line().textContent, /Questions thought through: 3/, "read again after the reply");
+  assert.equal(line().querySelector("progress").getAttribute("value"), "700");
 });

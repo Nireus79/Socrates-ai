@@ -353,13 +353,20 @@ func TestTheRosterShowsProgressForEveryPhilosopherEvenWhenAllAreUnlocked(t *test
 	a.finishChallenges(t, "socrates", 5)
 	c, _ := a.st.CreateConversation(bg, "plato")
 	in, _ := a.st.CreateInquiry(bg, store.Inquiry{PhilosopherID: "plato", ConversationID: c.ID, Question: "q", Quote: "quote"})
-	a.st.Bank(bg, in.ID, 430)
+	a.st.Update(bg, func(o *store.Ops) error {
+		for i := 0; i < 2; i++ { // two turns of the person's, nothing settled yet: the turns part is 2 of 5, so a quarter of that
+			if _, err := o.AddInquiryTurn(bg, in.ID); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 	_, r := a.do(t, "GET", "/api/philosophers", "")
 	soc, pl, ar := find(t, r, "socrates"), find(t, r, "plato"), find(t, r, "aristotle")
 	if soc["unlocked"] != true || soc["challenges"] != float64(5) || soc["required"] != float64(5) {
 		t.Fatalf("%v", soc)
 	}
-	if pl["inProgress"] != float64(716) || soc["inProgress"] != float64(0) {
+	if pl["inProgress"] != float64(100) || soc["inProgress"] != float64(0) {
 		t.Fatalf("the open question must show only with its own philosopher: %v %v", soc, pl)
 	}
 	if len(soc["leads"].([]any)) != 3 || ar["leads"] != nil {

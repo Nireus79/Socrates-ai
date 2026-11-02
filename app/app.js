@@ -146,6 +146,17 @@ function applyTheme(v) {
   if (v === "light" || v === "dark") root.dataset.theme = v; else delete root.dataset.theme;
   try { localStorage.setItem("theme", v === "light" || v === "dark" ? v : "auto"); } catch (_) { /* no storage: the choice lasts until the page closes */ }
 }
+// The desktop window asks the system whether it is dark or light and tells the page (the web view does not always follow it). The answer goes
+// in data-device, which only "Automatic" listens to: the person's own choice (data-theme) always wins. Without the window, or when the
+// system gives no answer, the browser's own setting decides, as before.
+async function followDevice() {
+  const bound = typeof window !== "undefined" && window.go && window.go.main && window.go.main.App;
+  if (!bound || !bound.SystemTheme) return;
+  try {
+    const v = await bound.SystemTheme();
+    if (v === "dark" || v === "light") document.documentElement.dataset.device = v; else delete document.documentElement.dataset.device;
+  } catch (_) { /* the browser's own setting decides */ }
+}
 function rememberedTheme() { try { return localStorage.getItem("theme") || "auto"; } catch (_) { return "auto"; } }
 async function loadTheme() {
   const r = await api("GET", "/api/settings/theme");
@@ -615,7 +626,19 @@ const REASONS = { harmful: "It was harmful", hateful: "It was hateful or insulti
         learned > 0 ? el("button", { class: "link", type: "button", onclick: () => removeConversation(true) }, t("Delete, but let him keep it")) : null,
         el("button", { class: "link", type: "button", onclick: hideDelete }, t("Cancel"))));
   };
-  const refreshHelp = () => { helpBtn.hidden = !canHelp(); if (helpBtn.hidden) helpBox.hidden = true; showOffer(); };
+  // The person sees how far they have come with this philosopher without leaving the chat: the questions thought through to the end and
+  // how far the question now under way is. No numbers beyond the count; the bar is read again after every turn.
+  const progressLine = el("div", { class: "progressline" });
+  const refreshProgress = async () => {
+    const res = await api("GET", "/api/philosophers");
+    if (res.status !== 200) return;
+    S.philosophers = res.data.philosophers || [];
+    const me = S.philosophers.find((p) => p.id === conv.philosopherId);
+    if (!me) { progressLine.replaceChildren(); return; }
+    progressLine.replaceChildren(el("span", { class: "muted" }, t("Questions thought through: {n}", { n: me.challenges || 0 })),
+      me.inProgress > 0 ? el("progress", { value: String(me.inProgress), max: "1000", "aria-label": t("A question in progress") }) : null);
+  };
+  const refreshHelp = () => { helpBtn.hidden = !canHelp(); if (helpBtn.hidden) helpBox.hidden = true; showOffer(); refreshProgress(); };
   const showSuggestions = async () => {
     helpBtn.disabled = true; helpBox.hidden = false;
     helpBox.replaceChildren(el("span", { class: "muted" }, t("Thinking of some starting points…")));
@@ -674,7 +697,7 @@ const REASONS = { harmful: "It was harmful", hateful: "It was hateful or insulti
   mount(el("header", {}, el("button", { class: "link", onclick: back }, t("← Back")), el("h1", {}, who.name),
     el("button", { class: "link", onclick: () => show(() => memory(who)) }, t("Memory")),
     el("button", { class: "link", onclick: showDelete }, t("Delete"))),
-    main, err, helpBox, challengeBar, deleteBox, el("div", { class: "helpbar" }, helpBtn, challengeBtn), form);
+    progressLine, main, err, helpBox, challengeBar, deleteBox, el("div", { class: "helpbar" }, helpBtn, challengeBtn), form);
   refreshHelp(); main.scrollTop = main.scrollHeight; input.focus();
 }
 
@@ -775,6 +798,6 @@ async function exportData() {
   document.body.append(a); a.click(); a.remove();
 }
 
-function start(root) { S.root = root || document.getElementById("root"); S.lang = detectedLang(); applyTheme(rememberedTheme()); window.socratesBack = goBack; return boot(); }
+function start(root) { S.root = root || document.getElementById("root"); S.lang = detectedLang(); applyTheme(rememberedTheme()); followDevice(); window.addEventListener("focus", followDevice); window.socratesBack = goBack; return boot(); }
 if (typeof module !== "undefined") module.exports = { start, el, api, S };
 else window.addEventListener("DOMContentLoaded", () => start());

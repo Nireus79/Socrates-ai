@@ -91,3 +91,20 @@ func (r Result) Thousandths() int { return int(r.Maturity*1000 + 0.5) }
 func (r Result) Complete(p Profile) bool {
 	return r.Maturity >= p.Threshold && r.Settled >= p.MinSettled && r.Own >= p.MinOwn && r.Examined >= 1
 }
+
+// Fraction is how far an inquiry is from the finish line, 0 to 1, for the person to see. The line is several things at once (enough turns
+// of the person's, enough maturity, enough of it in their own words, a view examined), so the fraction is the mean of how far each one is
+// (each capped at its line): it moves with every turn the person takes, and it reaches 1 only when the inquiry can finish.
+func Fraction(r Result, turns int, p Profile) float64 {
+	part := func(have, line float64) float64 {
+		if line <= 0 || have >= line {
+			return 1
+		}
+		if have < 0 {
+			return 0
+		}
+		return have / line
+	}
+	sum := part(float64(turns), float64(p.MinTurns)) + part(r.Maturity, p.Threshold) + part(float64(r.Own), float64(p.MinOwn)) + part(float64(r.Examined), 1)
+	return sum / 4
+}

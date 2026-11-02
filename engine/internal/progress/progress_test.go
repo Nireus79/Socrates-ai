@@ -168,3 +168,26 @@ func TestEveryPhilosopherHasAProfileAndOneWithHisOwnNumbersKeepsThem(t *testing.
 		t.Fatal("a philosopher's own profile must be his alone")
 	}
 }
+
+func TestTheFractionMovesWithEveryTurnAndIsOneOnlyWhenTheInquiryCanFinish(t *testing.T) {
+	p := Default
+	if Fraction(Result{}, 0, p) != 0 {
+		t.Fatal("nothing yet is nothing")
+	}
+	a, b := Fraction(Result{}, 1, p), Fraction(Result{}, 3, p)
+	if !(0 < a && a < b && b < 1) {
+		t.Fatalf("turns alone must move it: %v %v", a, b)
+	}
+	// everything but the turns: not finished
+	if f := Fraction(Result{Maturity: 0.9, Settled: 3, Own: 3, Examined: 2}, 2, p); f >= 1 || f <= 0.7 {
+		t.Fatalf("%v", f)
+	}
+	// everything: one, and it never goes above one
+	if f := Fraction(Result{Maturity: 0.9, Settled: 3, Own: 3, Examined: 2}, 9, p); f != 1 {
+		t.Fatalf("%v", f)
+	}
+	done := Result{Maturity: 0.6, Settled: 2, Own: 2, Examined: 1}
+	if !done.Complete(p) || Fraction(done, p.MinTurns, p) != 1 {
+		t.Fatal("the fraction must reach one exactly where the inquiry can finish")
+	}
+}

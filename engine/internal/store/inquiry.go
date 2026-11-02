@@ -235,23 +235,21 @@ func (o *Ops) ChallengeCounts(ctx context.Context) (map[string]int, error) {
 	return out, rows.Err()
 }
 
-// OpenBanked is, for each philosopher, the maturity (thousandths) the newest unfinished inquiry with him has reached. A philosopher with
-// no unfinished inquiry is absent. It carries no text.
-func (o *Ops) OpenBanked(ctx context.Context) (map[string]int, error) {
-	rows, err := o.q.QueryContext(ctx, "SELECT philosopher_id, banked FROM inquiry WHERE completed = 0 ORDER BY updated_at DESC, rowid DESC")
+// OpenInquiries is, for each philosopher, the newest unfinished inquiry with him. A philosopher with none is absent.
+func (o *Ops) OpenInquiries(ctx context.Context) (map[string]Inquiry, error) {
+	rows, err := o.q.QueryContext(ctx, "SELECT "+inquiryColumns+" FROM inquiry WHERE completed = 0 ORDER BY updated_at DESC, rowid DESC")
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	out := map[string]int{}
+	out := map[string]Inquiry{}
 	for rows.Next() {
-		var id string
-		var n int
-		if err := rows.Scan(&id, &n); err != nil {
+		in, err := o.scanInquiry(rows)
+		if err != nil {
 			return nil, err
 		}
-		if _, seen := out[id]; !seen {
-			out[id] = n
+		if _, seen := out[in.PhilosopherID]; !seen {
+			out[in.PhilosopherID] = in
 		}
 	}
 	return out, rows.Err()

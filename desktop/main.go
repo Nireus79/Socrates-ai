@@ -42,6 +42,9 @@ func (a *App) OpenLink(url string) error {
 	return nil
 }
 
+// SystemTheme tells the page whether the desktop is set to "dark" or "light" ("" when unknown), because the web view may not follow it.
+func (a *App) SystemTheme() string { return shell.SystemTheme() }
+
 func enginePath() string {
 	if p := os.Getenv("SOCRATES_ENGINE"); p != "" {
 		return p
@@ -92,7 +95,9 @@ func main() {
 		AssetServer: &assetserver.Options{Assets: assets, Handler: handler},
 		OnStartup:   app.startup,
 		Bind:        []interface{}{app},
-		Linux:       &linux.Options{Icon: icon},
+		// the system's right-click menu, so that copy and paste work in the boxes of the screens
+		EnableDefaultContextMenu: true,
+		Linux:                    &linux.Options{Icon: icon},
 	})
 	if err != nil {
 		log.Fatal(err)

@@ -81,7 +81,7 @@ func (h *handler) philosophers(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusInternalServerError, "the roster could not be read")
 		return
 	}
-	open, err := h.d.Store.OpenBanked(r.Context())
+	open, err := h.d.Store.OpenInquiries(r.Context())
 	if err != nil {
 		fail(w, http.StatusInternalServerError, "the roster could not be read")
 		return
@@ -89,7 +89,7 @@ func (h *handler) philosophers(w http.ResponseWriter, r *http.Request) {
 	var out []view
 	for i, st := range progress.StatusOf(roster, counts) {
 		v := view{Philosopher: roster[i].Localized(lang), Unlocked: h.conv.Allowed(r.Context(), entitlements.Philosopher(st.ID)), Challenges: st.Challenges, Earned: st.Unlocked,
-			Required: progress.Required, InProgress: towardFinish(open[st.ID], progress.ProfileFor(st.ID))}
+			Required: progress.Required, InProgress: h.inProgress(r.Context(), open, st.ID)}
 		for _, later := range roster[i+1:] {
 			v.Leads = append(v.Leads, later.Localized(lang).Name)
 		}
@@ -102,17 +102,18 @@ func (h *handler) philosophers(w http.ResponseWriter, r *http.Request) {
 	transport.WriteJSON(w, http.StatusOK, map[string]any{"philosophers": out})
 }
 
-// towardFinish scales a banked maturity (thousandths) to the finish line of the philosopher's profile, so that a full bar means the maturity
-// is there (the turns and own-words rules are still needed to finish).
-func towardFinish(banked int, p progress.Profile) int {
-	line := int(p.Threshold*1000 + 0.5)
-	if banked <= 0 || line <= 0 {
+// inProgress is how far the newest unfinished question with a philosopher is from the finish line, 0 to 1000 (see progress.Fraction).
+func (h *handler) inProgress(ctx context.Context, open map[string]store.Inquiry, id string) int {
+	in, ok := open[id]
+	if !ok {
 		return 0
 	}
-	if banked >= line {
-		return 1000
+	entries, err := h.d.Store.InquiryEntries(ctx, in.ID)
+	if err != nil {
+		return 0
 	}
-	return banked * 1000 / line
+	p := progress.ProfileFor(id)
+	return int(progress.Fraction(progress.Score(entries, p), in.Turns, p)*1000 + 0.5)
 }
 
 type conversationJSON struct {
