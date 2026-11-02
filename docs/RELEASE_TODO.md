@@ -30,3 +30,8 @@ Written 2026-10-24, after commit 4039ba4. The beta is feature-complete; what is 
 ## Open on 2026-11-02 (founder)
 - Play needs a closed test; Moly's is still running, so the Android release waits.
 - Scoring: on 2026-11-02 the founder asked for progress to be visible for every philosopher even when unlocked; built as the Progress screen and per-philosopher profiles (PLAN 16). The per-answer grade of PLAN 12.4 is still not built.
+
+## Desktop release route (decided by the founder, 2026-11-02: GitHub releases)
+- `desktop/scripts/package.sh linux|windows vX.Y.Z` builds the window and the engine and packs `dist/socrates-<version>-<platform>-amd64.(tar.gz|zip)` with a `.sha256`. It refuses to pack an engine built with the `testprovider` tag (checked by building one). Both packages were built locally on 2026-11-02 (Linux contents and `--version` checked; the Windows zip was only built).
+- `.github/workflows/release-desktop.yml`: a pushed tag `v*` runs the gate (engine `make check`, app `npm test`), builds both packages and opens a **draft pre-release**; nothing goes public until the founder publishes the draft. The workflow was linted (actionlint) but has never run on GitHub.
+- To cut a beta: `git tag v0.1.0-beta.1 && git push origin v0.1.0-beta.1`, then publish the draft. Unsigned: Windows shows SmartScreen. Not run on Windows or macOS (macOS is not built).
