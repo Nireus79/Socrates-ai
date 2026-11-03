@@ -6,7 +6,12 @@
   const el = {
     "Log in": "Σύνδεση",
     "Register": "Εγγραφή",
+    "Support": "Στήριξη",
+    "Socrates is free and made by one person. If you would like to help it go on, you can sponsor the work.": "Ο Σωκράτης είναι δωρεάν και φτιαγμένος από έναν άνθρωπο. Αν θέλεις να βοηθήσεις να συνεχιστεί, μπορείς να στηρίξεις τη δουλειά.",
+    "Sponsor on GitHub": "Στήριξη στο GitHub",
     "Show the passphrase": "Εμφάνιση της φράσης-κωδικού",
+    "Protect this profile with a passphrase": "Προστασία αυτού του προφίλ με φράση-κωδικό",
+    "No passphrase: the profile opens with one click. Anyone who uses this computer account can open it, so choose a passphrase if that matters to you.": "Χωρίς φράση-κωδικό: το προφίλ ανοίγει με ένα κλικ. Όποιος χρησιμοποιεί αυτόν τον λογαριασμό του υπολογιστή μπορεί να το ανοίξει, οπότε διάλεξε φράση-κωδικό αν σε νοιάζει.",
     "Enter your passphrase.": "Γράψε τη φράση-κωδικό σου.",
     "A passphrase needs at least 12 characters.": "Η φράση-κωδικός θέλει τουλάχιστον 12 χαρακτήρες.",
     "Manage profiles": "Διαχείριση προφίλ",

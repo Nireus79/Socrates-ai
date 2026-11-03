@@ -751,13 +751,14 @@ function withProfiles(shell, extra = {}) {
     "GET /shell/profiles": () => [200, shell],
     "POST /shell/open": (b) => { posted.push(["open", b.id]); shell.active = b.id; return [200, {}]; },
     "POST /shell/close": () => { posted.push(["close"]); shell.active = ""; return [200, {}]; },
-    "POST /shell/profiles": (b) => { posted.push(["create", b.name]); const p = { id: "p" + (shell.profiles.length + 1), name: b.name }; shell.profiles.push(p); return [200, p]; },
+    "POST /shell/profiles": (b) => { posted.push(["create", b.name]); const p = { id: "p" + (shell.profiles.length + 1), name: b.name, open: b.open || undefined }; shell.profiles.push(p); return [200, p]; },
     "POST /shell/remove": (b) => { posted.push(["remove", b.id]); shell.profiles = shell.profiles.filter((p) => p.id !== b.id); return [200, {}]; },
   }, extra));
   const p = page(routes);
   p.posted = posted;
   return p;
 }
+const protectOn = (p) => { const b = p.root.querySelector("#protect"); b.checked = true; b.dispatchEvent(new p.dom.window.Event("change", { bubbles: true })); };
 const button = (root, label) => [...root.querySelectorAll("button")].find((b) => b.textContent === label);
 const submit = (p, form) => form.dispatchEvent(new p.dom.window.Event("submit", { bubbles: true, cancelable: true }));
 const status = (shell) => () => (shell.active ? [200, { status: "ok" }] : [409, { kind: "no_profile" }]);
@@ -845,6 +846,7 @@ test("registering checks the passphrase before anything is made, then makes the 
     "GET /api/profile": [200, { ageConfirmed: false, hasProvider: false }],
   });
   p.app.start(p.root); await settle();
+  protectOn(p);
   const form = () => p.root.querySelector("form");
   const [pass, again] = p.root.querySelectorAll("input[type=password]");
   const name = p.root.querySelector("input[type=text]");
@@ -869,6 +871,7 @@ test("a name that is taken is told on the register screen and no engine is start
   const p = withProfiles({ profiles: [{ id: "p1", name: "Anna" }], active: "" }, { "POST /shell/profiles": [400, { error: "A profile with that name already exists." }] });
   p.app.start(p.root); await settle();
   click([...p.root.querySelectorAll("[role=tab]")].find((x) => x.textContent === "Register")); await settle();
+  protectOn(p);
   p.root.querySelector("input[type=text]").value = "anna";
   const [one, two] = p.root.querySelectorAll("input[type=password]");
   one.value = two.value = "a long enough passphrase";
@@ -1099,4 +1102,47 @@ test("the provider screen offers a model on this computer only where the engine 
       assert.ok(p.root.querySelector("input[type=password]").closest("div").hidden, "no key is asked for a local model");
     }
   }
+});
+
+test("a profile can be made without a passphrase: no passphrase asked, the key goes to the keychain or a file, and it opens with one click", async () => {
+  for (const options of [["keychain", "file"], ["file"]]) {
+    const shell = { profiles: [], active: "" };
+    const setups = [];
+    let state = "needs_setup";
+    const p = withProfiles(shell, {
+      "GET /api/status": () => (state === "ready" ? [200, { status: "ok" }] : [423, {}]),
+      "GET /api/keystore/status": () => [200, { state, options }],
+      "POST /api/keystore/setup": (b) => { setups.push(b); state = "ready"; return [200, {}]; },
+      "GET /api/profile": [200, { ageConfirmed: false, hasProvider: false }],
+    });
+    p.app.start(p.root); await settle();
+    assert.equal(p.root.querySelector("#protect").checked, false, "protecting is a choice, not the default");
+    assert.ok([...p.root.querySelectorAll("input[type=password]")].every((i) => i.hidden), "no passphrase field while unprotected");
+    p.root.querySelector("input[type=text]").value = "Anna";
+    submit(p, p.root.querySelector("form")); await settle(14);
+    assert.deepStrictEqual(setups, [options[0] === "keychain" ? { mode: "keychain" } : { mode: "file", confirmInsecure: true }]);
+    assert.equal(shell.profiles[0].open, true, "the shell is told the profile has no passphrase");
+    assert.match(text(p.root), /16 or older/);
+  }
+  // logging in again: no passphrase field, no unlock call, and the profile used last is the one chosen
+  const shell = { profiles: [{ id: "p1", name: "Anna", open: true }, { id: "p2", name: "Ben", open: true }], active: "" };
+  const p = withProfiles(shell, { "GET /api/keystore/status": [200, { state: "ready" }], "GET /api/profile": [200, { ageConfirmed: true, hasProvider: false }] });
+  p.app.start(p.root); await settle();
+  assert.ok(p.root.querySelector("input[type=password]").hidden, "an open profile asks for nothing");
+  p.root.querySelector("form select").value = "p2";
+  submit(p, p.root.querySelector("form")); await settle(14);
+  assert.deepStrictEqual(p.posted, [["open", "p2"]]);
+  assert.equal(p.calls.filter((c) => c.key === "POST /api/keystore/unlock").length, 0, "no passphrase was asked of an open profile");
+});
+
+test("the home screen ends with a labelled sponsor card whose button asks the shell to open the sponsor page, and only that page", async () => {
+  const p = page(ready({ "GET /api/conversations": [200, { conversations: [] }] }));
+  const asked = [];
+  global.window.socratesShell = { ready: Promise.resolve(), base: "", token: "t", openLink: async (u) => { asked.push(u); } };
+  p.app.start(p.root); await settle(10);
+  const card = p.root.querySelector(".sponsor");
+  assert.ok(card && /Support/.test(card.textContent), "a labelled card");
+  click([...card.querySelectorAll("button")][0]); await settle();
+  assert.deepStrictEqual(asked, ["https://github.com/sponsors/Nireus79"]);
+  delete global.window.socratesShell;
 });

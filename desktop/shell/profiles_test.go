@@ -260,3 +260,34 @@ func TestOldDataIsOfferedAsAProfileThatCannotBeRemovedHere(t *testing.T) {
 		t.Fatal("the old data was removable from the list")
 	}
 }
+
+func TestAProfileMadeWithoutAPassphraseIsOpenedWithoutThePassphraseOnlyFlagAndTheOthersStayProtected(t *testing.T) {
+	m, _, _ := newManager(t)
+	a, err := m.CreateWith("Anna", true)
+	if err != nil || !a.Open {
+		t.Fatalf("%+v %v", a, err)
+	}
+	b, _ := m.Create("Ben")
+	if b.Open {
+		t.Fatal("a profile made the old way must stay protected")
+	}
+	list, _ := m.List()
+	if len(list) != 2 || !list[0].Open || list[1].Open {
+		t.Fatalf("the mark must survive the file: %+v", list)
+	}
+}
+
+func TestAnOpenProfileMayKeepItsKeyInAFileAndAProtectedOneMayNot(t *testing.T) {
+	_, h, _ := newManager(t)
+	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent/bus")
+	t.Setenv("XDG_RUNTIME_DIR", t.TempDir()) // no system keychain for the engine: the test must not write one, and the key file is then the offer
+	code, out := call(t, h, "POST", "/shell/profiles", `{"name":"Cy","open":true}`)
+	if code != 200 || out["open"] != true {
+		t.Fatalf("%d %v", code, out)
+	}
+	call(t, h, "POST", "/shell/open", `{"id":"`+out["id"].(string)+`"}`)
+	apiWhenReady(t, h, "GET", "/api/keystore/status", "", 200)
+	if code, o := call(t, h, "POST", "/api/keystore/setup", `{"mode":"file","confirmInsecure":true}`); code != 200 {
+		t.Fatalf("an open profile must be able to keep its key in a file: %d %v", code, o)
+	}
+}

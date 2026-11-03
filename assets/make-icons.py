@@ -102,5 +102,5 @@ save(full_mark_on_cream((1024, 500)), "mobile", "store", "feature-graphic-1024x5
 # Desktop window and the screens (shared by the desktop window and the phone)
 save(head_on(512, 0.74, CREAM), "desktop", "icon.png")
 save(head_on(192, 0.74, CREAM), "app", "icon.png")
-save(full_mark_on_cream((500, 500)), "app", "mark.png")
+save(mark.resize((500, 500), Image.LANCZOS), "app", "mark.png")  # transparent: the screens draw it on their own background (dark theme inverts it in CSS)
 print("icons written")

@@ -51,14 +51,15 @@ public class SocratesEnginePlugin extends Plugin {
         }).start();
     }
 
-    // The key help: open a provider's page in the phone's browser. Only the two sites where a key is made, over https, are opened; the
+    // The key help: open a provider's page in the phone's browser. Only the two sites where a key is made and the developer's sponsor page, over https, are opened; the
     // page's own check is not trusted.
     @PluginMethod
     public void openLink(PluginCall call) {
         Uri uri = Uri.parse(call.getString("url", ""));
         String host = uri.getHost();
         boolean allowed = "https".equals(uri.getScheme()) && uri.getUserInfo() == null && uri.getPort() == -1
-                && ("platform.claude.com".equals(host) || "platform.openai.com".equals(host));
+                && ("platform.claude.com".equals(host) || "platform.openai.com".equals(host)
+                    || ("github.com".equals(host) && "/sponsors/Nireus79".equals(uri.getPath()) && uri.getQuery() == null && uri.getFragment() == null));
         if (!allowed) {
             call.reject("That address is not one the app opens.");
             return;

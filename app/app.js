@@ -198,11 +198,22 @@ async function keyStatus() {
   for (let i = 0; i < 60; i++) {
     const r = await api("GET", "/api/keystore/status");
     if (r.status === 200) return r.data || {};
+    if ((await api("GET", "/api/status")).status === 200) return { state: "ready" }; // the key was found by itself (the keychain)
     await new Promise((ok) => setTimeout(ok, 250));
   }
   return null;
 }
 const MIN_PASSPHRASE = 12;
+
+// A profile without a passphrase keeps its key the way the old data did: in the system keychain where there is one, otherwise in a file
+// next to its data. The data here is not sensitive and several people may share the computer; a person who wants more protects the profile.
+async function setupOpenProfile(st) {
+  if (!st || st.state !== "needs_setup") return { status: 200 };
+  const opts = st.options || [];
+  return api("POST", "/api/keystore/setup", opts.includes("keychain") ? { mode: "keychain" } : { mode: "file", confirmInsecure: true });
+}
+const lastProfile = () => { try { return localStorage.getItem("lastProfile") || ""; } catch (_) { return ""; } };
+const rememberProfile = (id) => { try { localStorage.setItem("lastProfile", id); } catch (_) { /* the choice is only a convenience */ } };
 
 // The first screen of the desktop app: log in to a profile on this computer, or register a new one. There is no server; a profile is a
 // folder with its own passphrase, and nothing here can be reset, which the register tab says.
@@ -226,12 +237,14 @@ function authScreen(info, tab) {
   let form;
   if (tab === "login") {
     const sel = el("select", { "aria-label": t("Profile") }, ...profiles.map((p) => el("option", { value: p.id }, p.legacy ? t("Existing data") : p.name)));
+    const remembered = profiles.find((p) => p.id === lastProfile());
+    if (remembered) sel.value = remembered.id;
     const pass = passField(t("Passphrase"), "current-password");
     const note = el("p", { class: "muted" });
-    const isLegacy = () => (profiles.find((p) => p.id === sel.value) || {}).legacy;
+    const isLegacy = () => { const p = profiles.find((x) => x.id === sel.value) || {}; return p.legacy || p.open; };
     const sync = () => {
       const legacy = isLegacy();
-      pass.label.hidden = pass.input.hidden = legacy; // the data from before profiles has no passphrase: it opens the way it always did
+      pass.label.hidden = pass.input.hidden = legacy; // the data from before profiles, and a profile made without a passphrase, open without one
       note.textContent = legacy ? t("Made before profiles existed. It opens the way it always did.") : "";
     };
     sel.addEventListener("change", sync);
@@ -241,7 +254,7 @@ function authScreen(info, tab) {
       err.textContent = "";
       const p = profiles.find((x) => x.id === sel.value);
       if (!p) return;
-      if (!p.legacy && !pass.input.value) { err.textContent = t("Enter your passphrase."); return; }
+      if (!p.legacy && !p.open && !pass.input.value) { err.textContent = t("Enter your passphrase."); return; }
       busy(go, true);
       // A profile stays open after a wrong passphrase, so the engine's slowing down of wrong guesses is not undone by starting it again.
       if (S.opened !== p.id) {
@@ -252,6 +265,11 @@ function authScreen(info, tab) {
       S.profile = p;
       const st = await keyStatus();
       if (!st) { err.textContent = t("The engine did not start."); busy(go, false); return; }
+      if (p.open) {
+        const r = await setupOpenProfile(st);
+        if (r.status !== 200) { err.textContent = errMsg(r.data); busy(go, false); return; }
+      }
+      rememberProfile(p.id);
       if (st.state === "locked") {
         const u = await api("POST", "/api/keystore/unlock", { passphrase: pass.input.value });
         if (u.status !== 200) { err.textContent = errMsg(u.data); busy(go, false); pass.input.value = ""; pass.input.focus(); return; }
@@ -264,28 +282,41 @@ function authScreen(info, tab) {
   } else {
     const name = el("input", { type: "text", maxlength: "40", autocomplete: "username", "aria-label": t("Name") });
     const one = passField(t("Passphrase"), "new-password"), two = passField(t("Repeat the passphrase"), "new-password");
+    const protect = el("input", { type: "checkbox", id: "protect", class: "check" });
+    const fields = [one.label, one.input, two.label, two.input];
+    const explain = el("p", { class: "muted" });
+    const syncProtect = () => {
+      for (const f of fields) f.hidden = !protect.checked;
+      explain.textContent = protect.checked
+        ? t("Your conversations are encrypted with a passphrase only you know. If you forget it, they cannot be opened: there is no way to get it back.")
+        : t("No passphrase: the profile opens with one click. Anyone who uses this computer account can open it, so choose a passphrase if that matters to you.");
+    };
+    protect.addEventListener("change", syncProtect);
     const go = el("button", { class: "primary", type: "submit" }, t("Register"));
     form = el("form", { class: "stack", onsubmit: async (e) => {
       e.preventDefault();
       err.textContent = "";
       if (!name.value.trim()) { err.textContent = t("Give the profile a name."); return; }
-      if (one.input.value.length < MIN_PASSPHRASE) { err.textContent = t("A passphrase needs at least 12 characters."); return; }
-      if (one.input.value !== two.input.value) { err.textContent = t("The two passphrases are not the same."); return; }
+      if (protect.checked && one.input.value.length < MIN_PASSPHRASE) { err.textContent = t("A passphrase needs at least 12 characters."); return; }
+      if (protect.checked && one.input.value !== two.input.value) { err.textContent = t("The two passphrases are not the same."); return; }
       busy(go, true);
-      const c = await shellPost("/shell/profiles", { name: name.value });
+      const c = await shellPost("/shell/profiles", { name: name.value, open: !protect.checked });
       if (c.status !== 200) { err.textContent = errMsg(c.data); busy(go, false); return; }
       const o = await shellPost("/shell/open", { id: c.data.id });
       if (o.status !== 200) { err.textContent = errMsg(o.data); busy(go, false); return; }
       S.profile = c.data;
       const st = await keyStatus();
       if (!st) { err.textContent = t("The engine did not start."); busy(go, false); return; }
-      const r = await api("POST", "/api/keystore/setup", { mode: "passphrase", passphrase: one.input.value });
+      const r = protect.checked ? await api("POST", "/api/keystore/setup", { mode: "passphrase", passphrase: one.input.value }) : await setupOpenProfile(st);
       if (r.status !== 200) { err.textContent = errMsg(r.data); busy(go, false); return; }
+      rememberProfile(c.data.id);
       boot(); // the age confirmation and the provider follow, as for anyone new
     } },
-      el("label", {}, t("Name")), name, one.label, one.input, two.label, two.input,
-      el("p", { class: "muted" }, t("Your conversations are encrypted with a passphrase only you know. If you forget it, they cannot be opened: there is no way to get it back.")),
+      el("label", {}, t("Name")), name,
+      el("div", { class: "row" }, protect, el("label", { for: "protect", class: "inline" }, t("Protect this profile with a passphrase"))),
+      one.label, one.input, two.label, two.input, explain,
       err, showBox([one.input, two.input]), go);
+    syncProtect();
   }
   const body = el("div", { class: "auth" }, logo(), tabs, el("div", { class: "card stack" }, form));
   // Removing a profile is rare and final, so it sits out of the way, below the form.
@@ -393,9 +424,9 @@ function ageScreen() {
     el("button", { class: "primary", onclick: async () => { await api("POST", "/api/profile/age"); boot(); } }, t("I am 16 or older")))));
 }
 
-// Pages of the two providers that the key help leads to. A link is opened in the system's browser, by the shell, and only if it is
+// Pages of the two providers that the key help leads to, and the developer's sponsor page. A link is opened in the system's browser, by the shell, and only if it is
 // one of these two sites over https; the page never navigates itself and never sends anything to them.
-const PROVIDER_SITES = /^https:\/\/platform\.(claude|openai)\.com\//;
+const PROVIDER_SITES = /^https:\/\/(platform\.(claude|openai)\.com\/|github\.com\/sponsors\/Nireus79$)/;
 async function openLink(url, err) {
   if (!PROVIDER_SITES.test(url)) return;
   const shell = shellInfo();
@@ -462,6 +493,18 @@ async function providerScreen(first, back) {
 
 // ---- home: the philosophers and the conversations
 
+// The sponsor card: one quiet, labelled card at the foot of the home screen, loaded from nothing but this file (no network, no tracking).
+// For now it points to the developer's own sponsor page; a later sponsor replaces the three fields (and the one address the shells open).
+// null hides the card.
+const SPONSOR = { label: "Support", text: "Socrates is free and made by one person. If you would like to help it go on, you can sponsor the work.", button: "Sponsor on GitHub", url: "https://github.com/sponsors/Nireus79" };
+
+function sponsorCard() {
+  if (!SPONSOR) return null;
+  const err = errorLine();
+  return el("div", { class: "card stack sponsor", role: "note" }, el("div", { class: "muted" }, t(SPONSOR.label)),
+    el("p", {}, t(SPONSOR.text)), el("button", { class: "outlink", onclick: () => openLink(SPONSOR.url, err) }, t(SPONSOR.button)), err);
+}
+
 async function home() {
   const [c] = await Promise.all([api("GET", "/api/conversations")]);
   const byId = Object.fromEntries(S.philosophers.map((p) => [p.id, p]));
@@ -488,6 +531,8 @@ async function home() {
         el("h2", {}, k.title || t("New conversation")), el("div", { class: "muted" }, who)));
     }
   }
+  const sponsor = sponsorCard();
+  if (sponsor) body.append(sponsor);
   mount(...screen("Socrates", body, el("span", { class: "row" }, S.profiles ? el("button", { class: "link", onclick: logOut }, t("Log out")) : null, el("button", { class: "link", onclick: () => show(progressScreen) }, t("Progress")), el("button", { class: "link", onclick: () => show(settings) }, t("Settings")))));
 }
 

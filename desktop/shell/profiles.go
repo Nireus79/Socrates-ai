@@ -38,6 +38,10 @@ type Profile struct {
 	ID     string `json:"id"`
 	Name   string `json:"name"`
 	Legacy bool   `json:"legacy,omitempty"`
+	// Open marks a profile made without a passphrase (the data here is not sensitive, and several people may share the computer): it opens with
+	// one click and its key is kept the way the old data's was, in the system keychain or a key file. A profile without this mark is protected
+	// by its passphrase alone, as every profile was before.
+	Open bool `json:"open,omitempty"`
 }
 
 // Manager keeps the list and the running engine of the open profile.
@@ -76,7 +80,7 @@ func (m *Manager) load() ([]Profile, error) {
 	out := f.Profiles[:0]
 	for _, p := range f.Profiles {
 		if idPattern.MatchString(p.ID) && validName(p.Name) == nil {
-			out = append(out, Profile{ID: p.ID, Name: p.Name})
+			out = append(out, Profile{ID: p.ID, Name: p.Name, Open: p.Open})
 		}
 	}
 	return out, nil
@@ -136,24 +140,33 @@ func (m *Manager) List() ([]Profile, error) {
 // dir is the folder of a profile, or an error for an id that is not on the list. An id is never used in a path before it has been matched
 // against the list.
 func (m *Manager) dir(id string) (string, bool, error) {
+	dir, p, err := m.find(id)
+	return dir, p.Legacy, err
+}
+
+// find is dir with the profile itself.
+func (m *Manager) find(id string) (string, Profile, error) {
 	list, err := m.List()
 	if err != nil {
-		return "", false, err
+		return "", Profile{}, err
 	}
 	for _, p := range list {
 		if p.ID == id {
 			if p.Legacy {
-				return m.base, true, nil
+				return m.base, p, nil
 			}
-			return filepath.Join(m.base, profileDir, p.ID), false, nil
+			return filepath.Join(m.base, profileDir, p.ID), p, nil
 		}
 	}
-	return "", false, errors.New("There is no such profile.")
+	return "", Profile{}, errors.New("There is no such profile.")
 }
 
 // Create adds a profile with a name nobody else here has (ignoring case). Nothing is protected yet: the passphrase is chosen when the
 // profile is first opened.
-func (m *Manager) Create(name string) (Profile, error) {
+func (m *Manager) Create(name string) (Profile, error) { return m.CreateWith(name, false) }
+
+// CreateWith is Create with the choice of a profile that needs no passphrase.
+func (m *Manager) CreateWith(name string, open bool) (Profile, error) {
 	name = strings.TrimSpace(name)
 	if err := validName(name); err != nil {
 		return Profile{}, err
@@ -173,7 +186,7 @@ func (m *Manager) Create(name string) (Profile, error) {
 	if _, err := rand.Read(raw[:]); err != nil {
 		return Profile{}, err
 	}
-	p := Profile{ID: hex.EncodeToString(raw[:]), Name: name}
+	p := Profile{ID: hex.EncodeToString(raw[:]), Name: name, Open: open}
 	stored, err := m.load()
 	if err != nil {
 		return Profile{}, err
@@ -188,13 +201,13 @@ func (m *Manager) Create(name string) (Profile, error) {
 func (m *Manager) Open(id string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	dir, legacy, err := m.dir(id)
+	dir, prof, err := m.find(id)
 	if err != nil {
 		return err
 	}
 	m.stopLocked()
 	args := []string{"--data-dir", dir}
-	if !legacy {
+	if !prof.Legacy && !prof.Open {
 		args = append(args, "--passphrase-only")
 	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -315,11 +328,12 @@ func (m *Manager) handleList(w http.ResponseWriter, r *http.Request) {
 func (m *Manager) handleCreate(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Name string `json:"name"`
+		Open bool   `json:"open"`
 	}
 	if !readJSON(w, r, &body) {
 		return
 	}
-	p, err := m.Create(body.Name)
+	p, err := m.CreateWith(body.Name, body.Open)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return

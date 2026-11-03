@@ -21,7 +21,10 @@ button { background: var(--panel); border: 1px solid var(--line); border-radius:
 button:hover { border-color: var(--accent); }
 button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 button.danger { color: var(--danger); border-color: var(--danger); }
-.logo { display: block; width: 160px; max-width: 60%; margin: 0 auto 4px; border-radius: 14px; }
+.logo { display: block; width: 160px; max-width: 60%; margin: 0 auto 4px; }
+/* the mark is black line art on a transparent ground: on the dark theme it is turned to light lines */
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]):not([data-device="light"]) .logo { filter: invert(1); } }
+:root[data-device="dark"]:not([data-theme="light"]) .logo, :root[data-theme="dark"] .logo { filter: invert(1); }
 button.link { border: none; background: none; color: var(--muted); padding: 4px 8px; }
 button:disabled { opacity: .5; cursor: default; }
 input, select, textarea { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%; }
