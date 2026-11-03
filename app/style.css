@@ -5,9 +5,9 @@
 /* Dark follows the device unless the person chose Light; Dark forces it (the Theme setting puts data-theme on the page). The device is
    known either by the browser (prefers-color-scheme) or, in the desktop window, by the system itself (data-device, set by the shell). */
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]):not([data-device="light"]) { --bg: #17140f; --panel: #201c16; --ink: #ece6da; --muted: #a39a8a; --line: #3a342a; --accent: #c9a366; --accent-ink: #17140f; --user: #2e2819; --danger: #e0806f; --notice: #2a2418; color-scheme: dark; }
+  :root:not([data-theme="light"]):not([data-device="light"]) { --bg: #131415; --panel: #1b1d1f; --ink: #ebebe8; --muted: #a2a29b; --line: #33373b; --accent: #86b4bf; --accent-ink: #131415; --user: #223237; --danger: #e0877e; --notice: #24272a; color-scheme: dark; }
 }
-:root[data-device="dark"]:not([data-theme="light"]), :root[data-theme="dark"] { --bg: #17140f; --panel: #201c16; --ink: #ece6da; --muted: #a39a8a; --line: #3a342a; --accent: #c9a366; --accent-ink: #17140f; --user: #2e2819; --danger: #e0806f; --notice: #2a2418; color-scheme: dark; }
+:root[data-device="dark"]:not([data-theme="light"]), :root[data-theme="dark"] { --bg: #131415; --panel: #1b1d1f; --ink: #ebebe8; --muted: #a2a29b; --line: #33373b; --accent: #86b4bf; --accent-ink: #131415; --user: #223237; --danger: #e0877e; --notice: #24272a; color-scheme: dark; }
 :root[data-theme="light"] { color-scheme: light; }
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
@@ -21,6 +21,14 @@ button { background: var(--panel); border: 1px solid var(--line); border-radius:
 button:hover { border-color: var(--accent); }
 button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 button.danger { color: var(--danger); border-color: var(--danger); }
+.hlogo { height: 30px; width: 30px; flex: none; object-fit: contain; }
+:root[data-device="dark"]:not([data-theme="light"]) .hlogo, :root[data-theme="dark"] .hlogo { filter: invert(1); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]):not([data-device="light"]) .hlogo { filter: invert(1); } }
+/* the lists that open from a select follow the theme (the browser would draw them white) */
+select { color-scheme: light; }
+:root[data-theme="dark"] select, :root[data-device="dark"]:not([data-theme="light"]) select { color-scheme: dark; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]):not([data-device="light"]) select { color-scheme: dark; } }
+select option, select optgroup { background-color: var(--panel); color: var(--ink); }
 .logo { display: block; width: 160px; max-width: 60%; margin: 0 auto 4px; }
 /* the mark is black line art on a transparent ground: on the dark theme it is turned to light lines */
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]):not([data-device="light"]) .logo { filter: invert(1); } }
@@ -61,6 +69,7 @@ h1:focus { outline: none; }
 .card-area { flex: 0 0 auto; padding: 10px 16px 12px; border-top: 1px solid var(--line); background: var(--panel); font-size: .88rem; line-height: 1.4; }
 .card-head { display: flex; align-items: center; justify-content: space-between; }
 .card-label { font-size: .7rem; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); font-weight: 600; }
+.hermes { display: block; width: 150px; height: 48px; margin: 6px 0 2px; background-color: currentColor; color: var(--ink); -webkit-mask: url("hermes.png") left center / contain no-repeat; mask: url("hermes.png") left center / contain no-repeat; }
 .card-title { display: block; margin-top: 2px; }
 .card-text { margin: 2px 0 8px; color: var(--muted); }
 .card-area .error { margin: 4px 0 0; }

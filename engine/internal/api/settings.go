@@ -80,6 +80,7 @@ func (h *handler) putLLM(w http.ResponseWriter, r *http.Request) {
 		Provider       string  `json:"provider"`
 		APIKey         *string `json:"apiKey"`
 		OllamaEndpoint string  `json:"ollamaEndpoint"`
+		LocalModel     string  `json:"localModel"` // the model chosen among the ones found on this computer
 	}
 	if !transport.ReadBody(w, r, &body) {
 		return
@@ -131,6 +132,17 @@ func (h *handler) putLLM(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	next.FastModel, next.ReplyModel = roles.Fast, roles.Reply
+	if provider == "ollama" && body.LocalModel != "" {
+		found := false
+		for _, m := range list.Models {
+			found = found || m.ID == body.LocalModel
+		}
+		if !found {
+			fail(w, http.StatusBadRequest, "That model is not on the model server.")
+			return
+		}
+		next.FastModel, next.ReplyModel, roles.Tested = body.LocalModel, body.LocalModel, false // one model for every role: the person's own choice
+	}
 	tested := "0"
 	if roles.Tested {
 		tested = "1"
@@ -192,3 +204,34 @@ func (h *handler) testLLM(w http.ResponseWriter, r *http.Request) {
 // localModelAllowed is false on Android: a phone cannot run a model good enough for the safety checks, and the engine there is never the
 // place for one (founder, 2026-11-03: the local model is for the computer versions only).
 var localModelAllowed = func() bool { return runtime.GOOS != "android" }
+
+// getLocalModels looks for a model server on this computer (the given address, or the stored one, or the usual local one) and lists the
+// models it holds, so that the screen can offer them without the person typing anything. Nothing is saved. An empty list means none was found.
+func (h *handler) getLocalModels(w http.ResponseWriter, r *http.Request) {
+	if !localModelAllowed() {
+		transport.WriteJSON(w, http.StatusOK, map[string]any{"models": []string{}, "endpoint": ""})
+		return
+	}
+	s, _, _ := h.load(r)
+	endpoint := strings.TrimSpace(r.URL.Query().Get("endpoint"))
+	if endpoint == "" {
+		endpoint = s.OllamaEndpoint
+	}
+	if endpoint == "" {
+		endpoint = "http://127.0.0.1:11434"
+	}
+	models := []string{}
+	if e, err := llm.NormalizeOllamaEndpoint(endpoint); err == nil {
+		endpoint = e
+		if list, err := llm.ListModels(background(r), llm.Settings{Provider: "ollama", OllamaEndpoint: e}, h.d.LLMOptions...); err == nil {
+			for _, m := range list.Models {
+				models = append(models, m.ID)
+			}
+		}
+	}
+	current := ""
+	if s.Provider == "ollama" {
+		current = s.ReplyModel
+	}
+	transport.WriteJSON(w, http.StatusOK, map[string]any{"models": models, "endpoint": endpoint, "current": current})
+}

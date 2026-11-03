@@ -115,7 +115,7 @@ function confirmButton(label, cls, armed, action) {
 // once a day with nothing about the person), which lets them change without a release. The links open in the system's browser.
 const CARD_KEY = "socrates_card_hidden";
 const BUILTIN_CARDS = [{
-  id: "about-socrates", kind: "socrates", active: true, builtin: true,
+  id: "about-socrates", kind: "socrates", active: true, builtin: true, marks: ["hermes"],
   title: "Socrates AI is made by Hermes Software",
   text: "A free beta, made by one person. If you would like it to go on, please sponsor.",
   links: [{ text: "Sponsor", url: "https://github.com/sponsors/Nireus79", primary: true }, { text: "GitHub", url: "https://github.com/Nireus79/Socrates-ai" }, { text: "Hermes Software", url: "https://hermesoftware.wordpress.com/" }],
@@ -150,6 +150,7 @@ function cardNode() {
   const node = el("aside", { class: "card-area", "aria-label": t("Sponsored") },
     el("div", { class: "card-head" }, el("span", { class: "card-label" }, t("Sponsored")),
       el("button", { class: "link", type: "button", "aria-label": t("Hide this card"), title: t("Hide this card until you open Socrates again"), onclick: () => { hideCard(); node.remove(); } }, t("Hide"))),
+    (e.marks || []).includes("hermes") ? el("span", { class: "hermes", role: "img", "aria-label": "Hermes Software" }) : null,
     el("strong", { class: "card-title" }, say(e.title)), el("p", { class: "card-text" }, say(e.text)),
     links.length ? el("div", { class: "row" }, ...links.map((l) => el("button", { type: "button", class: l.primary ? "primary small-btn" : "small-btn", onclick: () => openCardLink(l.url, err) }, say(l.text)))) : null, err);
   return node;
@@ -170,7 +171,7 @@ async function refreshCards() {
 }
 
 function mount(...nodes) {
-  S.root.replaceChildren(...nodes, ...[cardNode()].filter(Boolean));
+  S.root.replaceChildren(...nodes, ...(S.noCard ? [] : [cardNode()].filter(Boolean)));
   const h = S.root.querySelector("h1");
   if (h) { h.setAttribute("tabindex", "-1"); h.focus({ preventScroll: true }); }
 }
@@ -192,8 +193,10 @@ function back() { if (!goBack()) home(); }
 // Back to the first screen, forgetting every step.
 function unwind() { nav.stack = []; }
 
+// The mark, small, at the left of every header (a decoration: it has no name for a screen reader).
+const headerLogo = () => el("img", { class: "hlogo", src: "mark.png", alt: "" });
 function screen(title, body, actions) {
-  return [el("header", {}, el("h1", {}, title), actions || null), el("main", {}, body)];
+  return [el("header", {}, headerLogo(), el("h1", {}, title), actions || null), el("main", {}, body)];
 }
 function errMsg(d) { return t((d && d.error) || "That did not work."); }
 function errorLine(text) { return el("p", { class: "error", role: "alert" }, text || ""); }
@@ -274,8 +277,6 @@ async function setupOpenProfile(st) {
   const opts = st.options || [];
   return api("POST", "/api/keystore/setup", opts.includes("keychain") ? { mode: "keychain" } : { mode: "file", confirmInsecure: true });
 }
-const lastProfile = () => { try { return localStorage.getItem("lastProfile") || ""; } catch (_) { return ""; } };
-const rememberProfile = (id) => { try { localStorage.setItem("lastProfile", id); } catch (_) { /* the choice is only a convenience */ } };
 
 // The first screen of the desktop app: log in to a profile on this computer, or register a new one. There is no server; a profile is a
 // folder with its own passphrase, and nothing here can be reset, which the register tab says.
@@ -299,8 +300,6 @@ function authScreen(info, tab) {
   let form;
   if (tab === "login") {
     const sel = el("select", { "aria-label": t("Profile") }, ...profiles.map((p) => el("option", { value: p.id }, p.legacy ? t("Existing data") : p.name)));
-    const remembered = profiles.find((p) => p.id === lastProfile());
-    if (remembered) sel.value = remembered.id;
     const pass = passField(t("Passphrase"), "current-password");
     const note = el("p", { class: "muted" });
     const isLegacy = () => { const p = profiles.find((x) => x.id === sel.value) || {}; return p.legacy || p.open; };
@@ -331,7 +330,6 @@ function authScreen(info, tab) {
         const r = await setupOpenProfile(st);
         if (r.status !== 200) { err.textContent = errMsg(r.data); busy(go, false); return; }
       }
-      rememberProfile(p.id);
       if (st.state === "locked") {
         const u = await api("POST", "/api/keystore/unlock", { passphrase: pass.input.value });
         if (u.status !== 200) { err.textContent = errMsg(u.data); busy(go, false); pass.input.value = ""; pass.input.focus(); return; }
@@ -371,7 +369,6 @@ function authScreen(info, tab) {
       if (!st) { err.textContent = t("The engine did not start."); busy(go, false); return; }
       const r = protect.checked ? await api("POST", "/api/keystore/setup", { mode: "passphrase", passphrase: one.input.value }) : await setupOpenProfile(st);
       if (r.status !== 200) { err.textContent = errMsg(r.data); busy(go, false); return; }
-      rememberProfile(c.data.id);
       boot(); // the age confirmation and the provider follow, as for anyone new
     } },
       el("label", {}, t("Name")), name,
@@ -392,7 +389,9 @@ function authScreen(info, tab) {
       })));
     body.append(rm);
   }
+  S.noCard = true; // the card is not shown on the login page
   mount(...screen("Socrates", body));
+  S.noCard = false;
   const first = S.root.querySelector("form input:not([hidden]), form select");
   if (first) first.focus({ preventScroll: true });
 }
@@ -523,12 +522,24 @@ async function providerScreen(first, back) {
   const cur = await api("GET", "/api/settings/llm");
   const localAllowed = !!(cur.data && cur.data.localAllowed);
   const options = [el("option", { value: "claude" }, "Claude (Anthropic)"), el("option", { value: "openai" }, "OpenAI")];
-  if (localAllowed) options.push(el("option", { value: "ollama" }, t("A model on this computer")));
+  // A model server on this computer is looked for by itself, and the models it holds are offered in a list: nothing to type.
+  const lookFor = async (endpoint) => { const r = await api("GET", "/api/settings/llm/local-models" + (endpoint ? "?endpoint=" + encodeURIComponent(endpoint) : "")); return r.status === 200 ? r.data : { models: [], endpoint: "" }; };
+  const found = localAllowed ? await lookFor("") : { models: [] };
+  if (localAllowed) options.push(el("option", { value: "ollama" }, found.models.length ? t("A model on this computer ({n} found)", { n: found.models.length }) : t("A model on this computer")));
   const provider = el("select", { "aria-label": t("Provider") }, ...options);
   const key = el("input", { type: "password", autocomplete: "off", placeholder: t("Paste your API key"), "aria-label": t("API key") });
   const keyBox = el("div", {}, el("label", {}, t("Your API key")), key, el("p", { class: "muted" }, t("The key stays on this device, encrypted. It is tested once, then used only to talk to your provider.")));
   const endpoint = el("input", { type: "text", value: (cur.data && cur.data.ollamaEndpoint) || "http://127.0.0.1:11434", "aria-label": t("Address of the model server") });
-  const epBox = el("div", { hidden: true }, el("label", {}, t("Address of the model server")), endpoint,
+  const modelSel = el("select", { "aria-label": t("Model") });
+  const noModel = el("p", { class: "muted" }, t("No model was found on this computer. Start your model server (for example Ollama) and press Look again."));
+  const fillModels = (d) => {
+    modelSel.replaceChildren(...d.models.map((m) => el("option", { value: m }, m)));
+    if (d.current && d.models.includes(d.current)) modelSel.value = d.current;
+    modelSel.hidden = !d.models.length; noModel.hidden = d.models.length > 0;
+  };
+  fillModels(found);
+  const again = el("button", { class: "link", type: "button", onclick: async () => fillModels(await lookFor(endpoint.value)) }, t("Look again"));
+  const epBox = el("div", { hidden: true }, el("label", {}, t("Model")), modelSel, noModel, again, el("label", {}, t("Address of the model server")), endpoint,
     el("p", { class: "muted" }, t("The server of a model that runs on this computer, for example Ollama. Nothing leaves the computer if the address is this computer.")),
     el("p", { class: "notice", role: "note" }, t("How well the philosophers talk, and how reliably the safety checks work, depend on what the model can do. A small model understands Greek and instructions less well, may answer badly, and may judge a risky message wrongly. Choose the strongest model you can run.")));
   const help = el("div", {}, keyHelp(provider.value, err));
@@ -542,7 +553,7 @@ async function providerScreen(first, back) {
   save.addEventListener("click", async () => {
     err.textContent = ""; save.disabled = true; save.textContent = t("Testing…");
     const body = { provider: provider.value };
-    if (provider.value === "ollama") body.ollamaEndpoint = endpoint.value; else body.apiKey = key.value;
+    if (provider.value === "ollama") { body.ollamaEndpoint = endpoint.value; if (modelSel.value) body.localModel = modelSel.value; } else body.apiKey = key.value;
     const r = await api("PUT", "/api/settings/llm", body);
     save.disabled = false; save.textContent = t("Save and test");
     if (r.status === 200) { key.value = ""; return boot(); }
@@ -803,7 +814,7 @@ const REASONS = { harmful: "It was harmful", hateful: "It was hateful or insulti
   };
   input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) submit(e); });
   const form = el("form", { class: "composer", onsubmit: submit }, input, send);
-  mount(el("header", {}, el("button", { class: "link", onclick: back }, t("← Back")), el("h1", {}, who.name),
+  mount(el("header", {}, el("button", { class: "link", onclick: back }, t("← Back")), headerLogo(), el("h1", {}, who.name),
     el("button", { class: "link", onclick: () => show(() => memory(who)) }, t("Memory")),
     el("button", { class: "link", onclick: showDelete }, t("Delete"))),
     progressLine, el("div", { class: "chatwrap" }, el("div", { class: "watermark", "aria-hidden": "true" }), main), err, helpBox, challengeBar, deleteBox, el("div", { class: "helpbar" }, helpBtn, challengeBtn), form);

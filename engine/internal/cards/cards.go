@@ -36,12 +36,13 @@ type Link struct {
 
 // Entry is one message. Kind is "socrates" (the project's own) or "sponsor"; every card is labelled "Sponsored" on screen, the project's own too.
 type Entry struct {
-	ID     string `json:"id"`
-	Kind   string `json:"kind"`
-	Title  string `json:"title"`
-	Text   string `json:"text"`
-	Links  []Link `json:"links"`
-	Active bool   `json:"active"`
+	ID     string   `json:"id"`
+	Kind   string   `json:"kind"`
+	Title  string   `json:"title"`
+	Text   string   `json:"text"`
+	Marks  []string `json:"marks,omitempty"` // "hermes": the logo of Hermes Software at the top of the card
+	Links  []Link   `json:"links"`
+	Active bool     `json:"active"`
 }
 
 func fits(s string, max int) bool {
@@ -60,6 +61,7 @@ func Parse(b []byte) (out []Entry, ok bool) {
 		Entries []struct {
 			ID, Kind, Title, Text string
 			Links                 []Link
+			Marks                 []string
 			Active                *bool
 		} `json:"entries"`
 	}
@@ -77,7 +79,13 @@ func Parse(b []byte) (out []Entry, ok bool) {
 				links = append(links, l)
 			}
 		}
-		out = append(out, Entry{ID: e.ID, Kind: e.Kind, Title: e.Title, Text: e.Text, Links: links, Active: *e.Active})
+		var marks []string
+		for _, m := range e.Marks {
+			if m == "hermes" && len(marks) == 0 {
+				marks = append(marks, m)
+			}
+		}
+		out = append(out, Entry{ID: e.ID, Kind: e.Kind, Title: e.Title, Text: e.Text, Marks: marks, Links: links, Active: *e.Active})
 	}
 	return out, true
 }

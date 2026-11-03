@@ -132,9 +132,9 @@ test("everything a model or a user writes is shown as text, never as markup", as
     "GET /api/conversations": [200, { conversations: [{ id: "c1", philosopherId: "socrates", title: evil }] }],
   }));
   p.app.start(p.root); await settle();
-  assert.equal(p.root.querySelectorAll("img, script, b").length, 0, "home");
+  assert.equal(p.root.querySelectorAll("img:not(.hlogo):not(.hermes), script, b").length, 0, "home");
   click(p.root.querySelectorAll(".card.click")[1]); await settle();
-  assert.equal(p.root.querySelectorAll("img, script, b").length, 0, "chat");
+  assert.equal(p.root.querySelectorAll("img:not(.hlogo):not(.hermes), script, b").length, 0, "chat");
   assert.ok(text(p.root).includes(evil));
   assert.equal(p.dom.window.pwned, undefined);
 });
@@ -281,7 +281,7 @@ test("suggestions are shown as text, never as markup", async () => {
   }));
   await open1(p);
   click(helpButton(p)); await settle();
-  assert.equal(p.root.querySelectorAll("img").length, 0);
+  assert.equal(p.root.querySelectorAll("img:not(.hlogo):not(.hermes)").length, 0);
   assert.ok(text(p.root).includes(evil));
 });
 
@@ -517,7 +517,7 @@ test("what is noted is shown as text, never as markup, and Back returns to the c
   const evil = '<img src=x onerror="window.pwned=1">';
   const p = page(ready(entriesFor([{ id: "e1", kind: "claim", text: evil, quote: evil }])));
   await openMemory(p);
-  assert.equal(p.root.querySelectorAll("img").length, 0);
+  assert.equal(p.root.querySelectorAll("img:not(.hlogo):not(.hermes)").length, 0);
   assert.ok(text(p.root).includes(evil));
   click([...p.root.querySelectorAll("button")].find((b) => b.textContent === "Back")); await settle();
   assert.ok(p.root.querySelector("textarea"), "back to the chat");
@@ -971,7 +971,7 @@ test("the theme is the profile's own choice: the saved one is applied, a new one
 test("the stylesheet follows the device in dark unless Light was chosen, and Dark forces it", () => {
   const css = fs.readFileSync(path.join(__dirname, "../style.css"), "utf8");
   assert.match(css, /prefers-color-scheme: dark\)\s*\{\s*:root:not\(\[data-theme="light"\]\):not\(\[data-device="light"\]\)/);
-  assert.match(css, /:root\[data-theme="dark"\]\s*\{[^}]*--bg: #17140f/);
+  assert.match(css, /:root\[data-theme="dark"\]\s*\{[^}]*--bg: #131415/);
   assert.match(css, /:root\[data-device="dark"\]:not\(\[data-theme="light"\]\)/, "the window's own reading of the system must be able to make the page dark");
 });
 
@@ -1135,11 +1135,10 @@ test("a profile can be made without a passphrase: no passphrase asked, the key g
   assert.equal(p.calls.filter((c) => c.key === "POST /api/keystore/unlock").length, 0, "no passphrase was asked of an open profile");
 });
 
-test("every screen ends with a labelled card; its links open through the shell; one click hides it for the session; the logo is not on the login page", async () => {
+test("every screen but the login ends with a labelled card; its links open through the shell; one click hides it for the session; the logo is not on the login page", async () => {
   const auth = withProfiles({ profiles: [{ id: "p1", name: "Anna" }], active: "" });
   auth.app.start(auth.root); await settle();
-  assert.ok(auth.root.querySelector(".card-area"), "the login page has the card too");
-  assert.equal(auth.root.lastElementChild.className, "card-area", "its own area, last on the page");
+  assert.equal(auth.root.querySelector(".card-area"), null, "no card on the login page");
   assert.equal(auth.root.querySelector("img.logo"), null, "no logo on the login page");
 
   const p = page(ready({ "GET /api/conversations": [200, { conversations: [] }], "GET /api/cards": [200, { entries: [] }] }));

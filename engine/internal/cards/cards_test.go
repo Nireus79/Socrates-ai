@@ -118,3 +118,10 @@ func TestOnlyHTTPSIsFetched(t *testing.T) {
 		t.Fatal("no feed means no entries")
 	}
 }
+
+func TestOnlyTheHermesMarkIsKept(t *testing.T) {
+	e, ok := Parse([]byte(`{"version":1,"entries":[{"id":"a","kind":"sponsor","title":"T","text":"B","active":true,"marks":["other","hermes","hermes"]},{"id":"b","kind":"sponsor","title":"T","text":"B","active":true,"marks":["x"]}]}`))
+	if !ok || len(e) != 2 || len(e[0].Marks) != 1 || e[0].Marks[0] != "hermes" || len(e[1].Marks) != 0 {
+		t.Fatalf("%v %+v", ok, e)
+	}
+}

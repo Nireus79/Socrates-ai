@@ -268,3 +268,34 @@ func TestLocalModelIsOfferedOnTheComputerAndRefusedOnAndroid(t *testing.T) {
 		t.Error("the refused local model was saved")
 	}
 }
+
+func TestLocalModelsAreFoundOnTheComputerAndTheChosenOneIsUsedForEveryRole(t *testing.T) {
+	e := setup(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/tags" {
+			w.Write([]byte(`{"models":[{"name":"llama3:8b"},{"name":"qwen2:7b"}]}`))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+	code, body := e.do(t, "GET", "/api/settings/llm/local-models?endpoint="+srv.URL, "")
+	if code != 200 || !strings.Contains(body, `"llama3:8b"`) || !strings.Contains(body, `"qwen2:7b"`) {
+		t.Fatalf("%d %s", code, body)
+	}
+	if code, body := e.do(t, "GET", "/api/settings/llm/local-models?endpoint=http://127.0.0.1:1", ""); code != 200 || !strings.Contains(body, `"models":[]`) {
+		t.Fatalf("no server must give an empty list, not an error: %d %s", code, body)
+	}
+	if code, body := e.do(t, "PUT", "/api/settings/llm", `{"provider":"ollama","ollamaEndpoint":"`+srv.URL+`","localModel":"nothere"}`); code != 400 {
+		t.Fatalf("a model the server does not hold: %d %s", code, body)
+	}
+	if code, body := e.do(t, "PUT", "/api/settings/llm", `{"provider":"ollama","ollamaEndpoint":"`+srv.URL+`","localModel":"qwen2:7b"}`); code != 200 || !strings.Contains(body, `"fastModel":"qwen2:7b"`) || !strings.Contains(body, `"replyModel":"qwen2:7b"`) {
+		t.Fatalf("%d %s", code, body)
+	}
+	old := localModelAllowed
+	localModelAllowed = func() bool { return false }
+	defer func() { localModelAllowed = old }()
+	if code, body := e.do(t, "GET", "/api/settings/llm/local-models?endpoint="+srv.URL, ""); code != 200 || !strings.Contains(body, `"models":[]`) {
+		t.Fatalf("Android must not look: %d %s", code, body)
+	}
+}

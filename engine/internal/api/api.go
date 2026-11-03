@@ -58,6 +58,7 @@ func New(d Deps) (*http.ServeMux, *conversation.Service) {
 	mux.HandleFunc("PUT /api/settings/llm", h.putLLM)
 	mux.HandleFunc("DELETE /api/settings/llm/key", h.deleteKey)
 	mux.HandleFunc("POST /api/settings/llm/test", h.testLLM)
+	mux.HandleFunc("GET /api/settings/llm/local-models", h.getLocalModels)
 	mux.HandleFunc("GET /api/profile", h.profile)
 	mux.HandleFunc("POST /api/profile/age", h.confirmAge)
 	mux.HandleFunc("GET /api/profile/export", h.exportProfile)
