@@ -111,7 +111,7 @@ func New() *Registry {
 	for i := range r.list {
 		p := &r.list[i]
 		p.Library = libraries[p.ID]
-		p.Maps = maps[p.ID]
+		p.Maps = withLinks(p.ID, maps[p.ID])
 		p.Stories = stories[p.ID]
 		p.Opening = "I'm an artificial " + p.Name + ", brought into your time from what was written about me and what came after."
 		if p.ID == "socrates" {

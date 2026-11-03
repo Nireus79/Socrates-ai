@@ -339,3 +339,50 @@ func TestNothingHandedToAPhilosopherIsACitationOrAPassageNumber(t *testing.T) {
 		}
 	}
 }
+
+func TestLinksNameRealEntriesOfTheSameMapAndAreWrittenIntoThem(t *testing.T) {
+	for id, byName := range links {
+		have := map[string]bool{}
+		for _, is := range maps[id] {
+			have[is.Name] = true
+		}
+		for name, to := range byName {
+			if !have[name] {
+				t.Errorf("%s: link from %q, which is not an entry", id, name)
+			}
+			seen := map[string]bool{}
+			for _, n := range to {
+				if !have[n] {
+					t.Errorf("%s: %q links to %q, which is not an entry of the same map", id, name, n)
+				}
+				if n == name {
+					t.Errorf("%s: %q links to itself", id, name)
+				}
+				if seen[n] {
+					t.Errorf("%s: %q links to %q twice", id, name, n)
+				}
+				seen[n] = true
+			}
+		}
+	}
+	p, _ := New().Get("aristotle")
+	if !strings.Contains(p.Whole(), "Hold it together with: Happiness; Friendship; Virtue, habit and the mean.") {
+		t.Fatal("the links are not written into the map the philosopher is given")
+	}
+	for _, is := range maps["aristotle"] {
+		if strings.Contains(is.Readers, "Hold it together") {
+			t.Fatal("the shared map was changed")
+		}
+	}
+	for id, byName := range links {
+		for name, to := range byName {
+			for _, w := range append([]string{name}, to...) {
+				for _, bad := range []string{"irony", "ironic", "elenchus", "maieutic", "socratic method", "dialectic"} {
+					if strings.Contains(strings.ToLower(w), bad) {
+						t.Errorf("%s: %q carries %q", id, w, bad)
+					}
+				}
+			}
+		}
+	}
+}
