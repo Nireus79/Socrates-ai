@@ -75,6 +75,8 @@ h1:focus { outline: none; }
 .card-area .error { margin: 4px 0 0; }
 .small-btn { padding: 4px 10px; font-size: .85rem; }
 @media (max-height: 700px) { .card-text { display: none; } .card-area { padding: 6px 16px 8px; } }
+/* The phone: a slim card, so that it does not cover the screen it sits under. */
+@media (max-width: 600px) { .card-area { padding: 4px 12px 6px; font-size: .8rem; line-height: 1.3; } .hermes { width: 96px; height: 28px; margin: 2px 0 0; } .card-text { margin: 0 0 4px; } .card-area .row { gap: 6px; margin-top: 2px; } .card-area .small-btn { padding: 4px 10px; min-height: 0; font-size: .8rem; } }
 
 /* the mark as a quiet background of the chat: line art on a transparent ground, very faint, turned to light lines on the dark theme */
 .chatwrap { flex: 1; position: relative; min-height: 0; display: flex; }
