@@ -1,0 +1,24 @@
+Ask anything. Socrates does not hand down answers: he asks, and you think. Diogenes, Plato and Aristotle each have their own way of talking with you.
+
+The philosophers are artificial characters, imagined alive in today's world and made from what was written about them and after them. They are not the real people, and they say so.
+
+HOW IT WORKS
+• Choose a philosopher and write, in plain English.
+• He answers briefly, often with a question, and holds you to your own words.
+• Stuck? "Help me answer" offers a few ways to begin, and you may change them.
+• Now and then a philosopher puts a question to you that he thinks is worth thinking all the way through. Think enough of them through with one philosopher, and you meet the next.
+• Each philosopher keeps short notes about what you said, only for himself. You can read and delete every one, or switch the memory off.
+
+PRIVATE BY DESIGN
+• Your conversations stay on your phone, in an encrypted database. Android backup is off.
+• No account, no analytics, no tracking. There is no Socrates server: your messages go from your phone to the AI provider you chose, with your own key.
+• "Report this reply" takes a reply out of your conversation. Nothing is sent unless you send it.
+
+YOU NEED YOUR OWN KEY
+Socrates works with a Claude (Anthropic) or OpenAI API key that you paste in at setup. Your messages are sent to that provider under its terms.
+
+GOOD TO KNOW
+• For people aged 16 and over.
+• The philosophers are not a medical, legal or crisis service. If you are thinking of hurting yourself, call your local emergency number or a crisis line.
+• Beta: questions and problems to Hermes_creative@proton.me.
+• Independent app, not made or endorsed by Anthropic or OpenAI.

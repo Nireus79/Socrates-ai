@@ -35,9 +35,25 @@ public class EngineService extends Service {
     private static volatile boolean appVisible = false;
     private static volatile long lastVisible = System.currentTimeMillis();
     private static volatile int lastStartId;
+    private static volatile boolean closing = false; // the person closed the app: stop as soon as nothing is being written
+    private static volatile long closingSince = 0;
     private static Thread watcher;
 
+    // The person closed the app (Back, or swiped away from the recent list). The engine and this service stop at the next check in which no
+    // request is running, so a reply still being written is finished and kept, and then nothing stays behind.
+    static void closeWhenDone() {
+        if (!closing) closingSince = System.currentTimeMillis();
+        closing = true;
+    }
+
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        closeWhenDone();
+        super.onTaskRemoved(rootIntent);
+    }
+
     static void appVisible(boolean visible) {
+        if (visible) closing = false;
         appVisible = visible;
         lastVisible = System.currentTimeMillis();
     }
@@ -142,7 +158,7 @@ public class EngineService extends Service {
     private void watch() {
         while (true) {
             try {
-                Thread.sleep(60000);
+                Thread.sleep(5000);
             } catch (InterruptedException e) {
                 return;
             }
@@ -153,11 +169,17 @@ public class EngineService extends Service {
     // Stops the engine and this service when the app has been off the screen for IDLE_STOP_MS and the engine reports that long with no
     // request in flight. Any doubt keeps it running. Opening the app again starts it anew (SocratesEnginePlugin.start).
     private boolean stopWhenIdle() {
-        if (appVisible || System.currentTimeMillis() - lastVisible < IDLE_STOP_MS) return false;
-        long idle = engineIdleSeconds();
-        if (idle < IDLE_STOP_MS / 1000) return false;
+        boolean leaving = closing;
+        if (!leaving && (appVisible || System.currentTimeMillis() - lastVisible < IDLE_STOP_MS)) return false;
+        String[] c = connection();
+        if (c != null) {
+            long idle = engineIdleSeconds();
+            long need = leaving ? 2 : IDLE_STOP_MS / 1000;
+            boolean gaveUp = leaving && System.currentTimeMillis() - closingSince > 10 * 60 * 1000;
+            if (idle < need && !gaveUp) return false; // a request is running (or the engine did not answer): any doubt keeps it running
+        }
         synchronized (EngineService.class) {
-            if (appVisible) return false; // the person came back while we were deciding
+            if (appVisible && !closing) return false; // the person came back while we were deciding
         }
         stopEngine();
         stopForeground(true);

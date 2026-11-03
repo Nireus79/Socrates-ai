@@ -1,0 +1,53 @@
+# Build recipe for F-Droid (goes to fdroiddata as metadata/io.github.nireus79.socrates.yml). DRAFT, 2026-11-03: not yet run in F-Droid's
+# build image, and the commit tag below does not exist until the first v* tag is pushed. It follows Moly's recipe, which was run there
+# (JDK 21 from Debian trixie; Go, Node and npm from Debian forky; the NDK from sdkmanager). Socrates has no store flavours and no esbuild:
+# the screens are plain files copied by mobile/scripts/build-www.sh.
+Categories:
+  - Science & Education
+License: MIT
+AuthorName: Hermes Software
+AuthorEmail: Hermes_creative@proton.me
+WebSite: https://github.com/Nireus79/Socrates-ai
+SourceCode: https://github.com/Nireus79/Socrates-ai
+IssueTracker: https://github.com/Nireus79/Socrates-ai/issues
+Changelog: https://github.com/Nireus79/Socrates-ai/releases
+
+AntiFeatures:
+  NonFreeNet:
+    en-US: Sends your messages to the AI provider you choose (Claude or OpenAI) with your own key; those services are not free software. Once a day it also fetches the text of a small card from the project's repository on GitHub, with nothing about you.
+
+AutoName: Socrates
+
+RepoType: git
+Repo: https://github.com/Nireus79/Socrates-ai.git
+
+Builds:
+  - versionName: 0.1.0-beta.3
+    versionCode: 3
+    commit: v0.1.0-beta.3
+    subdir: mobile/android/app
+    sudo:
+      - echo "deb https://deb.debian.org/debian trixie main" > /etc/apt/sources.list.d/trixie.list
+      - echo "deb https://deb.debian.org/debian forky main" > /etc/apt/sources.list.d/forky.list
+      - apt-get update
+      - apt-get install -y -t trixie openjdk-21-jdk-headless
+      - apt-get install -y -t forky golang-1.26-go nodejs npm
+      - update-alternatives --auto java
+    prebuild:
+      - (cd ../.. && npm ci)
+      - (cd ../../../engine && GOTOOLCHAIN=local /usr/lib/go-1.26/bin/go mod download)
+    scanignore:
+      - mobile/node_modules/@capacitor/cli/assets/capacitor-cordova-android-plugins.tar.gz
+    scandelete:
+      - mobile/node_modules
+    build:
+      - sdkmanager "ndk;26.3.11579264"
+      - export PATH=/usr/lib/go-1.26/bin:$PATH
+      - export GOTOOLCHAIN=local
+      - (cd ../.. && scripts/build-engine.sh)
+      - (cd ../.. && npm ci --offline && scripts/build-www.sh && npx cap sync android)
+
+AutoUpdateMode: Version v%v
+UpdateCheckMode: Tags ^v[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?$
+CurrentVersion: 0.1.0-beta.3
+CurrentVersionCode: 3

@@ -2,6 +2,12 @@
 
 Written 2026-10-24, after commit 4039ba4. The beta is feature-complete; what is left is testing, paperwork and platform checks. "You" is the founder; "me" is Claude.
 
+## Decided 2026-11-03 (founder): F-Droid first, Google Play waits
+- Signing key made (`~/android-dev/socrates/`, backed up on USB, secrets `SOCRATES_KEYSTORE_*` set in the repository). It signs only the APK on GitHub releases; F-Droid signs its own build.
+- Version lives in `mobile/android/app/build.gradle`, checked against the tag by `scripts/check-version.sh`; one `v*` tag builds desktop and Android (`release-desktop.yml`, never run on GitHub yet).
+- Draft F-Droid recipe: `mobile/fdroid/io.github.nireus79.socrates.yml` (not run in F-Droid's build image; needs the tag it names). Listing text and images: `fastlane/metadata/android/en-US/` (phone screenshots missing: add `phoneScreenshots/1.png` and more from the finished app). The unused Google services plugin was removed from the Android build for F-Droid's scanner.
+- Next: cut the first tag, run the recipe in the fdroidserver build image, then open the merge request on F-Droid's GitLab (fdroiddata).
+
 ## Needed from you
 1. **Phone run.** Done on 2026-10-26 on a Mi A2 (Android 10, arm64) with a debug build (SESSION 65); a release build and the idle restart on that phone are still to do. Original note: plug in the phone, enable USB debugging, accept the prompt. I build and install a release build and drive it with your key (you enter the key in the app yourself). First run on real arm64 hardware: Back key, engine restart after idle, signed build, keyboard. Untested: Android 8 to 12, share-in, the save-as export picker, low-memory kills.
 2. **Your own full test**, including a read of the Greek texts (`app/i18n.js`, `engine/internal/safety/texts.go`, the crisis message above all) by a native reader, and one click on the new key-help buttons in the desktop window (the click itself was only tested on the Android emulator).

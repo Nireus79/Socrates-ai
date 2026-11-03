@@ -32,8 +32,9 @@ public class MainActivity extends BridgeActivity {
             }
 
             private void leave() {
-                setEnabled(false);
-                getOnBackPressedDispatcher().onBackPressed();
+                // Back at the first screen closes the app. Older Android versions would only move it to the background, where the engine
+                // would keep running until the idle stop; finishing ends it (onDestroy asks the service to stop).
+                finish();
             }
         });
     }
@@ -50,10 +51,10 @@ public class MainActivity extends BridgeActivity {
         super.onStop();
     }
 
-    // Closing the app with the back button or from the recent list ends the engine cleanly; the service would otherwise outlive the screens.
+    // Closing the app with the back button or from the recent list ends the engine cleanly once nothing is being written, and the service with it.
     @Override
     public void onDestroy() {
-        if (isFinishing()) EngineService.stopEngine();
+        if (isFinishing()) EngineService.closeWhenDone();
         super.onDestroy();
     }
 }
