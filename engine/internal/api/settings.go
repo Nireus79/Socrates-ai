@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"net/http"
+	"runtime"
 	"strings"
 
 	"socrates/internal/llm"
@@ -14,6 +15,7 @@ import (
 const (
 	kProvider = "llm.provider"
 	kKey      = "llm.key"
+	kEndpoint = "llm.ollama_endpoint"
 	kFast     = "llm.fast_model"
 	kReply    = "llm.reply_model"
 	kTested   = "llm.tested"
@@ -21,11 +23,13 @@ const (
 
 // LLMSettingsView is what the screens may see.
 type LLMSettingsView struct {
-	Provider   string `json:"provider"`
-	FastModel  string `json:"fastModel"`
-	ReplyModel string `json:"replyModel"`
-	HasKey     bool   `json:"hasKey"`
-	Tested     bool   `json:"tested"` // both models were measured on the program's batteries
+	Provider       string `json:"provider"`
+	OllamaEndpoint string `json:"ollamaEndpoint"`
+	FastModel      string `json:"fastModel"`
+	ReplyModel     string `json:"replyModel"`
+	HasKey         bool   `json:"hasKey"`
+	LocalAllowed   bool   `json:"localAllowed"` // a model on this computer is offered everywhere but on Android
+	Tested         bool   `json:"tested"`       // both models were measured on the program's batteries
 }
 
 func (h *handler) load(r *http.Request) (llm.Settings, bool, error) { return h.loadCtx(r.Context()) }
@@ -43,6 +47,9 @@ func (h *handler) loadCtx(ctx context.Context) (llm.Settings, bool, error) {
 	if s.APIKey, err = get(kKey); err != nil {
 		return s, false, err
 	}
+	if s.OllamaEndpoint, err = get(kEndpoint); err != nil {
+		return s, false, err
+	}
 	if s.FastModel, err = get(kFast); err != nil {
 		return s, false, err
 	}
@@ -54,7 +61,7 @@ func (h *handler) loadCtx(ctx context.Context) (llm.Settings, bool, error) {
 }
 
 func view(s llm.Settings, tested bool) LLMSettingsView {
-	return LLMSettingsView{Provider: s.Provider, FastModel: s.FastModel, ReplyModel: s.ReplyModel, HasKey: s.APIKey != "", Tested: tested}
+	return LLMSettingsView{Provider: s.Provider, OllamaEndpoint: s.OllamaEndpoint, FastModel: s.FastModel, ReplyModel: s.ReplyModel, HasKey: s.APIKey != "", LocalAllowed: localModelAllowed(), Tested: tested}
 }
 
 func (h *handler) getLLM(w http.ResponseWriter, r *http.Request) {
@@ -66,12 +73,13 @@ func (h *handler) getLLM(w http.ResponseWriter, r *http.Request) {
 	transport.WriteJSON(w, http.StatusOK, view(s, tested))
 }
 
-// putLLM changes the provider or the key. The new settings are tried first (the provider is asked which models the
+// putLLM changes the provider, the key or the Ollama address. The new settings are tried first (the provider is asked which models the
 // key can use) and saved only when that works, so a wrong key is never stored. An omitted apiKey keeps the stored one.
 func (h *handler) putLLM(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Provider string  `json:"provider"`
-		APIKey   *string `json:"apiKey"`
+		Provider       string  `json:"provider"`
+		APIKey         *string `json:"apiKey"`
+		OllamaEndpoint string  `json:"ollamaEndpoint"`
 	}
 	if !transport.ReadBody(w, r, &body) {
 		return
@@ -82,18 +90,33 @@ func (h *handler) putLLM(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	provider := strings.ToLower(strings.TrimSpace(body.Provider))
-	if provider != "claude" && provider != "openai" {
-		fail(w, http.StatusBadRequest, "The provider must be claude or openai.")
+	if provider != "claude" && provider != "openai" && provider != "ollama" {
+		fail(w, http.StatusBadRequest, "The provider must be claude, openai or ollama.")
 		return
 	}
-	next := llm.Settings{Provider: provider, APIKey: s.APIKey}
+	if provider == "ollama" && !localModelAllowed() {
+		fail(w, http.StatusBadRequest, "A model on this computer is not available on Android.")
+		return
+	}
+	next := llm.Settings{Provider: provider, APIKey: s.APIKey, OllamaEndpoint: strings.TrimSpace(body.OllamaEndpoint)}
 	if provider != s.Provider {
 		next.APIKey = "" // a key belongs to one provider
 	}
 	if body.APIKey != nil {
 		next.APIKey = strings.TrimSpace(*body.APIKey)
 	}
-	if next.APIKey == "" {
+	if provider == "ollama" {
+		next.APIKey = ""
+		if next.OllamaEndpoint == "" {
+			next.OllamaEndpoint = s.OllamaEndpoint
+		}
+		if e, err := llm.NormalizeOllamaEndpoint(next.OllamaEndpoint); err != nil {
+			fail(w, http.StatusBadRequest, err.Error())
+			return
+		} else {
+			next.OllamaEndpoint = e
+		}
+	} else if next.APIKey == "" {
 		fail(w, http.StatusBadRequest, "An API key is needed for this provider.")
 		return
 	}
@@ -112,7 +135,7 @@ func (h *handler) putLLM(w http.ResponseWriter, r *http.Request) {
 	if roles.Tested {
 		tested = "1"
 	}
-	saved := map[string]string{kProvider: next.Provider, kKey: next.APIKey, kFast: next.FastModel, kReply: next.ReplyModel, kTested: tested}
+	saved := map[string]string{kProvider: next.Provider, kKey: next.APIKey, kEndpoint: next.OllamaEndpoint, kFast: next.FastModel, kReply: next.ReplyModel, kTested: tested}
 	err = h.d.Store.Update(r.Context(), func(o *store.Ops) error {
 		for k, v := range saved {
 			if v == "" {
@@ -165,3 +188,7 @@ func (h *handler) testLLM(w http.ResponseWriter, r *http.Request) {
 	}
 	transport.WriteJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
+
+// localModelAllowed is false on Android: a phone cannot run a model good enough for the safety checks, and the engine there is never the
+// place for one (founder, 2026-11-03: the local model is for the computer versions only).
+var localModelAllowed = func() bool { return runtime.GOOS != "android" }

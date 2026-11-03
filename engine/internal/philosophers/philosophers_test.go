@@ -164,10 +164,10 @@ func TestEachPhilosopherConversesInHisOwnWayAndNoneReportsHisBooks(t *testing.T)
 	}
 }
 
-func TestSocratesAsksInsteadOfAnswering(t *testing.T) {
+func TestSocratesAnswersWhatHeCanAndAsksWhenAskingServes(t *testing.T) {
 	soc, _ := New().Get("socrates")
 	sys := soc.System()
-	for _, want := range []string{"You do not answer the person's questions; you ask them questions", "ask what follows from it, one step at a time", "you hand them back exactly as they were said", "never say they said what they did not", "You never list what is written in books", "build a case together with them", "you ask the question that lets them see it"} {
+	for _, want := range []string{"You answer what you can answer, plainly and briefly", "Asking is one of your ways and not your only one", "no question at all", "ask what follows from it, one step at a time", "you hand them back exactly as they were said", "never say they said what they did not", "You never list what is written in books", "build a case together with them", "you ask the question that lets them see it"} {
 		if !strings.Contains(sys, want) {
 			t.Errorf("Socrates lacks %q", want)
 		}
@@ -180,6 +180,11 @@ func TestSocratesAsksInsteadOfAnswering(t *testing.T) {
 	// the shared "answer first" and "think of the whole work" are not his: they make him recite the books
 	if strings.Contains(sys, "answer it first") || strings.Contains(sys, "the whole course of it") {
 		t.Error("the shared answer-first and whole-work sentences must not reach Socrates")
+	}
+	for _, gone := range []string{"you ask them questions.", "you do not tell them what you think of it", "ask again."} {
+		if strings.Contains(sys, gone) {
+			t.Errorf("Socrates must not be told to answer only with questions (%q)", gone)
+		}
 	}
 	if strings.Contains(sys, "you may say more") {
 		t.Error("Socrates has no longer answer to give: he asks")

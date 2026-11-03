@@ -33,3 +33,25 @@ func TestMeasureIsQuietOnFewRepliesAndOnNone(t *testing.T) {
 		t.Errorf("two replies cannot repeat a habit: %+v", r)
 	}
 }
+
+func TestEveryRubricHasSourcedCriteriaAndNamesWhatIsContested(t *testing.T) {
+	r := Rubrics()
+	for _, id := range []string{"socrates", "diogenes", "plato", "aristotle"} {
+		m, ok := r[id]
+		if !ok || len(m.Criteria) < 8 || len(m.Foreign) < 3 {
+			t.Fatalf("%s: the rubric is missing or thin", id)
+		}
+		contested := 0
+		for _, c := range m.Criteria {
+			if c.Behaviour == "" || c.Source == "" || (c.Status != "attested" && c.Status != "contested") {
+				t.Errorf("%s: incomplete criterion %+v", id, c)
+			}
+			if c.Status == "contested" {
+				contested++
+			}
+		}
+		if contested == 0 {
+			t.Errorf("%s: no criterion is marked contested, which would say that the whole picture is settled", id)
+		}
+	}
+}

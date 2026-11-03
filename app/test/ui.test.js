@@ -1082,3 +1082,21 @@ test("the chat shows the questions thought through and the question under way, a
   assert.match(line().textContent, /Questions thought through: 3/, "read again after the reply");
   assert.equal(line().querySelector("progress").getAttribute("value"), "700");
 });
+
+test("the provider screen offers a model on this computer only where the engine allows it, and says plainly that quality depends on the model", async () => {
+  for (const allowed of [true, false]) {
+    const p = page(ready({
+      "GET /api/profile": [200, { ageConfirmed: true, hasProvider: false }],
+      "GET /api/settings/llm": [200, { provider: "", localAllowed: allowed, ollamaEndpoint: "http://127.0.0.1:11434" }],
+    }));
+    p.app.start(p.root); await settle(10);
+    const sel = p.root.querySelector("select");
+    const has = [...sel.options].some((o) => o.value === "ollama");
+    assert.equal(has, allowed, "the option follows the engine (Android has none)");
+    if (allowed) {
+      sel.value = "ollama"; sel.dispatchEvent(new p.dom.window.Event("change")); await settle();
+      assert.match(text(p.root), /depend on what the model can do/);
+      assert.ok(p.root.querySelector("input[type=password]").closest("div").hidden, "no key is asked for a local model");
+    }
+  }
+});

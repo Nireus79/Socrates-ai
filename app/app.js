@@ -425,24 +425,39 @@ function keyHelp(kind, err) {
     el("p", {}, t("4. Come back here, paste the key above and press Save and test.")));
 }
 
-function providerScreen(first, back) {
+async function providerScreen(first, back) {
   const err = errorLine();
-  const provider = el("select", { "aria-label": t("Provider") }, el("option", { value: "claude" }, "Claude (Anthropic)"), el("option", { value: "openai" }, "OpenAI"));
+  const cur = await api("GET", "/api/settings/llm");
+  const localAllowed = !!(cur.data && cur.data.localAllowed);
+  const options = [el("option", { value: "claude" }, "Claude (Anthropic)"), el("option", { value: "openai" }, "OpenAI")];
+  if (localAllowed) options.push(el("option", { value: "ollama" }, t("A model on this computer")));
+  const provider = el("select", { "aria-label": t("Provider") }, ...options);
   const key = el("input", { type: "password", autocomplete: "off", placeholder: t("Paste your API key"), "aria-label": t("API key") });
   const keyBox = el("div", {}, el("label", {}, t("Your API key")), key, el("p", { class: "muted" }, t("The key stays on this device, encrypted. It is tested once, then used only to talk to your provider.")));
+  const endpoint = el("input", { type: "text", value: (cur.data && cur.data.ollamaEndpoint) || "http://127.0.0.1:11434", "aria-label": t("Address of the model server") });
+  const epBox = el("div", { hidden: true }, el("label", {}, t("Address of the model server")), endpoint,
+    el("p", { class: "muted" }, t("The server of a model that runs on this computer, for example Ollama. Nothing leaves the computer if the address is this computer.")),
+    el("p", { class: "notice", role: "note" }, t("How well the philosophers talk, and how reliably the safety checks work, depend on what the model can do. A small model understands Greek and instructions less well, may answer badly, and may judge a risky message wrongly. Choose the strongest model you can run.")));
   const help = el("div", {}, keyHelp(provider.value, err));
-  provider.addEventListener("change", () => { help.replaceChildren(keyHelp(provider.value, err)); });
+  const helpCard = el("div", { class: "card" }, help);
+  provider.addEventListener("change", () => {
+    const local = provider.value === "ollama";
+    keyBox.hidden = local; epBox.hidden = !local; helpCard.hidden = local;
+    if (!local) help.replaceChildren(keyHelp(provider.value, err));
+  });
   const save = el("button", { class: "primary" }, t("Save and test"));
   save.addEventListener("click", async () => {
     err.textContent = ""; save.disabled = true; save.textContent = t("Testing…");
-    const r = await api("PUT", "/api/settings/llm", { provider: provider.value, apiKey: key.value });
+    const body = { provider: provider.value };
+    if (provider.value === "ollama") body.ollamaEndpoint = endpoint.value; else body.apiKey = key.value;
+    const r = await api("PUT", "/api/settings/llm", body);
     save.disabled = false; save.textContent = t("Save and test");
     if (r.status === 200) { key.value = ""; return boot(); }
     err.textContent = errMsg(r.data);
   });
   mount(...screen(first ? t("Connect an AI provider") : t("AI provider"), el("div", {}, el("div", { class: "card stack" },
     el("p", {}, t("Socrates uses your own account with an AI provider. You pay the provider directly; Socrates has no server and sees nothing.")),
-    el("label", {}, t("Provider")), provider, keyBox, err, save), el("div", { class: "card" }, help)), back ? el("button", { class: "link", onclick: back }, t("Back")) : null));
+    el("label", {}, t("Provider")), provider, keyBox, epBox, err, save), helpCard), back ? el("button", { class: "link", onclick: back }, t("Back")) : null));
 }
 
 // ---- home: the philosophers and the conversations
@@ -747,7 +762,7 @@ async function settings() {
     el("p", { class: "muted" }, S.profile && !S.profile.legacy ? t("Signed in as {name}.", { name: S.profile.name }) : t("Signed in to the existing data.")),
     el("button", { onclick: logOut }, t("Log out"))));
   body.append(el("div", { class: "card stack" }, el("h2", {}, t("AI provider")),
-    el("p", { class: "muted" }, p.data.provider ? t("{provider}, models {fast} and {reply}", { provider: p.data.provider === "claude" ? "Claude (Anthropic)" : p.data.provider === "openai" ? "OpenAI" : p.data.provider, fast: p.data.fastModel, reply: p.data.replyModel }) : t("Not set up.")),
+    el("p", { class: "muted" }, p.data.provider ? t("{provider}, models {fast} and {reply}", { provider: p.data.provider === "claude" ? "Claude (Anthropic)" : p.data.provider === "openai" ? "OpenAI" : p.data.provider === "ollama" ? t("A model on this computer") : p.data.provider, fast: p.data.fastModel, reply: p.data.replyModel }) : t("Not set up.")),
     el("button", { onclick: () => show(() => providerScreen(false, back)) }, t("Change provider or key"))));
   body.append(el("div", { class: "card stack" }, el("h2", {}, t("Your data")),
     el("p", { class: "muted" }, t("Conversations are stored encrypted on this device only. An export holds your conversations and never your key.")),
@@ -776,6 +791,7 @@ async function settings() {
   const st = await api("GET", "/api/status");
   body.append(el("div", { class: "card stack" }, el("h2", {}, t("About")), logo(),
     el("p", { class: "muted" }, t("The philosophers are artificial characters made from what was written about them. They are not real people, and they are not a source of medical, legal or other professional advice.")),
+    el("p", { class: "muted" }, t("How well the philosophers talk, and how reliably the safety checks work, depend on what the model behind them can do.")),
     el("p", { class: "muted" }, t("If you are thinking of hurting yourself, please call your local emergency number or a crisis line, or tell someone you trust.")),
     el("p", { class: "muted" }, t("For people aged 16 and over. ") + (st.data.version ? t("Version {v}.", { v: st.data.version }) : "")),
     el("p", { class: "muted" }, t("Problems, questions and reports: {address} (Hermes Software).", { address: CONTACT }))));

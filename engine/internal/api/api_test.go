@@ -195,10 +195,11 @@ func TestOmittingTheKeyKeepsTheStoredOneAndChangingTheProviderDropsIt(t *testing
 func TestBadInputIsRefused(t *testing.T) {
 	e := setup(t)
 	for name, body := range map[string]string{
-		"unknown provider": `{"provider":"gemini","apiKey":"k"}`,
-		"no key":           `{"provider":"claude"}`,
-		"ollama":           `{"provider":"ollama","ollamaEndpoint":"http://127.0.0.1:11434"}`,
-		"not json":         `nonsense`,
+		"unknown provider":  `{"provider":"gemini","apiKey":"k"}`,
+		"no key":            `{"provider":"claude"}`,
+		"bad ollama":        `{"provider":"ollama","ollamaEndpoint":"ftp://x"}`,
+		"not json":          `nonsense`,
+		"credentials in it": `{"provider":"ollama","ollamaEndpoint":"http://u:p@127.0.0.1:11434"}`,
 	} {
 		if code, _ := e.do(t, "PUT", "/api/settings/llm", body); code != 400 {
 			t.Errorf("%s: %d", name, code)
@@ -246,5 +247,24 @@ func TestProviderFailuresAreMappedToPlainAnswers(t *testing.T) {
 	failLLM(rec, io.ErrUnexpectedEOF)
 	if rec.Code != 500 {
 		t.Errorf("an unexpected error: %d", rec.Code)
+	}
+}
+
+func TestLocalModelIsOfferedOnTheComputerAndRefusedOnAndroid(t *testing.T) {
+	e := setup(t)
+	if code, body := e.do(t, "GET", "/api/settings/llm", ""); code != 200 || !strings.Contains(body, `"localAllowed":true`) {
+		t.Fatalf("a computer is offered a local model: %d %s", code, body)
+	}
+	old := localModelAllowed
+	localModelAllowed = func() bool { return false }
+	defer func() { localModelAllowed = old }()
+	if code, body := e.do(t, "GET", "/api/settings/llm", ""); code != 200 || !strings.Contains(body, `"localAllowed":false`) {
+		t.Fatalf("Android is not offered one: %d %s", code, body)
+	}
+	if code, _ := e.do(t, "PUT", "/api/settings/llm", `{"provider":"ollama","ollamaEndpoint":"http://127.0.0.1:11434"}`); code != 400 {
+		t.Errorf("Android must refuse a local model: %d", code)
+	}
+	if _, ok, _ := e.store.Setting(context.Background(), "llm.provider"); ok {
+		t.Error("the refused local model was saved")
 	}
 }
