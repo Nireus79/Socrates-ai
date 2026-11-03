@@ -94,7 +94,7 @@
     "Your profile could not be read.": "Το προφίλ σου δεν μπόρεσε να διαβαστεί.",
     "Socrates AI": "Socrates AI",
     "Welcome to Socrates": "Καλώς ήρθες στο Socrates",
-    "Socrates is a conversation with artificial philosophers, made from what was written about them. They ask hard questions and do not give verdicts.": "Το Socrates είναι μια συζήτηση με τεχνητούς φιλοσόφους, φτιαγμένους από όσα γράφτηκαν γι’ αυτούς. Θέτουν δύσκολες ερωτήσεις και δεν βγάζουν ετυμηγορίες.",
+    "Socrates is an app for talking with artificial philosophers, made from what was written about them. They ask hard questions and do not give verdicts.": "Το Socrates είναι μια εφαρμογή για να μιλάς με τεχνητούς φιλοσόφους, φτιαγμένους από όσα γράφτηκαν γι’ αυτούς. Θέτουν δύσκολες ερωτήσεις και δεν βγάζουν ετυμηγορίες.",
     "I am 16 or older": "Είμαι 16 ετών ή άνω",
     "Language": "Γλώσσα",
     "Provider": "Πάροχος",

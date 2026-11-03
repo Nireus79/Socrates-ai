@@ -479,7 +479,7 @@ const logo = () => el("img", { class: "logo", src: "mark.png", alt: "Socrates AI
 
 function ageScreen() {
   mount(...screen(t("Welcome to Socrates"), el("div", { class: "card stack" }, logo(),
-    el("p", {}, t("Socrates is a conversation with artificial philosophers, made from what was written about them. They ask hard questions and do not give verdicts.")),
+    el("p", {}, t("Socrates is an app for talking with artificial philosophers, made from what was written about them. They ask hard questions and do not give verdicts.")),
     el("p", {}, t(AGE_TEXT)),
     languagePicker(ageScreen),
     el("button", { class: "primary", onclick: async () => { await api("POST", "/api/profile/age"); boot(); } }, t("I am 16 or older")))));

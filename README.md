@@ -1,6 +1,6 @@
 # Socrates
 
-A conversation with artificial Greek philosophers (Socrates, Diogenes, Plato, Aristotle), each revived in today's world and speaking as himself. They ask hard
+An app for talking with artificial Greek philosophers (Socrates, Diogenes, Plato, Aristotle), each revived in today's world and speaking as himself. They ask hard
 questions, do not give verdicts, remember what you told them (in your own words, which you can see and delete), and offer starting points when you are stuck.
 It runs on your own AI provider key (Claude or OpenAI). No server of ours, no ads in the chat, nothing you write in a log,
 conversations encrypted on your device.
