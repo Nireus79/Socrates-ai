@@ -5,6 +5,8 @@ Status: draft of 2026-10-24 for the beta. It is the source for the privacy page 
 ## In plain words
 - Your conversations, the notes the philosophers keep about you and your settings are stored **only on your own device**, encrypted. We (Hermes Software) run no server and receive nothing.
 - To write a reply, the text of the conversation is sent to the **AI provider you chose** (Anthropic or OpenAI) with **your own key**. That provider's terms and privacy policy apply to what it receives. Nothing else leaves your device.
+- On a computer you can instead choose **a model on this computer**: the conversation then goes to the model server whose address you entered (by default your own machine) and to no provider. What that server does with it is outside this app. Android offers only Claude and OpenAI.
+- On a computer several people can have their own **profile**, each with its own folder, key, settings and optional passphrase; there is no server, so a forgotten passphrase cannot be recovered.
 - There is no account, no analytics, no advertising and no tracking in the beta.
 - One small request besides that: while the card at the foot of the screens is shown, the program may fetch a public data file with its messages (`site/cards.json` in the project's GitHub repository, at most once a day, over https, with no cookies, no referrer and nothing about you; GitHub sees your address as for any web page). Hiding the card stops it for that session. If the file cannot be fetched, the messages built into the app are shown.
 - The philosophers are artificial. They are not a medical, legal or crisis service. The app is for people aged 16 and over.
