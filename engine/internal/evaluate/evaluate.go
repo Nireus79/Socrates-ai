@@ -62,3 +62,26 @@ func Measure(replies []string, limit int) Report {
 func words(s string) []string {
 	return strings.FieldsFunc(s, func(c rune) bool { return unicode.IsSpace(c) })
 }
+
+// EndingQuestions counts the replies whose last sentence is a question (a Greek question mark is ";" or U+037E), and OverWords those longer
+// than the given number of words. Both are structural, for comparing runs without reading every transcript.
+func EndingQuestions(replies []string) int {
+	n := 0
+	for _, r := range replies {
+		t := strings.TrimRight(strings.TrimSpace(r), " .\"'»)]”")
+		if strings.HasSuffix(t, "?") || strings.HasSuffix(t, ";") || strings.HasSuffix(t, "\u037e") {
+			n++
+		}
+	}
+	return n
+}
+
+func OverWords(replies []string, limit int) int {
+	n := 0
+	for _, r := range replies {
+		if len(words(r)) > limit {
+			n++
+		}
+	}
+	return n
+}

@@ -1108,3 +1108,25 @@ func TestTheReminderCarriesTheFactOfHowTheLastRepliesEnded(t *testing.T) {
 		t.Fatalf("no fact was due: %q", r)
 	}
 }
+
+func TestOpeningsFactIsToldOnlyWhenTheLastThreeBeganWithTheSameWord(t *testing.T) {
+	mk := func(s ...string) []store.Message {
+		var h []store.Message
+		for _, e := range s {
+			h = append(h, store.Message{Role: "user", Content: "u"}, store.Message{Role: "philosopher", Content: e})
+		}
+		return h
+	}
+	const fact = "Your last three replies began with the same word."
+	if openingsFact(mk("Λες ότι x.", "λες, λοιπόν, y.", "«Λες» z.")) != fact {
+		t.Error("three openings with the same word (case and punctuation aside) must be told")
+	}
+	if openingsFact(mk("Λες x.", "Ναι y.", "Λες z.")) != "" || openingsFact(mk("Λες x.", "Λες y.")) != "" {
+		t.Error("two the same, or one different, is not a habit")
+	}
+	ph, _ := philosophers.New().Get("diogenes")
+	h := mk("Λες x;", "Λες y;", "Λες z;")
+	if r := reminderFor(ph, h); !strings.Contains(r, "each ended with a question") || !strings.Contains(r, "began with the same word") {
+		t.Fatalf("%q", r)
+	}
+}

@@ -55,3 +55,13 @@ func TestEveryRubricHasSourcedCriteriaAndNamesWhatIsContested(t *testing.T) {
 		}
 	}
 }
+
+func TestEndingQuestionsAndOverWordsAreStructural(t *testing.T) {
+	r := []string{"Why?", "Because.", "Γιατί;", "Τι \u037e", "Yes, I think so, and here is the reason why."}
+	if EndingQuestions(r) != 3 {
+		t.Errorf("%d", EndingQuestions(r))
+	}
+	if OverWords(r, 5) != 1 {
+		t.Errorf("%d", OverWords(r, 5))
+	}
+}

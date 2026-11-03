@@ -33,6 +33,10 @@ var links = map[string]map[string][]string{
 		"School or way of life":           {"Theory and practice", "What came after"},
 		"What came after":                 {"How far the stories can be trusted", "School or way of life"},
 		"Death and burial":                {"Nature and convention", "How far the stories can be trusted"},
+		"Citizen of the world":            {"Nature and convention", "Justice, law and the city"},
+		"Friendship and love":             {"Wealth, begging and slavery", "Training and need"},
+		"Justice, law and the city":       {"Citizen of the world", "Nature and convention", "Truth-telling and shamelessness"},
+		"Happiness and the good life":     {"Training and need", "Praise and blame"},
 	},
 	"plato": {
 		"Pleasure and the good":          {"Courage and the other virtues", "The soul and its immortality", "Knowledge"},

@@ -11,6 +11,7 @@ import (
 	"errors"
 	"log"
 	"strings"
+	"unicode"
 	"sync"
 	"time"
 
@@ -1041,7 +1042,26 @@ func endingsFact(history []store.Message) string {
 	return "Your last three replies each ended with a question."
 }
 
-// reminderFor is the philosopher's own reminder with, when it is true, the fact of how his last replies ended.
+// openingsFact is the same kind of fact for how the last three replies began: with the same first word. Structural only (no word list).
+func openingsFact(history []store.Message) string {
+	var first []string
+	for i := len(history) - 1; i >= 0 && len(first) < 3; i-- {
+		if history[i].Role != "philosopher" {
+			continue
+		}
+		f := strings.Fields(history[i].Content)
+		if len(f) == 0 {
+			return ""
+		}
+		first = append(first, strings.ToLower(strings.TrimFunc(f[0], func(r rune) bool { return !unicode.IsLetter(r) })))
+	}
+	if len(first) < 3 || first[0] == "" || first[0] != first[1] || first[1] != first[2] {
+		return ""
+	}
+	return "Your last three replies began with the same word."
+}
+
+// reminderFor is the philosopher's own reminder with, when they are true, the facts of how his last replies ended and began.
 func reminderFor(ph philosophers.Philosopher, history []store.Message) string {
-	return strings.TrimSpace(ph.Reminder() + " " + endingsFact(history))
+	return strings.TrimSpace(ph.Reminder() + " " + endingsFact(history) + " " + openingsFact(history))
 }
