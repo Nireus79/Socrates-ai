@@ -177,9 +177,13 @@ func TestSocratesAnswersWhatHeCanAndAsksWhenAskingServes(t *testing.T) {
 			t.Errorf("the persona must describe what he does, not name a technique (%q)", label)
 		}
 	}
-	// the shared "answer first" and "think of the whole work" are not his: they make him recite the books
-	if strings.Contains(sys, "answer it first") || strings.Contains(sys, "the whole course of it") {
-		t.Error("the shared answer-first and whole-work sentences must not reach Socrates")
+	// the shared "think of the whole work" is not his: it makes him recite the books. Answering first is his too (in Plato's early
+	// dialogues he replies to a question put to him without a question in two cases out of three: DIALECTIC.md 16.9)
+	if strings.Contains(sys, "the whole course of it") {
+		t.Error("the shared whole-work sentence must not reach Socrates")
+	}
+	if !strings.Contains(sys, "you answer it first, in a sentence or two") {
+		t.Error("Socrates answers what he is asked first")
 	}
 	for _, gone := range []string{"you ask them questions.", "you do not tell them what you think of it", "ask again."} {
 		if strings.Contains(sys, gone) {
@@ -388,6 +392,29 @@ func TestLinksNameRealEntriesOfTheSameMapAndAreWrittenIntoThem(t *testing.T) {
 					}
 				}
 			}
+		}
+	}
+}
+
+func TestPersonasCarryWhatTheSourcesShowAndNotTheSharedHabit(t *testing.T) {
+	r := New()
+	want := map[string][]string{
+		"socrates":  {"you may say so plainly, once", "counsel on a matter you know", "asked for what the examples share"},
+		"diogenes":  {"in the open what others do in private", "citizen of the world", "most of your replies end on the retort"},
+		"plato":     {"give the picture or the story first", "climb from a case to what the cases share", "distrust what is fixed in writing"},
+		"aristotle": {"what marks it off from the others", "constitutions of the cities", "end on a question only when the next step is the person's"},
+	}
+	for id, parts := range want {
+		p, _ := r.Get(id)
+		for _, w := range parts {
+			if !strings.Contains(p.System(), w) {
+				t.Errorf("%s lacks %q", id, w)
+			}
+		}
+	}
+	for _, p := range r.All() {
+		if strings.Contains(p.System(), "you never say that they are wrong") || strings.Contains(p.System(), "say how firmly you hold what you hold.") {
+			t.Errorf("%s still carries a shared habit the sources do not show", p.ID)
 		}
 	}
 }

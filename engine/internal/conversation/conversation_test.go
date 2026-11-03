@@ -1067,3 +1067,44 @@ func short(s string, n int) string {
 	}
 	return s
 }
+
+func TestEndingsFactIsToldOnlyAfterThreeRepliesEndedInAQuestion(t *testing.T) {
+	mk := func(ends ...string) []store.Message {
+		var h []store.Message
+		for _, e := range ends {
+			h = append(h, store.Message{Role: "user", Content: "u"}, store.Message{Role: "philosopher", Content: e})
+		}
+		return h
+	}
+	const fact = "Your last three replies each ended with a question."
+	if got := endingsFact(mk("Why?", "And then?", "Who says so;")); got != fact {
+		t.Fatalf("three questions (a Greek question mark among them) must be told: %q", got)
+	}
+	if endingsFact(mk("Why?", "I think so.", "Who says so?")) != "" {
+		t.Error("a plain statement among the last three means nothing is said")
+	}
+	if endingsFact(mk("Why?", "And then?")) != "" {
+		t.Error("two replies are not a habit yet")
+	}
+	if endingsFact(mk("It is so.", "Why?", "And then?", "Who?")) != fact {
+		t.Error("only the last three count")
+	}
+	h := append(mk("Why?", "And?", "Who?"), store.Message{Role: "marker", Content: ""})
+	if endingsFact(h) != fact {
+		t.Error("a marker between replies must not hide the habit")
+	}
+}
+
+func TestTheReminderCarriesTheFactOfHowTheLastRepliesEnded(t *testing.T) {
+	ph, _ := philosophers.New().Get("socrates")
+	var h []store.Message
+	for _, e := range []string{"Why?", "And then?", "Who?"} {
+		h = append(h, store.Message{Role: "user", Content: "u"}, store.Message{Role: "philosopher", Content: e})
+	}
+	if r := reminderFor(ph, h); !strings.Contains(r, ph.Reminder()) || !strings.HasSuffix(r, "Your last three replies each ended with a question.") {
+		t.Fatalf("%q", r)
+	}
+	if r := reminderFor(ph, h[:2]); r != strings.TrimSpace(ph.Reminder()) {
+		t.Fatalf("no fact was due: %q", r)
+	}
+}

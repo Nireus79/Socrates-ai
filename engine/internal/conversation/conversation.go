@@ -509,7 +509,7 @@ func (s *Service) send(ctx context.Context, conversationID, text string, suggest
 		if sum, _, ok, _ := s.st.Summary(ctx, conversationID); ok {
 			system += "\n\nWhat has been said earlier in this conversation, in short:\n" + sum
 		}
-		reply, err := s.guarded(ctx, client, system, contextFor(history, text), toLLM(history), text, ph.Traps, ph.Notes, ph.Reminder())
+		reply, err := s.guarded(ctx, client, system, contextFor(history, text), toLLM(history), text, ph.Traps, ph.Notes, reminderFor(ph, history))
 		switch {
 		case errors.Is(err, errHeldBack): // held back twice: the user's message is kept, the reply is a fixed text
 			d.Marker = safety.MarkerGateFallback
@@ -1016,4 +1016,32 @@ func (s *Service) Suggest(ctx context.Context, conversationID string, exclude []
 	msgs := contextFor(history, "")
 	msgs = msgs[:len(msgs)-1] // contextFor appends the newest user message; there is none here
 	return suggest.Generate(ctx, client, msgs, exclude)
+}
+
+// endingsFact tells the philosopher a plain fact about the conversation he is in: that his last three replies each ended with a question.
+// It is a fact and not an instruction, in the manner of the do-not-repeat list of the first design (PLAN 2.2): the model has no memory of
+// its own habit except by reading its earlier replies, and a habit repeated three times in a row is read by it as the way to go on; told
+// the fact, it chooses. Measured without the key on the same 32-message script: replies ending in a question fell from about 27 to about
+// 21 of 32, close to the 64 per cent of Socrates' own turns in Plato's early dialogues (DIALECTIC.md 16.9).
+func endingsFact(history []store.Message) string {
+	n := 0
+	for i := len(history) - 1; i >= 0 && n < 3; i-- {
+		if history[i].Role != "philosopher" {
+			continue
+		}
+		t := strings.TrimRight(strings.TrimSpace(history[i].Content), " .\"'»)]”")
+		if !(strings.HasSuffix(t, "?") || strings.HasSuffix(t, ";") || strings.HasSuffix(t, "\u037e")) {
+			return ""
+		}
+		n++
+	}
+	if n < 3 {
+		return ""
+	}
+	return "Your last three replies each ended with a question."
+}
+
+// reminderFor is the philosopher's own reminder with, when it is true, the fact of how his last replies ended.
+func reminderFor(ph philosophers.Philosopher, history []store.Message) string {
+	return strings.TrimSpace(ph.Reminder() + " " + endingsFact(history))
 }
