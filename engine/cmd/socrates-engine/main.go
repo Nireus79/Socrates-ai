@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"socrates/internal/api"
+	"socrates/internal/cards"
 	"socrates/internal/keystore"
 	"socrates/internal/privacy"
 	"socrates/internal/secrets"
@@ -127,7 +128,7 @@ func run() error {
 	}
 	defer db.Close()
 
-	mux, conversations := api.New(api.Deps{Store: db, Selector: true, Version: version, LLMOptions: llmOptions(*dir), EnforceUnlocks: os.Getenv("SOCRATES_ENFORCE_UNLOCKS") == "1"})
+	mux, conversations := api.New(api.Deps{Store: db, Selector: true, Version: version, LLMOptions: llmOptions(*dir), EnforceUnlocks: os.Getenv("SOCRATES_ENFORCE_UNLOCKS") == "1", Cards: cards.NewFeed(cards.DefaultURL)})
 	// The second check (EnableReview) is off in the program: it sent back 9 to 12 of 12 drafts whatever the persona said (REDESIGN.md 8); kept as a test instrument.
 	defer conversations.Wait() // titles and summaries of the last turns are written before the database closes
 	transport.RegisterShutdown(mux, quit)

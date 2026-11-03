@@ -11,9 +11,9 @@ import (
 	"errors"
 	"log"
 	"strings"
-	"unicode"
 	"sync"
 	"time"
+	"unicode"
 
 	"socrates/internal/entitlements"
 	"socrates/internal/ledger"

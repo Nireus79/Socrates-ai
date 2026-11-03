@@ -6,6 +6,7 @@ Status: draft of 2026-10-24 for the beta. It is the source for the privacy page 
 - Your conversations, the notes the philosophers keep about you and your settings are stored **only on your own device**, encrypted. We (Hermes Software) run no server and receive nothing.
 - To write a reply, the text of the conversation is sent to the **AI provider you chose** (Anthropic or OpenAI) with **your own key**. That provider's terms and privacy policy apply to what it receives. Nothing else leaves your device.
 - There is no account, no analytics, no advertising and no tracking in the beta.
+- One small request besides that: while the card at the foot of the screens is shown, the program may fetch a public data file with its messages (`site/cards.json` in the project's GitHub repository, at most once a day, over https, with no cookies, no referrer and nothing about you; GitHub sees your address as for any web page). Hiding the card stops it for that session. If the file cannot be fetched, the messages built into the app are shown.
 - The philosophers are artificial. They are not a medical, legal or crisis service. The app is for people aged 16 and over.
 
 ## What is stored, and where

@@ -1135,14 +1135,53 @@ test("a profile can be made without a passphrase: no passphrase asked, the key g
   assert.equal(p.calls.filter((c) => c.key === "POST /api/keystore/unlock").length, 0, "no passphrase was asked of an open profile");
 });
 
-test("the home screen ends with a labelled sponsor card whose button asks the shell to open the sponsor page, and only that page", async () => {
-  const p = page(ready({ "GET /api/conversations": [200, { conversations: [] }] }));
+test("every screen ends with a labelled card; its links open through the shell; one click hides it for the session; the logo is not on the login page", async () => {
+  const auth = withProfiles({ profiles: [{ id: "p1", name: "Anna" }], active: "" });
+  auth.app.start(auth.root); await settle();
+  assert.ok(auth.root.querySelector(".card-area"), "the login page has the card too");
+  assert.equal(auth.root.lastElementChild.className, "card-area", "its own area, last on the page");
+  assert.equal(auth.root.querySelector("img.logo"), null, "no logo on the login page");
+
+  const p = page(ready({ "GET /api/conversations": [200, { conversations: [] }], "GET /api/cards": [200, { entries: [] }] }));
   const asked = [];
-  global.window.socratesShell = { ready: Promise.resolve(), base: "", token: "t", openLink: async (u) => { asked.push(u); } };
+  global.window.socratesShell = { ready: Promise.resolve(), base: "", token: "t", openSponsorLink: async (u) => { asked.push(u); } };
   p.app.start(p.root); await settle(10);
-  const card = p.root.querySelector(".sponsor");
-  assert.ok(card && /Support/.test(card.textContent), "a labelled card");
-  click([...card.querySelectorAll("button")][0]); await settle();
+  const card = p.root.querySelector(".card-area");
+  assert.ok(card && /Sponsored/.test(card.textContent) && /Hermes Software/.test(card.textContent), "labelled, with the built-in message");
+  click([...card.querySelectorAll("button")].find((b) => b.textContent === "Sponsor")); await settle();
   assert.deepStrictEqual(asked, ["https://github.com/sponsors/Nireus79"]);
+  click([...card.querySelectorAll("button")].find((b) => b.textContent === "Hide")); await settle();
+  assert.equal(p.root.querySelector(".card-area"), null, "hidden");
+  click([...p.root.querySelectorAll("button")].find((b) => b.textContent === "Settings")); await settle(10);
+  assert.equal(p.root.querySelector(".card-area"), null, "and it stays hidden on the next screen");
   delete global.window.socratesShell;
+});
+
+test("the project's messages replace the built-in ones, are shown as text, and only https links survive", async () => {
+  const evil = "<img src=x onerror=alert(1)>";
+  const p = page(ready({ "GET /api/conversations": [200, { conversations: [] }], "GET /api/cards": [200, { entries: [
+    { id: "s", kind: "sponsor", active: true, title: evil, text: "From the file", links: [{ text: "Ok", url: "https://example.org/x" }, { text: "Bad", url: "javascript:alert(1)" }, { text: "Plain", url: "http://example.org/" }] },
+    { id: "off", kind: "sponsor", active: false, title: "retired", text: "x", links: [] }] }] }));
+  p.app.start(p.root); await settle(12);
+  const card = p.root.querySelector(".card-area");
+  assert.match(card.textContent, /From the file/);
+  assert.doesNotMatch(card.textContent, /Hermes Software|retired/);
+  assert.ok(card.textContent.includes(evil) && card.querySelector("img") === null, "text, never markup");
+  assert.deepStrictEqual([...card.querySelectorAll(".row button")].map((b) => b.textContent), ["Ok"]);
+});
+
+test("a hidden card asks the engine for nothing, and the chat has the card below the writing box and the mark behind the messages", async () => {
+  const p = page(ready({ "GET /api/conversations": [200, { conversations: [] }], "GET /api/cards": [200, { entries: [] }] }));
+  p.app.start(p.root); await settle(10);
+  click([...p.root.querySelectorAll(".card-area button")].find((b) => b.textContent === "Hide")); await settle();
+  const before = p.calls.filter((c) => c.key === "GET /api/cards").length;
+  click([...p.root.querySelectorAll("button")].find((b) => b.textContent === "Settings")); await settle(10);
+  click([...p.root.querySelectorAll("button")].find((b) => b.textContent === "Back" || b.textContent === "Done")); await settle(10);
+  assert.equal(p.calls.filter((c) => c.key === "GET /api/cards").length, before, "no request while the card is hidden");
+  const q = page(withQuestion({}));
+  q.app.start(q.root); await settle(10);
+  click(q.root.querySelector(".card.click")); await settle(12);
+  assert.ok(q.root.querySelector(".chatwrap .watermark"), "the mark is behind the chat");
+  assert.equal(q.root.lastElementChild.className, "card-area", "the card is below the writing box");
+  assert.equal(q.root.lastElementChild.previousElementSibling.tagName, "FORM");
 });

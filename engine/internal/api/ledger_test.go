@@ -176,3 +176,11 @@ func TestTheMemorySettingCanBeReadAndChangedOverHTTP(t *testing.T) {
 		t.Fatal(code)
 	}
 }
+
+func TestTheCardRouteAnswersWithAnEmptyListWhenThereIsNoFeed(t *testing.T) {
+	a := newApp(t, newScript(t))
+	code, r := a.do(t, "GET", "/api/cards", "")
+	if list, ok := r["entries"].([]any); code != 200 || !ok || len(list) != 0 {
+		t.Fatalf("%d %v", code, r)
+	}
+}

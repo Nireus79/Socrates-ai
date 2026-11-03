@@ -107,8 +107,70 @@ function confirmButton(label, cls, armed, action) {
 }
 
 // A new screen takes the focus on its heading, so that a keyboard or screen-reader user starts at the top of what is new.
+// ---- the card at the foot of every screen
+//
+// A small card with a message from the project or from a sponsor, as Moly's: labelled "Sponsored" (the project's own too), static (text and
+// links only), one click hides it until the app is opened again, and it has its own area below everything, never between a philosopher's
+// replies. The messages built in here show until the engine brings the project's data file (site/cards.json, fetched by the engine at most
+// once a day with nothing about the person), which lets them change without a release. The links open in the system's browser.
+const CARD_KEY = "socrates_card_hidden";
+const BUILTIN_CARDS = [{
+  id: "about-socrates", kind: "socrates", active: true, builtin: true,
+  title: "Socrates AI is made by Hermes Software",
+  text: "A free beta, made by one person. If you would like it to go on, please sponsor.",
+  links: [{ text: "Sponsor", url: "https://github.com/sponsors/Nireus79", primary: true }, { text: "GitHub", url: "https://github.com/Nireus79/Socrates-ai" }, { text: "Hermes Software", url: "https://hermesoftware.wordpress.com/" }],
+}];
+const cardHidden = () => { if (S.cardGone) return true; try { return window.sessionStorage.getItem(CARD_KEY) === "1"; } catch (_) { return false; } };
+const hideCard = () => { S.cardGone = true; try { window.sessionStorage.setItem(CARD_KEY, "1"); } catch (_) { /* hidden until the next screen is drawn */ } };
+const safeHttps = (u) => { try { const p = new URL(u); return p.protocol === "https:" && !p.username && !p.port; } catch (_) { return false; } };
+// One of the active entries, chosen by the day only, so that the card changes slowly and depends on nothing about the person.
+function pickCard(entries, now) {
+  const active = (entries || []).filter((e) => e && e.active);
+  return active.length ? active[Math.floor((now || Date.now()) / 86400000) % active.length] : null;
+}
+async function openCardLink(url, err) {
+  if (!safeHttps(url)) return;
+  const shell = shellInfo();
+  const bound = typeof window !== "undefined" && window.go && window.go.main && window.go.main.App;
+  try {
+    if (shell && shell.openSponsorLink) await shell.openSponsorLink(url);
+    else if (bound && bound.OpenSponsorLink) await bound.OpenSponsorLink(url);
+    else window.open(url, "_blank", "noopener,noreferrer");
+  } catch (_) {
+    err.textContent = t("The browser could not be opened. Go to {url} yourself.", { url });
+  }
+}
+function cardNode() {
+  if (cardHidden()) return null;
+  const e = pickCard(S.cardFeed && S.cardFeed.length ? S.cardFeed : BUILTIN_CARDS);
+  if (!e) return null;
+  const say = (x) => (e.builtin ? t(x) : x); // the built-in words are translated; a message from the file is shown as written
+  const err = errorLine();
+  const links = (e.links || []).filter((l) => safeHttps(l.url));
+  const node = el("aside", { class: "card-area", "aria-label": t("Sponsored") },
+    el("div", { class: "card-head" }, el("span", { class: "card-label" }, t("Sponsored")),
+      el("button", { class: "link", type: "button", "aria-label": t("Hide this card"), title: t("Hide this card until you open Socrates again"), onclick: () => { hideCard(); node.remove(); } }, t("Hide"))),
+    el("strong", { class: "card-title" }, say(e.title)), el("p", { class: "card-text" }, say(e.text)),
+    links.length ? el("div", { class: "row" }, ...links.map((l) => el("button", { type: "button", class: l.primary ? "primary small-btn" : "small-btn", onclick: () => openCardLink(l.url, err) }, say(l.text)))) : null, err);
+  return node;
+}
+// The project's messages, once per session (the engine fetches the file at most once a day); nothing is asked while the card is hidden.
+async function refreshCards() {
+  if (cardHidden() || S.cardFeed || S.cardsBusy) return;
+  S.cardsBusy = true;
+  try {
+    const r = await api("GET", "/api/cards");
+    if (r.status === 200) {
+      S.cardFeed = (r.data.entries || []).filter((e) => e && e.active);
+      const old = S.root.querySelector(".card-area");
+      const fresh = cardNode();
+      if (old && fresh) old.replaceWith(fresh);
+    }
+  } finally { S.cardsBusy = false; }
+}
+
 function mount(...nodes) {
-  S.root.replaceChildren(...nodes);
+  S.root.replaceChildren(...nodes, ...[cardNode()].filter(Boolean));
   const h = S.root.querySelector("h1");
   if (h) { h.setAttribute("tabindex", "-1"); h.focus({ preventScroll: true }); }
 }
@@ -318,7 +380,7 @@ function authScreen(info, tab) {
       err, showBox([one.input, two.input]), go);
     syncProtect();
   }
-  const body = el("div", { class: "auth" }, logo(), tabs, el("div", { class: "card stack" }, form));
+  const body = el("div", { class: "auth" }, tabs, el("div", { class: "card stack" }, form));
   // Removing a profile is rare and final, so it sits out of the way, below the form.
   const removable = profiles.filter((p) => !p.legacy);
   if (removable.length) {
@@ -424,9 +486,9 @@ function ageScreen() {
     el("button", { class: "primary", onclick: async () => { await api("POST", "/api/profile/age"); boot(); } }, t("I am 16 or older")))));
 }
 
-// Pages of the two providers that the key help leads to, and the developer's sponsor page. A link is opened in the system's browser, by the shell, and only if it is
+// Pages of the two providers that the key help leads to. A link is opened in the system's browser, by the shell, and only if it is
 // one of these two sites over https; the page never navigates itself and never sends anything to them.
-const PROVIDER_SITES = /^https:\/\/(platform\.(claude|openai)\.com\/|github\.com\/sponsors\/Nireus79$)/;
+const PROVIDER_SITES = /^https:\/\/platform\.(claude|openai)\.com\//;
 async function openLink(url, err) {
   if (!PROVIDER_SITES.test(url)) return;
   const shell = shellInfo();
@@ -493,19 +555,8 @@ async function providerScreen(first, back) {
 
 // ---- home: the philosophers and the conversations
 
-// The sponsor card: one quiet, labelled card at the foot of the home screen, loaded from nothing but this file (no network, no tracking).
-// For now it points to the developer's own sponsor page; a later sponsor replaces the three fields (and the one address the shells open).
-// null hides the card.
-const SPONSOR = { label: "Support", text: "Socrates is free and made by one person. If you would like to help it go on, you can sponsor the work.", button: "Sponsor on GitHub", url: "https://github.com/sponsors/Nireus79" };
-
-function sponsorCard() {
-  if (!SPONSOR) return null;
-  const err = errorLine();
-  return el("div", { class: "card stack sponsor", role: "note" }, el("div", { class: "muted" }, t(SPONSOR.label)),
-    el("p", {}, t(SPONSOR.text)), el("button", { class: "outlink", onclick: () => openLink(SPONSOR.url, err) }, t(SPONSOR.button)), err);
-}
-
 async function home() {
+  refreshCards(); // the card's messages from the project's file, once per session and only while the card is shown
   const [c] = await Promise.all([api("GET", "/api/conversations")]);
   const byId = Object.fromEntries(S.philosophers.map((p) => [p.id, p]));
   const body = el("div", {});
@@ -531,8 +582,6 @@ async function home() {
         el("h2", {}, k.title || t("New conversation")), el("div", { class: "muted" }, who)));
     }
   }
-  const sponsor = sponsorCard();
-  if (sponsor) body.append(sponsor);
   mount(...screen("Socrates", body, el("span", { class: "row" }, S.profiles ? el("button", { class: "link", onclick: logOut }, t("Log out")) : null, el("button", { class: "link", onclick: () => show(progressScreen) }, t("Progress")), el("button", { class: "link", onclick: () => show(settings) }, t("Settings")))));
 }
 
@@ -757,7 +806,7 @@ const REASONS = { harmful: "It was harmful", hateful: "It was hateful or insulti
   mount(el("header", {}, el("button", { class: "link", onclick: back }, t("← Back")), el("h1", {}, who.name),
     el("button", { class: "link", onclick: () => show(() => memory(who)) }, t("Memory")),
     el("button", { class: "link", onclick: showDelete }, t("Delete"))),
-    progressLine, main, err, helpBox, challengeBar, deleteBox, el("div", { class: "helpbar" }, helpBtn, challengeBtn), form);
+    progressLine, el("div", { class: "chatwrap" }, el("div", { class: "watermark", "aria-hidden": "true" }), main), err, helpBox, challengeBar, deleteBox, el("div", { class: "helpbar" }, helpBtn, challengeBtn), form);
   refreshHelp(); main.scrollTop = main.scrollHeight; input.focus();
 }
 

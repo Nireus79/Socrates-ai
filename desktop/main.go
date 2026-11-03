@@ -42,6 +42,15 @@ func (a *App) OpenLink(url string) error {
 	return nil
 }
 
+// OpenSponsorLink opens the link of a card in the system browser (shell.AllowedSponsorLink).
+func (a *App) OpenSponsorLink(url string) error {
+	if !shell.AllowedSponsorLink(url) {
+		return errors.New("that address is not one the app opens")
+	}
+	wruntime.BrowserOpenURL(a.ctx, url)
+	return nil
+}
+
 // SystemTheme tells the page whether the desktop is set to "dark" or "light" ("" when unknown), because the web view may not follow it.
 func (a *App) SystemTheme() string { return shell.SystemTheme() }
 

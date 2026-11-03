@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 
+	"socrates/internal/cards"
 	"socrates/internal/catalog"
 	"socrates/internal/conversation"
 	"socrates/internal/entitlements"
@@ -30,6 +31,7 @@ type Deps struct {
 	Selector   bool
 	Version    string
 	LLMOptions []llm.Option // only tests change these (a stand-in provider, no waiting between retries)
+	Cards      *cards.Feed  // the messages of the card at the foot of the screens; nil: none (the screens show their own)
 }
 
 // New builds the routes. The caller adds the shutdown route and puts the door (transport.Policy) and the rate limit in front.
@@ -61,6 +63,7 @@ func New(d Deps) (*http.ServeMux, *conversation.Service) {
 	mux.HandleFunc("GET /api/profile/export", h.exportProfile)
 	mux.HandleFunc("POST /api/profile/import", h.importProfile)
 	mux.HandleFunc("DELETE /api/profile", h.deleteProfile)
+	mux.HandleFunc("GET /api/cards", h.getCards)
 	mux.HandleFunc("GET /api/settings/memory", h.getMemory)
 	mux.HandleFunc("PUT /api/settings/memory", h.putMemory)
 	mux.HandleFunc("GET /api/settings/language", h.getLang)
