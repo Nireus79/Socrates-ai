@@ -4,8 +4,8 @@ Written 2026-10-24, after commit 4039ba4. The beta is feature-complete; what is 
 
 ## Decided 2026-11-03 (founder): F-Droid first, Google Play waits
 - Signing key made (`~/android-dev/socrates/`, backed up on USB, secrets `SOCRATES_KEYSTORE_*` set in the repository). It signs only the APK on GitHub releases; F-Droid signs its own build.
-- Version lives in `mobile/android/app/build.gradle`, checked against the tag by `scripts/check-version.sh`; one `v*` tag builds desktop and Android (`release-desktop.yml`, never run on GitHub yet).
-- Draft F-Droid recipe: `mobile/fdroid/io.github.nireus79.socrates.yml` (not run in F-Droid's build image; needs the tag it names). Listing text and images: `fastlane/metadata/android/en-US/` (phone screenshots missing: add `phoneScreenshots/1.png` and more from the finished app). The unused Google services plugin was removed from the Android build for F-Droid's scanner.
+- Version lives in `mobile/android/app/build.gradle`, checked against the tag by `scripts/check-version.sh`; one `v*` tag builds desktop and Android (`release-desktop.yml`; it can also be started by hand from the Actions tab: the manual run on 2026-11-03 built Linux, Windows and a signed Android APK, verified against the new key, and made no release).
+- F-Droid recipe: `mobile/fdroid/io.github.nireus79.socrates.yml`, written to Moly's corrected recipe and its lessons (`mobile/fdroid/README.md`); never built by F-Droid yet (the merge request's own pipeline builds it); needs the full commit hash of the tag. Listing text and images: `fastlane/metadata/android/en-US/` (phone screenshots missing: add `phoneScreenshots/1.png` and more from the finished app). The unused Google services plugin was removed from the Android build for F-Droid's scanner.
 - Next: cut the first tag, run the recipe in the fdroidserver build image, then open the merge request on F-Droid's GitLab (fdroiddata).
 
 ## Needed from you

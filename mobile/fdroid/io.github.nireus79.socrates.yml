@@ -1,7 +1,9 @@
-# Build recipe for F-Droid (goes to fdroiddata as metadata/io.github.nireus79.socrates.yml). DRAFT, 2026-11-03: not yet run in F-Droid's
-# build image, and the commit tag below does not exist until the first v* tag is pushed. It follows Moly's recipe, which was run there
-# (JDK 21 from Debian trixie; Go, Node and npm from Debian forky; the NDK from sdkmanager). Socrates has no store flavours and no esbuild:
-# the screens are plain files copied by mobile/scripts/build-www.sh.
+AntiFeatures:
+  NonFreeNet:
+    en-US: Sends your messages to the AI provider you choose (Claude or OpenAI) with
+      your own key; those services are not free software. Once a day it also fetches
+      the text of a small card from the project's repository on GitHub, nothing about
+      you is sent.
 Categories:
   - Science & Education
 License: MIT
@@ -12,10 +14,6 @@ SourceCode: https://github.com/Nireus79/Socrates-ai
 IssueTracker: https://github.com/Nireus79/Socrates-ai/issues
 Changelog: https://github.com/Nireus79/Socrates-ai/releases
 
-AntiFeatures:
-  NonFreeNet:
-    en-US: Sends your messages to the AI provider you choose (Claude or OpenAI) with your own key; those services are not free software. Once a day it also fetches the text of a small card from the project's repository on GitHub, with nothing about you.
-
 AutoName: Socrates
 
 RepoType: git
@@ -24,13 +22,11 @@ Repo: https://github.com/Nireus79/Socrates-ai.git
 Builds:
   - versionName: 0.1.0-beta.3
     versionCode: 3
-    commit: v0.1.0-beta.3
+    commit: FULL_COMMIT_HASH_OF_THE_TAG
     subdir: mobile/android/app
     sudo:
-      - echo "deb https://deb.debian.org/debian trixie main" > /etc/apt/sources.list.d/trixie.list
       - echo "deb https://deb.debian.org/debian forky main" > /etc/apt/sources.list.d/forky.list
       - apt-get update
-      - apt-get install -y -t trixie openjdk-21-jdk-headless
       - apt-get install -y -t forky golang-1.26-go nodejs npm
       - update-alternatives --auto java
     prebuild:
@@ -47,7 +43,7 @@ Builds:
       - (cd ../.. && scripts/build-engine.sh)
       - (cd ../.. && npm ci --offline && scripts/build-www.sh && npx cap sync android)
 
-AutoUpdateMode: Version v%v
+AutoUpdateMode: Version
 UpdateCheckMode: Tags ^v[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?$
 CurrentVersion: 0.1.0-beta.3
 CurrentVersionCode: 3
