@@ -211,7 +211,7 @@ func (s *Service) SetLang(ctx context.Context, lang string) error {
 // milestoneText is the plain sentence that tells a person a question has been thought all the way through.
 func milestoneText(lang string, ph philosophers.Philosopher) string {
 	if lang == safety.LangGreek {
-		return "Εσύ και ο " + ph.Localized(lang).Name + " σκεφτήκατε ένα ερώτημα ώς το τέλος."
+		return "Εσύ και ο " + ph.Localized(lang).Name + " σκεφτήκατε ένα ερώτημα μέχρι το τέλος."
 	}
 	return "You and " + ph.Name + " thought one question all the way through."
 }
