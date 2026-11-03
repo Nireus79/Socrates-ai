@@ -10,7 +10,7 @@ Written 2026-10-24, after commit 4039ba4. The beta is feature-complete; what is 
 5. **Desktop route.** Profiles (log in and register) are built (SESSION 65); click through them in the real window. Linux builds and runs. Windows is only cross-compiled (`make -C desktop windows`; needs WebView2, not run); macOS needs a Mac (not attempted). Nothing is signed or packaged. Choose the route (GitHub releases, itch.io, Steam); an unsigned Windows build shows a SmartScreen warning.
 
 ## Mine, once the above is ready
-- Cut the tags (`v*` desktop, `mobile-v*` Android) and write release notes.
+- Cut one `v*` tag (desktop and Android; set versionName and versionCode in build.gradle first; the signing secrets SOCRATES_KEYSTORE_BASE64 and SOCRATES_KEYSTORE_PASSWORD must exist) and write release notes.
 - Packaging for the chosen desktop route.
 - Rebuild release artifacts from a clean engine: the Android engine must be built without `GO_TAGS=testprovider` (`build-apk.sh release|bundle` refuses otherwise).
 - Fix what the phone run and your tests find.

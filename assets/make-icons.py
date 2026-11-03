@@ -29,7 +29,7 @@ def heavy(img, k):
 
 
 def head_on(canvas_size, height_frac, background):
-    """The head centred on a square canvas, built large and brought down so the line stays even. The smaller the head ends up, the heavier
+    """The head, centred as if the face were whole, on a square canvas, built large and brought down so the line stays even. The smaller the head ends up, the heavier
     the line is drawn, so that it holds."""
     big = 1024
     h = head.copy()
@@ -38,7 +38,9 @@ def head_on(canvas_size, height_frac, background):
     shown = canvas_size * height_frac
     h = heavy(h, 5 if shown >= 400 else 7 if shown >= 250 else 9 if shown >= 120 else 13)
     c = Image.new("RGBA", (big, big), background)
-    c.alpha_composite(h, ((big - h.width) // 2, (big - h.height) // 2))
+    # The drawing is half a face (the line down its right edge is the middle of the face), so it is placed as if the face were whole: that
+    # edge stands at the centre of the canvas, and the half face lies to the left of it.
+    c.alpha_composite(h, (big // 2 - h.width, (big - h.height) // 2))
     return c.resize((canvas_size, canvas_size), Image.LANCZOS)
 
 

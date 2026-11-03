@@ -170,7 +170,7 @@ Socrates suggested.
 - **Browser extension**: optional, later, as a free entry (Chrome and Edge Manifest V3 side panel, Firefox separate build). Not part of M0. The Chrome Web Store has no payments of its own.
 - **Android**: Capacitor shell with the engine embedded, copy/paste layout and share target, `play` flavor only (F-Droid is out for this product, section 15; the `foss` flavor of Moly is not carried over
   unless that changes). Provider key only, no local model, no page scanning.
-- Release trains: `v*` tags for desktop and extension, `mobile-v*` tags for Android, as in Moly. Store listings follow after the beta.
+- Release trains: one `v*` tag builds desktop and Android together (the version lives in mobile/android/app/build.gradle, checked by scripts/check-version.sh; 2026-11-03). Store listings follow after the beta.
 
 ## 6. Language
 English only at the beginning (decided 2026-10-22). Prompts are English.

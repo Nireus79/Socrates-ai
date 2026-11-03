@@ -1,5 +1,5 @@
 # Desktop release: a tag v* checks the code, builds Linux and Windows packages and opens a DRAFT pre-release on GitHub.
-# Nothing is published until the founder presses "Publish" on the draft. Android has its own tag (mobile-v*) and is not built here.
+# Nothing is published until the founder presses "Publish" on the draft. The Android APK (signed with the founder's key from the repository secrets) is built here too, from the same tag.
 name: release-desktop
 on:
   push:
@@ -11,6 +11,9 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: The tag and the version in the repository agree
+        run: scripts/check-version.sh "${{ github.ref_name }}"
       - uses: actions/setup-go@v5
         with: { go-version-file: engine/go.mod }
       - run: make -C engine check
@@ -40,8 +43,40 @@ jobs:
           name: ${{ matrix.platform }}
           path: dist/*
           if-no-files-found: error
+  android:
+    needs: check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version-file: engine/go.mod }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21 }
+      - name: Android NDK
+        run: echo "y" | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;26.3.11579264" "platforms;android-36" "build-tools;36.0.0" >/dev/null
+      - name: Build the engine and a signed APK (needs the signing secrets; without them nothing is uploaded)
+        env:
+          KS_B64: ${{ secrets.SOCRATES_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.SOCRATES_KEYSTORE_PASSWORD }}
+          VERSION: ${{ github.ref_name }}
+        run: |
+          if [ -z "$KS_B64" ]; then echo "::warning::no signing key in the secrets: no APK in this release"; exit 0; fi
+          echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/socrates.jks"
+          export SOCRATES_KEYSTORE="$RUNNER_TEMP/socrates.jks" SOCRATES_KEYSTORE_PASSWORD="$KS_PASS"
+          mobile/scripts/build-engine.sh
+          mobile/scripts/build-apk.sh release
+          mkdir -p dist
+          cp mobile/android/app/build/outputs/apk/release/app-release.apk "dist/socrates-$VERSION-android.apk"
+          (cd dist && sha256sum "socrates-$VERSION-android.apk" > "socrates-$VERSION-android.apk.sha256")
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: dist/*
+          if-no-files-found: ignore
   release:
-    needs: package
+    needs: [package, android]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -54,7 +89,7 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           cat > notes.md <<'TXT'
-          Beta. Unsigned builds for Linux and Windows. You need your own Claude or OpenAI key.
+          Beta. Unsigned builds for Linux and Windows; the Android APK is signed with the author's key (it is missing when the signing secrets were not set). You need your own Claude or OpenAI key.
 
           - Windows: the first start shows a SmartScreen warning because the build is not signed ("More info", then "Run anyway"). It needs the WebView2 runtime (included in Windows 11). Windows builds have not been run by the author yet.
           - Linux: needs GTK 3 and WebKitGTK 4.1 (`libgtk-3-0`, `libwebkit2gtk-4.1-0`).
