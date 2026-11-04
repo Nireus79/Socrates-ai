@@ -76,6 +76,18 @@ def full_mark_on_cream(size):
     return c
 
 
+def original_icon(size):
+    """The founder's original logo (assets/brand/socrates-original.png, with its wordmark) cropped to a square around the drawing, then scaled."""
+    from PIL import ImageChops
+    o = Image.open(os.path.join(ROOT, "assets", "brand", "socrates-original.png")).convert("RGB")
+    bg = Image.new("RGB", o.size, o.getpixel((2, 2)))
+    x0, y0, x1, y1 = ImageChops.difference(o, bg).point(lambda v: 255 if v > 24 else 0).getbbox()
+    side = round(max(x1 - x0, y1 - y0) * 1.14)
+    cx, cy = (x0 + x1) // 2, (y0 + y1) // 2
+    box = (cx - side // 2, cy - side // 2, cx - side // 2 + side, cy - side // 2 + side)
+    return o.crop(box).resize((size, size), Image.LANCZOS).convert("RGBA")
+
+
 # Android launcher: legacy square and round icons, and the adaptive foreground (108 dp, the visible part is the middle 66 dp)
 res = ("mobile", "android", "app", "src", "main", "res")
 for name, legacy, adaptive in (("mdpi", 48, 108), ("hdpi", 72, 162), ("xhdpi", 96, 216), ("xxhdpi", 144, 324), ("xxxhdpi", 192, 432)):
@@ -99,12 +111,12 @@ for dirpath, _, files in os.walk(os.path.join(ROOT, *res)):
 
 # Play listing: the 512 icon (Play applies its own mask) and the 1024x500 feature graphic
 # The two store icons are large enough to carry the vertical wordmark, so they show the whole logo; the launcher and window icons stay head-only.
-save(full_mark_on_cream((512, 512)), "mobile", "store", "play-icon-512.png", rgb=True)
-save(full_mark_on_cream((512, 512)), "fastlane", "metadata", "android", "en-US", "images", "icon.png", rgb=True)
+save(original_icon(512), "mobile", "store", "play-icon-512.png", rgb=True)
+save(original_icon(512), "fastlane", "metadata", "android", "en-US", "images", "icon.png", rgb=True)
 save(full_mark_on_cream((1024, 500)), "mobile", "store", "feature-graphic-1024x500.png", rgb=True)
 
 # Desktop window and the screens (shared by the desktop window and the phone)
-save(head_on(512, 0.74, CREAM), "desktop", "icon.png")
-save(head_on(192, 0.74, CREAM), "app", "icon.png")
+save(original_icon(512), "desktop", "icon.png")
+save(original_icon(192), "app", "icon.png")
 save(mark.resize((500, 500), Image.LANCZOS), "app", "mark.png")  # transparent: the screens draw it on their own background (dark theme inverts it in CSS)
 print("icons written")
