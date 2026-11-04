@@ -84,6 +84,7 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with: { path: dist, merge-multiple: true }
       - name: Draft pre-release
@@ -99,4 +100,5 @@ jobs:
           - Check a download with the `.sha256` file next to it.
           - Everything is stored encrypted on your device; there is no server. See the README for the privacy model.
           TXT
+          if [ -f "docs/release-notes/$TAG.md" ]; then cp "docs/release-notes/$TAG.md" notes.md; fi
           gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --draft --prerelease --title "Socrates $TAG" --notes-file notes.md

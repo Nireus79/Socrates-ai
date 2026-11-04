@@ -1,0 +1,6 @@
+First public beta.
+- Four artificial Greek philosophers to talk with, in English and Greek
+- Help me answer, questions put to you, progress, memory you control
+- User manual, About, Report a problem
+- Interface in the style of the Moly app, new icon
+- Closing the app stops its engine

@@ -5,8 +5,8 @@
 Modelled on Moly's recipe, which passed that pipeline; the lessons below are from Moly's merge request (Moly docs/NEXT_VERSION.md).
 
 Before the merge request:
-1. Push the tag (for example `v0.1.0-beta.3`; the version in `mobile/android/app/build.gradle` must match, see `scripts/check-version.sh`).
-2. Replace `FULL_COMMIT_HASH_OF_THE_TAG` with `git rev-parse 'v0.1.0-beta.3^{commit}'`. The tag is annotated, so the tag name or the tag object's hash fails; it must be the commit.
+1. Push the tag (for example `v0.1.0-beta.4`; the version in `mobile/android/app/build.gradle` must match, see `scripts/check-version.sh`).
+2. Replace `FULL_COMMIT_HASH_OF_THE_TAG` with `git rev-parse 'v0.1.0-beta.4^{commit}'`. The tag is annotated, so the tag name or the tag object's hash fails; it must be the commit.
 3. Copy the file from a text editor, never from the terminal view (the terminal adds a margin and wraps long lines, which broke Moly's first upload).
 
 Rules that F-Droid's checks enforce:
