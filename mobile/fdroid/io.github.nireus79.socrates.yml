@@ -22,7 +22,7 @@ Repo: https://github.com/Nireus79/Socrates-ai.git
 Builds:
   - versionName: 0.1.0-beta.4
     versionCode: 4
-    commit: FULL_COMMIT_HASH_OF_THE_TAG
+    commit: 389069d2b060775535154fba043fa647da30d8cc
     subdir: mobile/android/app
     sudo:
       - echo "deb https://deb.debian.org/debian forky main" > /etc/apt/sources.list.d/forky.list
