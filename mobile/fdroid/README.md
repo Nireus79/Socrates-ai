@@ -10,6 +10,7 @@ Before the merge request:
 3. Copy the file from a text editor, never from the terminal view (the terminal adds a margin and wraps long lines, which broke Moly's first upload).
 
 Rules that F-Droid's checks enforce:
+- The review of 2026-11-04 (merge request !55759) asked for: the once-a-day fetch of the sponsor card flagged as the `Tracking` anti-feature (separate from `NonFreeNet`); no `update-alternatives --auto java` line in `sudo:`; and a reason for the second `npm ci --offline` in `build:` (`scandelete` removes `mobile/node_modules` before the build, so the build restores it from the npm cache, as Moly's recipe does).
 - No comments in the yml (`fdroid rewritemeta` moves things around and wraps the anti-feature text).
 - `AutoUpdateMode: Version` (plain) when `UpdateCheckMode` is `Tags`.
 - The `sudo:` block must not install Java: the build image already has JDK 21. Go 1.26, Node and npm come from Debian forky.

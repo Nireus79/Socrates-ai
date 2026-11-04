@@ -1,9 +1,11 @@
 AntiFeatures:
   NonFreeNet:
     en-US: Sends your messages to the AI provider you choose (Claude or OpenAI) with
-      your own key; those services are not free software. Once a day it also fetches
-      the text of a small card from the project's repository on GitHub, nothing about
-      you is sent.
+      your own key; those services are not free software.
+  Tracking:
+    en-US: Once a day, while the sponsor card is shown, it fetches a small text file
+      from the project's repository on GitHub. Nothing about you is sent, but GitHub
+      sees your address. Hiding the card stops it for that session.
 Categories:
   - Science & Education
 License: MIT
@@ -28,7 +30,6 @@ Builds:
       - echo "deb https://deb.debian.org/debian forky main" > /etc/apt/sources.list.d/forky.list
       - apt-get update
       - apt-get install -y -t forky golang-1.26-go nodejs npm
-      - update-alternatives --auto java
     gradle:
       - yes
     prebuild:
