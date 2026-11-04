@@ -1,2 +1,2 @@
 - The About screen links to the new website and its privacy page
-- Website with a download page and the privacy policy
+- Fixed a stray word in the chat header, an empty box beside the message field, and the Memory checkbox layout
