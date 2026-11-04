@@ -593,7 +593,7 @@ async function home() {
         el("h2", {}, k.title || t("New conversation")), el("div", { class: "muted" }, who)));
     }
   }
-  mount(...screen("Socrates", body, el("span", { class: "row" }, S.profiles ? el("button", { class: "link", onclick: logOut }, t("Log out")) : null, el("button", { class: "link", onclick: () => show(progressScreen) }, t("Progress")), el("button", { class: "link", onclick: () => show(settings) }, t("Settings")))));
+  mount(...screen("Socrates", body, el("span", { class: "row" }, S.profiles ? el("button", { class: "link", onclick: logOut }, t("Log out")) : null, el("button", { class: "link", onclick: () => show(progressScreen) }, t("Progress")), el("button", { class: "link", onclick: () => show(helpScreen) }, t("Help")), el("button", { class: "link", onclick: () => show(settings) }, t("Settings")))));
 }
 
 // ---- progress: how far the person has come with every philosopher, unlocked or not
@@ -855,6 +855,60 @@ function ended(text) {
   mount(...screen("Socrates", el("div", { class: "card stack" }, el("p", {}, text), el("button", { class: "primary", onclick: () => { unwind(); home(); } }, t("OK")))));
 }
 
+// ---- help: what the app is, how a conversation goes, how each philosopher tends to behave, and some tips
+
+function philName(id, fallback) { const p = (S.philosophers || []).find((x) => x.id === id); return p ? p.name : fallback; }
+
+function helpScreen() {
+  const body = el("div", { class: "stack" });
+  const card = (title, ...paras) => body.append(el("div", { class: "card stack" }, el("h2", {}, title), ...paras.map((p) => el("p", {}, p))));
+  card(t("What Socrates is"),
+    t("Socrates is an app for talking with four artificial Greek philosophers: Socrates, Diogenes, Plato and Aristotle. Each is made from what was written about him and after him, and imagined alive in today's world. They are not real people, and they are not a source of medical, legal or other professional advice."),
+    t("They are not here to hand you answers. They ask, they answer in their own manner, and they say so when they do not know. The thinking is yours."));
+  card(t("How a conversation goes"),
+    t("Choose a philosopher and write whatever is on your mind: a question, an opinion, something you have always wondered. You can write in English or in Greek, and he answers in the language you write in."),
+    t("His replies are short and usually end with one question. Answer it in your own words, even roughly: your own words are what the conversation is built from."),
+    t("Stuck? Press Help me answer. You get a few starting points from different angles. Pick one, change it, or ignore them all. Words you took from the list count for less when progress is measured, because they began as someone else's."),
+    t("Press Put a question to me when you want him to put a question of his own to you, chosen from who he is and what he has learnt about you. He may also offer one when a conversation reaches a natural pause."),
+    t("Nothing is marked right or wrong. When you have thought a question all the way through with him, he tells you in a plain sentence."));
+  card(t("Meeting the others"),
+    t("Socrates is open from the start. To meet each of the others, you think 5 questions through with every philosopher before him, in the order Socrates, Diogenes, Plato, Aristotle. In this free beta all four are already open; the Progress screen still keeps the count."),
+    t("A question counts when you have worked on it over several messages, said what your key words mean, and tested at least one of your own views, in your own words. Long messages alone do not count, and neither does agreeing with everything."));
+  card(t("What they remember"),
+    t("Each philosopher keeps short notes about what you said: your claims, the words you defined, where two of your views pull apart, and small facts about your life. They are for him alone, stored encrypted on this device, and he is told to refer to them only when they matter."),
+    t("Open the Memory button inside a conversation to read or delete them. Settings has a switch to turn memory off; with it off nothing new is noted and no question can count as thought through."));
+  const phil = (name, ...paras) => body.append(el("div", { class: "card stack" }, el("h2", {}, name), ...paras.map((p) => el("p", {}, p))));
+  body.append(el("h2", { class: "muted" }, t("The four philosophers")));
+  phil(philName("socrates", "Socrates"),
+    t("He asks far more than he tells. He takes your words seriously, follows them to where they lead, and asks whether you still hold them there. He seldom says you are wrong; you tend to find it yourself. A conversation often ends not with an answer but with a better question."),
+    t("What helps: say what you mean by your main words, give him a real case from your life, and admit when you are not sure. If you stay stuck he may give his own view, as one view among others."));
+  phil(philName("diogenes", "Diogenes"),
+    t("Short and blunt, and the joke turns on himself first. He answers more than he asks, often with a plain picture instead of an argument, and he goes after poses and conventions, not after you."),
+    t("What helps: be honest about the gap between what you say and what you do. Insults get a witty answer and no escalation, and shock for its own sake gets you nowhere. If you are really low, he drops the edge."));
+  phil(philName("plato", "Plato"),
+    t("He builds upward: from one case toward what all such cases share. He likes a picture or a story to think with, and he offers a view and asks you to test it."),
+    t("What helps: say what you see in his picture, in your own words; start from a case before you make a general claim; and push back, since he expects it. Asked about the harsh parts of his own writing, he says plainly what he wrote and asks you what you make of it."));
+  phil(philName("aristotle", "Aristotle"),
+    t("He sorts. He starts from what people usually say, finds where those sayings pull apart, and asks which kind of thing you mean and in what sense. His examples come from nature and from trades."),
+    t("What helps: expect precision, take one distinction at a time, and bring an example and a counter-example. Asked about slavery or women, he says honestly what he held and why, then asks a question about today."));
+  card(t("What all four share"),
+    t("They know what came after them, so they can speak of one another and disagree. They are honest that they are artificial. When something they believed would be unpopular today, they say it plainly, set it in the frame of their own time, and then ask you a question about now; they do not settle it for you."));
+  card(t("A few tips"),
+    t("Write in sentences. One word gives him little to work with."),
+    t("Say what you mean by the words that carry your view. Most disagreements start there."),
+    t("Disagree with him. Changing your mind is welcome and counts as thinking."),
+    t("I do not know is a good answer. Say it, and then try Help me answer."),
+    t("Ask the same question of two philosophers and compare."),
+    t("They can misremember a detail. Check what matters, and ask him where something comes from: he will say what he knows and admit what he does not."));
+  card(t("Safety, privacy and your key"),
+    t("A safety check runs on every message and every reply, above every philosopher. If a reply is wrong or harmful, press Report next to it."),
+    t("The app uses your own key from Claude or OpenAI, which you pay the provider for; Settings explains how to get one. Your key and your conversations stay encrypted on this device. The only thing the app fetches is the sponsor card, once a day, and it sends nothing about you."));
+  body.append(el("div", { class: "card stack" }, el("h2", {}, t("About")), logo(),
+    el("p", { class: "muted" }, t("If you are thinking of hurting yourself, please call your local emergency number or a crisis line, or tell someone you trust.")),
+    el("p", { class: "muted" }, t("Problems, questions and reports: {address} (Hermes Software).", { address: CONTACT }))));
+  mount(...screen(t("Help"), body, el("button", { class: "link", onclick: back }, t("Back"))));
+}
+
 // ---- settings
 
 async function settings() {
@@ -899,7 +953,8 @@ async function settings() {
     el("p", { class: "muted" }, t("How well the philosophers talk, and how reliably the safety checks work, depend on what the model behind them can do.")),
     el("p", { class: "muted" }, t("If you are thinking of hurting yourself, please call your local emergency number or a crisis line, or tell someone you trust.")),
     el("p", { class: "muted" }, t("For people aged 16 and over. ") + (st.data.version ? t("Version {v}.", { v: st.data.version }) : "")),
-    el("p", { class: "muted" }, t("Problems, questions and reports: {address} (Hermes Software).", { address: CONTACT }))));
+    el("p", { class: "muted" }, t("Problems, questions and reports: {address} (Hermes Software).", { address: CONTACT })),
+    el("button", { onclick: () => show(helpScreen) }, t("How Socrates works"))));
   body.append(el("div", { class: "card stack" }, el("h2", {}, t("Delete everything")),
     el("p", { class: "muted" }, t("Removes every conversation, your provider key and your settings from this device. It cannot be undone.")),
     confirmButton(t("Delete everything"), "danger", t("Click again to delete everything"), async () => {

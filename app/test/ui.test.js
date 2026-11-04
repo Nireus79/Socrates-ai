@@ -1043,6 +1043,24 @@ test("the screens never rely on an inline style (the page's policy would ignore 
   assert.match(fs.readFileSync(path.join(__dirname, "../index.html"), "utf8"), /style-src 'self'(?! 'unsafe-inline')/);
 });
 
+test("Help explains the app, how to talk, each philosopher and tips, from the home screen and from About, and it goes back", async () => {
+  const p = page(ready({}));
+  p.app.start(p.root); await settle();
+  const btn = (label) => [...p.root.querySelectorAll("button")].find((b) => b.textContent === label);
+  click(btn("Help")); await settle();
+  const text = p.root.textContent;
+  for (const w of ["What Socrates is", "How a conversation goes", "Meeting the others", "What they remember", "A few tips", "Safety, privacy and your key"]) assert.match(text, new RegExp(w));
+  const heads = [...p.root.querySelectorAll(".card h2")].map((h) => h.textContent);
+  for (const n of ["Socrates", "Diogenes", "Plato", "Aristotle"]) assert.ok(heads.includes(n), n + " has a card");
+  assert.ok(!/challenge|\blevels?\b|\bscores?\b/i.test(text), "no sport words for philosophers");
+  assert.ok(!p.root.querySelector("[style]"), "no inline styles");
+  click(btn("Back")); await settle();
+  assert.ok(btn("Settings"), "back to the home screen");
+  click(btn("Settings")); await settle();
+  click(btn("How Socrates works")); await settle();
+  assert.match(p.root.textContent, /What Socrates is/);
+});
+
 test("the progress screen shows every philosopher, unlocked or not, with the questions thought through and the question in progress", async () => {
   const p = page(ready({
     "GET /api/philosophers": [200, { philosophers: [
