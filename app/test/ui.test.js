@@ -1288,3 +1288,15 @@ test("a hidden card asks the engine for nothing, and the chat has the card below
   assert.equal(q.root.lastElementChild.className, "card-area", "the card is below the writing box");
   assert.equal(q.root.lastElementChild.previousElementSibling.tagName, "FORM");
 });
+
+test("a chat with no question under way shows no stray text beside the count, and the hidden attribute always wins over a display rule", async () => {
+  const p = page(ready({
+    "GET /api/philosophers": () => [200, { philosophers: [{ id: "socrates", name: "Socrates", era: "Athens", unlocked: true, challenges: 0, required: 5, inProgress: 0 }] }],
+  }));
+  p.app.start(p.root); await settle();
+  click(p.root.querySelector(".card.click")); await settle(10);
+  const line = p.root.querySelector(".progressline");
+  assert.equal(line.textContent.trim(), "Questions thought through: 0", "no 'null' or other leftovers after the count");
+  assert.ok(!/null|undefined/.test(p.root.textContent), "no null or undefined anywhere on the screen");
+  assert.match(fs.readFileSync(path.join(__dirname, "../style.css"), "utf8"), /\[hidden\]\s*\{\s*display:\s*none\s*!important/, "an icon button's display rule must not show a hidden Stop button");
+});

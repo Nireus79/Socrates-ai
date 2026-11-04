@@ -803,8 +803,8 @@ const REASONS = { harmful: "It was harmful", hateful: "It was hateful or insulti
     S.philosophers = res.data.philosophers || [];
     const me = S.philosophers.find((p) => p.id === conv.philosopherId);
     if (!me) { progressLine.replaceChildren(); return; }
-    progressLine.replaceChildren(el("span", { class: "muted" }, t("Questions thought through: {n}", { n: me.challenges || 0 })),
-      me.inProgress > 0 ? el("progress", { value: String(me.inProgress), max: "1000", "aria-label": t("A question in progress") }) : null);
+    progressLine.replaceChildren(...[el("span", { class: "muted" }, t("Questions thought through: {n}", { n: me.challenges || 0 })),
+      me.inProgress > 0 ? el("progress", { value: String(me.inProgress), max: "1000", "aria-label": t("A question in progress") }) : null].filter(Boolean));
   };
   const refreshHelp = () => { helpBtn.hidden = !canHelp(); if (helpBtn.hidden) helpBox.hidden = true; showOffer(); refreshProgress(); };
   const showSuggestions = async () => {

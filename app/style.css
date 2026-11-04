@@ -140,3 +140,6 @@ span.error { color: var(--danger); }
 form.composer button.send { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border-radius: 50%; }
 form.composer button.send .icon { width: 20px; height: 20px; }
 .section-title { margin: 4px 0 -4px; }
+
+/* the hidden attribute must win over any display rule (a hidden Stop button showed next to the message box) */
+[hidden] { display: none !important; }
