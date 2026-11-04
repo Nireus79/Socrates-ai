@@ -98,7 +98,9 @@ for dirpath, _, files in os.walk(os.path.join(ROOT, *res)):
             c.convert("RGB").save(p, optimize=True)
 
 # Play listing: the 512 icon (Play applies its own mask) and the 1024x500 feature graphic
-save(head_on(512, 0.74, CREAM), "mobile", "store", "play-icon-512.png", rgb=True)
+# The two store icons are large enough to carry the vertical wordmark, so they show the whole logo; the launcher and window icons stay head-only.
+save(full_mark_on_cream((512, 512)), "mobile", "store", "play-icon-512.png", rgb=True)
+save(full_mark_on_cream((512, 512)), "fastlane", "metadata", "android", "en-US", "images", "icon.png", rgb=True)
 save(full_mark_on_cream((1024, 500)), "mobile", "store", "feature-graphic-1024x500.png", rgb=True)
 
 # Desktop window and the screens (shared by the desktop window and the phone)
