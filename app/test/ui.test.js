@@ -1065,6 +1065,28 @@ test("Help explains the app, how to talk, each philosopher and tips, from Settin
   assert.ok(btn("Done"), "back to Settings");
 });
 
+test("Report a problem appears only where the phone can build a report, shows all of it, and sends only on Send", async () => {
+  const p = page(ready({}));
+  p.app.start(p.root); await settle();
+  const btn = (label) => [...p.root.querySelectorAll("button")].find((b) => b.textContent === label);
+  click(btn("Settings")); await settle();
+  assert.ok(!btn("Prepare report"), "no report card without a phone bridge");
+  const sent = [];
+  global.window.socratesShell = { ready: Promise.resolve(), base: "", token: "t", buildReport: async () => "Socrates report\nEngine lines: none", shareReport: async (x) => { sent.push(x); } };
+  click(btn("Done")); await settle();
+  click(btn("Settings")); await settle();
+  click(btn("Prepare report")); await settle();
+  const areas = p.root.querySelectorAll("textarea.report-text");
+  assert.equal(areas.length, 2);
+  assert.match(areas[1].value || areas[1].textContent, /Engine lines: none/);
+  assert.equal(sent.length, 0, "nothing is sent before Send");
+  areas[0].value = "the reply was odd";
+  click(btn("Send report")); await settle();
+  assert.equal(sent.length, 1);
+  assert.match(sent[0], /^the reply was odd\n\n---\nSocrates report/);
+  delete global.window.socratesShell;
+});
+
 test("the progress screen shows every philosopher, unlocked or not, with the questions thought through and the question in progress", async () => {
   const p = page(ready({
     "GET /api/philosophers": [200, { philosophers: [

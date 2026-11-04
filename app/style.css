@@ -96,3 +96,4 @@ h1:focus { outline: none; }
 .faq dd { margin: 2px 0 0; color: var(--muted); }
 .card.center { align-items: center; text-align: center; }
 .about-link { gap: 8px; flex-wrap: wrap; }
+.report-text { width: 100%; box-sizing: border-box; font: inherit; font-size: .85rem; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }

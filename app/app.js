@@ -928,6 +928,7 @@ function manualScreen() {
     [t(PROVIDER_PROBLEMS.overloaded), t("Wait a moment and send the message again. It is back in the box.")],
     [t("Is anything running after I close the app?"), t("No. Closing the app stops its engine. If you only switch to another app, the engine stops by itself after about three minutes.")],
     [t("Socrates stops while the phone is idle"), t("Some phones close apps to save battery. In the phone's battery settings, allow Socrates to run in the background.")],
+    [t("Where is the log?"), t("On a computer, the engine keeps its log in the .socrates folder of your user folder, in the file socrates.log. It holds no message text. On the phone, Settings, Report a problem shows the engine's error lines for you to read and send.")],
     [t("Something else, or it keeps happening"), t("Problems, questions and reports: {address} (Hermes Software).", { address: CONTACT }) + " " + t("Please leave out your conversations and any key.")],
   ];
   sec(t("Something is wrong"), false, el("dl", { class: "faq" }, ...faq.flatMap(([q, a]) => [el("dt", {}, q), el("dd", {}, a)])));
@@ -962,6 +963,32 @@ async function aboutScreen() {
     el("div", { class: "row" }, el("button", { class: "primary small-btn", onclick: () => openCardLink("https://github.com/sponsors/Nireus79", err) }, t("Sponsor")), el("button", { class: "small-btn", onclick: () => openCardLink(REPO, err) }, "GitHub")));
   card(t("Licence"), P(t("Socrates is free and open source under the MIT licence: you may use, copy and change it as long as the licence notice stays with it. It comes without warranty.")));
   mount(...screen(t("About Socrates"), body, el("button", { class: "link", onclick: back }, t("Back"))));
+}
+
+// "Report a problem" (the phone app, as in Moly): the report is built on the phone and shown in full; it leaves the phone only when the
+// person presses Send and their mail app opens with it. The person may add a note, for example a reply they want to report.
+function reportCard() {
+  const sh = shellInfo();
+  if (!sh || !sh.buildReport || !sh.shareReport) return null;
+  const box = el("div", { class: "stack" });
+  const msg = errorLine();
+  const prepare = async () => {
+    msg.textContent = "";
+    let text;
+    try { text = await sh.buildReport(); } catch (_) { msg.textContent = t("Could not prepare the report."); return; }
+    const note = el("textarea", { class: "report-text", rows: "4", placeholder: t("Your note: describe the problem, or paste the reply you want to report (optional)"), "aria-label": t("Your note") });
+    const body = el("textarea", { class: "report-text", rows: "10", readonly: "", "aria-label": t("The report") }, text);
+    const send = async () => {
+      try { await sh.shareReport(note.value.trim() ? note.value.trim() + "\n\n---\n" + text : text); } catch (_) { msg.textContent = t("Could not open a mail app."); }
+    };
+    box.replaceChildren(note, body, el("div", { class: "row" },
+      el("button", { class: "primary", onclick: send }, t("Send report")),
+      el("button", { onclick: () => box.replaceChildren(el("button", { onclick: prepare }, t("Prepare report"))) }, t("Close"))));
+  };
+  box.append(el("button", { onclick: prepare }, t("Prepare report")));
+  return el("div", { class: "card stack" }, el("h2", {}, t("Report a problem or a reply")),
+    el("p", { class: "muted" }, t("Prepares a short note about how Socrates is doing: your phone model and Android version, whether its engine is running, and error lines from the engine. You can add your own note, for example a reply you want to report: paste it there. Read everything first. It goes nowhere unless you press Send and your mail app opens with it; you press Send there.")),
+    box, msg);
 }
 
 // ---- settings
@@ -1004,6 +1031,8 @@ async function settings() {
     el("p", { class: "muted" }, t("Each keeps short notes with your own words, only for himself, stored encrypted on this device. Turning this off stops new notes and stops him using the old ones; it does not delete them. You can see and delete them from the Memory button inside a conversation."))));
   const st = await api("GET", "/api/status");
   const row = (title, sub, go) => el("button", { class: "linkrow", onclick: () => show(go) }, el("span", {}, el("strong", {}, title), el("small", {}, sub)), el("span", { "aria-hidden": "true" }, "›"));
+  const report = reportCard();
+  if (report) body.append(report);
   body.append(el("div", { class: "card stack" }, el("h2", {}, t("About and help")),
     row(t("About Socrates"), t("What it is, who makes it, how to reach us") + (st.data.version ? " · " + t("Version {v}.", { v: st.data.version }) : ""), aboutScreen),
     row(t("User manual"), t("How to use Socrates, step by step, and what to do when something is wrong"), manualScreen)));

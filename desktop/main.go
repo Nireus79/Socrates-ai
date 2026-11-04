@@ -82,6 +82,12 @@ func main() {
 	// With SOCRATES_DATA_DIR set (tests, development) there is one engine on that folder and no profiles. Otherwise the person chooses a
 	// profile and logs in to it; its engine starts then.
 	var handler http.Handler
+	if os.Getenv("SOCRATES_DATA_DIR") == "" {
+		// The engines' log lines (never the people's words) are kept in ~/.socrates/socrates.log, where a person can find and send them.
+		if err := shell.UseLogFile(filepath.Join(baseDir(), "socrates.log")); err != nil {
+			log.Printf("the log file could not be opened: %v", err)
+		}
+	}
 	if d := os.Getenv("SOCRATES_DATA_DIR"); d != "" {
 		eng, err := shell.Start(enginePath(), []string{"--data-dir", d}, nil, 30*time.Second)
 		if err != nil {

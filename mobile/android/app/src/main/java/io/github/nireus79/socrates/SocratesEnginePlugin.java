@@ -2,6 +2,7 @@ package io.github.nireus79.socrates;
 
 import android.app.Activity;
 import android.content.Context;
+import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
@@ -125,5 +126,39 @@ public class SocratesEnginePlugin extends Plugin {
         } catch (Exception e) {
             call.reject("The file could not be saved.");
         }
+    }
+
+    // The report text, built on the phone; nothing leaves it until shareReport.
+    @PluginMethod
+    public void buildReport(PluginCall call) {
+        new Thread(() -> {
+            JSObject r = new JSObject();
+            r.put("text", Report.build(getContext()));
+            call.resolve(r);
+        }).start();
+    }
+
+    // The person's mail app with the support address and the text they have just read; they press Send there. A phone with no mail app
+    // falls back to the share sheet, where they choose where it goes.
+    @PluginMethod
+    public void shareReport(PluginCall call) {
+        String text = call.getString("text", "");
+        Intent mail = new Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:"));
+        mail.putExtra(Intent.EXTRA_EMAIL, new String[] {"Hermes_creative@proton.me"});
+        mail.putExtra(Intent.EXTRA_SUBJECT, "Socrates report");
+        mail.putExtra(Intent.EXTRA_TEXT, text);
+        mail.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            getContext().startActivity(mail);
+        } catch (ActivityNotFoundException e) {
+            Intent send = new Intent(Intent.ACTION_SEND);
+            send.setType("text/plain");
+            send.putExtra(Intent.EXTRA_SUBJECT, "Socrates report");
+            send.putExtra(Intent.EXTRA_TEXT, text);
+            Intent chooser = Intent.createChooser(send, "Send the Socrates report");
+            chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(chooser);
+        }
+        call.resolve();
     }
 }

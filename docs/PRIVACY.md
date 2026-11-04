@@ -17,6 +17,7 @@ Status: draft of 2026-10-24 for the beta. It is the source for the privacy page 
 - **Memory** (can be switched off in Settings): short notes each philosopher keeps for himself, with your own words as evidence: claims, the words you defined, tensions you saw, and a few facts about your life. He never keeps health, sexual life, money, legal trouble or named third parties by design (a model decides, so check the Memory screen). You can see and delete any note. Notes are per philosopher and are not shared between philosophers.
 - **Progress**: how many questions you have thought through with each philosopher (no text).
 - **Settings and purchases**: your provider choice, your key, whether memory is on, and later the products you bought or earned.
+- **Log and problem report**: the engine's log is kept on your device only (on a computer in `~/.socrates/socrates.log`, cut to its last part when it grows; on the phone in the app's private folder). On the phone, "Report a problem" in Settings builds a short note (phone model, Android version, whether the engine runs, error lines), shows it to you in full, and opens your mail app with it only if you press Send.
 - **Reports**: "Report this reply" removes the reply from the conversation, from what the models read and from the summary. Nothing is sent. If you choose to copy the report, you send it yourself to Hermes_creative@proton.me.
 
 ## What is never stored or logged

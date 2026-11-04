@@ -20,5 +20,8 @@
   shell.openLink = function (url) { return plugin.openLink({ url: url }); };
   // The links of the card at the foot of the screens: any plain https address (the plugin checks it again).
   shell.openSponsorLink = function (url) { return plugin.openSponsorLink({ url: url }); };
+  // "Report a problem": the text is built on the phone and shown; it goes to the mail app only when the person chooses to send it.
+  shell.buildReport = function () { return plugin.buildReport().then(function (r) { return r.text; }); };
+  shell.shareReport = function (text) { return plugin.shareReport({ text: text }); };
   window.socratesShell = shell;
 })();

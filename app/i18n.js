@@ -5,6 +5,17 @@
 (function (root) {
   const el = {
     "Log in": "Σύνδεση",
+    "Could not prepare the report.": "Δεν ήταν δυνατή η προετοιμασία της αναφοράς.",
+    "Your note: describe the problem, or paste the reply you want to report (optional)": "Η σημείωσή σου: περιέγραψε το πρόβλημα ή επικόλλησε την απάντηση που θέλεις να αναφέρεις (προαιρετικά)",
+    "Your note": "Η σημείωσή σου",
+    "The report": "Η αναφορά",
+    "Could not open a mail app.": "Δεν ήταν δυνατό να ανοίξει εφαρμογή αλληλογραφίας.",
+    "Send report": "Αποστολή αναφοράς",
+    "Prepare report": "Προετοιμασία αναφοράς",
+    "Report a problem or a reply": "Αναφορά προβλήματος ή απάντησης",
+    "Prepares a short note about how Socrates is doing: your phone model and Android version, whether its engine is running, and error lines from the engine. You can add your own note, for example a reply you want to report: paste it there. Read everything first. It goes nowhere unless you press Send and your mail app opens with it; you press Send there.": "Ετοιμάζει ένα σύντομο σημείωμα για το πώς πάει το Socrates: το μοντέλο και την έκδοση Android του τηλεφώνου σου, αν τρέχει η μηχανή του και γραμμές σφαλμάτων από τη μηχανή. Μπορείς να προσθέσεις δική σου σημείωση, για παράδειγμα μια απάντηση που θέλεις να αναφέρεις: επικόλλησέ τη εκεί. Διάβασε πρώτα τα πάντα. Δεν πάει πουθενά αν δεν πατήσεις Αποστολή και ανοίξει η εφαρμογή αλληλογραφίας σου· εκεί πατάς Αποστολή.",
+    "Where is the log?": "Πού είναι το αρχείο καταγραφής;",
+    "On a computer, the engine keeps its log in the .socrates folder of your user folder, in the file socrates.log. It holds no message text. On the phone, Settings, Report a problem shows the engine's error lines for you to read and send.": "Στον υπολογιστή, η μηχανή κρατά την καταγραφή της στον φάκελο .socrates του φακέλου χρήστη σου, στο αρχείο socrates.log. Δεν περιέχει κείμενο μηνυμάτων. Στο τηλέφωνο, οι Ρυθμίσεις, «Αναφορά προβλήματος», δείχνουν τις γραμμές σφαλμάτων της μηχανής για να τις διαβάσεις και να τις στείλεις.",
     "How to use Socrates, from the first start to the last conversation. Open a section to read it.": "Πώς να χρησιμοποιείς το Socrates, από την πρώτη εκκίνηση ως την τελευταία συζήτηση. Άνοιξε μια ενότητα για να τη διαβάσεις.",
     "What Socrates does": "Τι κάνει το Socrates",
     "Getting started": "Πρώτα βήματα",

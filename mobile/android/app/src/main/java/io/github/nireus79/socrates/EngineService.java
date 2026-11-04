@@ -29,6 +29,8 @@ public class EngineService extends Service {
     private static final long IDLE_STOP_MS = 3 * 60 * 1000;
 
     private static Process engine;
+
+    static synchronized boolean engineAlive() { return engine != null && engine.isAlive(); }
     private static OutputStream engineStdin;
     private static volatile int enginePort;
     private static volatile String engineToken;
