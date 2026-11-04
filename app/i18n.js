@@ -57,6 +57,7 @@
     "Who makes it": "Ποιος το φτιάχνει",
     "Socrates is made by Hermes Software, one person, in the same family as the writing coach Moly.": "Το Socrates φτιάχνεται από τη Hermes Software, έναν άνθρωπο, στην ίδια οικογένεια με τον βοηθό γραφής Moly.",
     "Questions and problems": "Ερωτήσεις και προβλήματα",
+    "Website": "Ιστοσελίδα",
     "Source code": "Πηγαίος κώδικας",
     "Privacy policy": "Πολιτική απορρήτου",
     "When you write for help, please do not include your conversations or any key.": "Όταν γράφεις για βοήθεια, μην συμπεριλαμβάνεις τις συζητήσεις σου ή κάποιο κλειδί.",

@@ -1,6 +1,6 @@
 # Privacy: what Socrates stores, where it goes, and how it is removed
 
-Status: draft of 2026-10-24 for the beta. It is the source for the privacy page the stores ask for; the page itself is still to be published at a public address (open). It must be updated before any billing or ad code ships: those add third parties and each must be named here. Technical detail: [THREAT_MODEL.md](THREAT_MODEL.md).
+Status: draft of 2026-10-24 for the beta. It is the source for the privacy page the stores ask for; the page is published at https://nireus79.github.io/Socrates-ai/privacy.html (made from this file; update both together). It must be updated before any billing or ad code ships: those add third parties and each must be named here. Technical detail: [THREAT_MODEL.md](THREAT_MODEL.md).
 
 ## In plain words
 - Your conversations, the notes the philosophers keep about you and your settings are stored **only on your own device**, encrypted. We (Hermes Software) run no server and receive nothing.

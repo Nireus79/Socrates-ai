@@ -1,0 +1,2 @@
+- The About screen links to the new website and its privacy page
+- Website with a download page and the privacy policy

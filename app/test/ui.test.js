@@ -621,6 +621,8 @@ test("settings say what the philosophers are, point to help in a crisis, and sho
   assert.match(t, /aged 16 and over/);
   assert.match(t, /Version 1\.2\.3/);
   assert.match(t, /Hermes_creative@proton\.me/);
+  assert.match(t, /nireus79\.github\.io\/Socrates-ai\/privacy\.html/, "the privacy policy is the page of the website");
+  assert.match(t, /nireus79\.github\.io\/Socrates-ai\/(?!privacy)/, "the website itself is linked");
   assert.ok(!p.root.querySelector("[style]"));
 });
 

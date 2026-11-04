@@ -912,6 +912,7 @@ function ended(text) {
 function philName(id, fallback) { const p = (S.philosophers || []).find((x) => x.id === id); return p ? p.name : fallback; }
 
 const REPO = "https://github.com/Nireus79/Socrates-ai";
+const SITE = "https://nireus79.github.io/Socrates-ai/";
 
 // The user manual: a section opens and closes; everything is plain text.
 function manualScreen() {
@@ -1006,9 +1007,10 @@ async function aboutScreen() {
   card(t("Contact"),
     P(t("Email") + ": " + CONTACT),
     out(t("Questions and problems"), REPO + "/issues"),
+    out(t("Website"), SITE),
     out(t("Source code"), REPO),
     out(t("Developer"), "https://hermesoftware.wordpress.com/"),
-    out(t("Privacy policy"), REPO + "/blob/master/docs/PRIVACY.md"),
+    out(t("Privacy policy"), SITE + "privacy.html"),
     P(t("When you write for help, please do not include your conversations or any key."), "muted"), err);
   card(t("Support the project"),
     P(t("Socrates is free. If it helps you, please sponsor its development, or tell a friend.")),
