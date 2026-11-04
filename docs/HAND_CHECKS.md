@@ -2,7 +2,7 @@
 
 Things only a person with the right machine, phone or key can do. Nothing here was run on a real Windows machine, a Mac or a signed F-Droid build. Use your own API key only for the checks that say so; set a spending limit at the provider first.
 
-## Windows (never run)
+## Windows (checked by the founder, 2026-11-04)
 1. Download `socrates-v0.1.0-beta.4-windows-amd64.zip` from the release and check it with the `.sha256` file. Unpack it into one folder (keep `socrates-engine.exe` next to `socrates-desktop.exe`).
 2. Start `socrates-desktop.exe`. Expect "Windows protected your PC": More info, Run anyway. If the window stays blank, install the WebView2 runtime (Windows 10).
 3. Register a profile (a name; choose a passphrase or none). Expect to land on the provider screen. Log out and log in again; a wrong passphrase must be refused.

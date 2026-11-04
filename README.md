@@ -5,7 +5,7 @@ questions, do not give verdicts, remember what you told them (in your own words,
 It runs on your own AI provider key (Claude or OpenAI). No server of ours, no ads in the chat, nothing you write in a log,
 conversations encrypted on your device.
 
-Status: free beta, published (0.1.0-beta.5). The engine, the screens, the desktop window (built and run on Linux; the Windows build is cross-compiled and has not been run; no macOS build) and the Android app exist; see [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md) for what is done and what is open,
+Status: free beta, published (0.1.0-beta.5). The engine, the screens, the desktop window (built and run on Linux; the Windows build is cross-compiled and was checked on Windows by the founder on 2026-11-04) and the Android app exist; see [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md) for what is done and what is open,
 and [docs/PLAN.md](docs/PLAN.md) for the product.
 
 ## Get it
