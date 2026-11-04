@@ -45,6 +45,26 @@ jobs:
           name: ${{ matrix.platform }}
           path: dist/*
           if-no-files-found: error
+  macos:
+    needs: check
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version-file: desktop/go.mod }
+      - run: desktop/scripts/package-macos.sh ${{ github.ref_type == 'tag' && github.ref_name || 'v0.0.0-manual' }}
+      - name: The package unpacks, the engine of this machine starts, and the bundle is whole
+        run: |
+          mkdir t && ditto -x -k dist/socrates-*-macos-universal.zip t
+          ls t
+          t/Socrates.app/Contents/MacOS/socrates-engine --version
+          codesign --verify --deep --strict t/Socrates.app
+          lipo -archs t/Socrates.app/Contents/MacOS/socrates-desktop
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: dist/*
+          if-no-files-found: error
   android:
     needs: check
     runs-on: ubuntu-24.04
@@ -79,7 +99,7 @@ jobs:
           if-no-files-found: ignore
   release:
     if: github.ref_type == 'tag'
-    needs: [package, android]
+    needs: [package, android, macos]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -93,9 +113,10 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           cat > notes.md <<'TXT'
-          Beta. Unsigned builds for Linux and Windows; the Android APK is signed with the author's key (it is missing when the signing secrets were not set). You need your own Claude or OpenAI key.
+          Beta. Unsigned builds for Linux, Windows and macOS; the Android APK is signed with the author's key (it is missing when the signing secrets were not set). You need your own Claude or OpenAI key.
 
-          - Windows: the first start shows a SmartScreen warning because the build is not signed ("More info", then "Run anyway"). It needs the WebView2 runtime (included in Windows 11). Windows builds have not been run by the author yet.
+          - Windows: the first start shows a SmartScreen warning because the build is not signed ("More info", then "Run anyway"). It needs the WebView2 runtime (included in Windows 11).
+          - macOS: not signed with an Apple certificate and not notarised, and never run on a Mac by the author. The first time, open System Settings, Privacy & Security and press "Open Anyway" for Socrates. It is one universal app (Apple Silicon and Intel).
           - Linux: needs GTK 3 and WebKitGTK 4.1 (`libgtk-3-0`, `libwebkit2gtk-4.1-0`).
           - Check a download with the `.sha256` file next to it.
           - Everything is stored encrypted on your device; there is no server. See the README for the privacy model.

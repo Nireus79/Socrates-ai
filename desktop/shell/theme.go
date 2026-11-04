@@ -63,6 +63,12 @@ func systemTheme(goos string, run Runner) string {
 				return "dark"
 			}
 		}
+	case "darwin":
+		// "Dark" when the Mac is in dark mode; in light mode the key does not exist and the command fails, which proves nothing, so the page's own
+		// prefers-color-scheme (which the web view takes from the system) decides.
+		if out, err := run(ctx, "defaults", "read", "-g", "AppleInterfaceStyle"); err == nil && strings.Contains(strings.ToLower(out), "dark") {
+			return "dark"
+		}
 	case "windows":
 		if out, err := run(ctx, "reg", "query", `HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize`, "/v", "AppsUseLightTheme"); err == nil {
 			return ParseWindowsLightTheme(out)

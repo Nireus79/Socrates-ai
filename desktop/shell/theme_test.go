@@ -69,3 +69,13 @@ func TestTheSnapSchemaFolderOfAnEditorTerminalIsNotPassedOn(t *testing.T) {
 		t.Fatal("a folder that is not a snap's own must be kept")
 	}
 }
+
+func TestMacDarkIsReadFromTheInterfaceStyleAndLightProvesNothing(t *testing.T) {
+	const style = "defaults read -g AppleInterfaceStyle"
+	if got := systemTheme("darwin", fake(map[string]string{style: "Dark\n"})); got != "dark" {
+		t.Fatalf("dark mode: got %q", got)
+	}
+	if got := systemTheme("darwin", fake(map[string]string{})); got != "" {
+		t.Fatalf("a failing command (light mode, or unreadable) must not claim a theme: got %q", got)
+	}
+}
