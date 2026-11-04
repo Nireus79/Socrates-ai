@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Socrates: privacy</title>
+<meta name="description" content="What Socrates stores, where it goes, and how it is removed.">
+<link rel="icon" href="icon.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+<nav><a href="index.html">Socrates</a> <a href="download.html">Download</a> <a href="privacy.html">Privacy</a> <a href="https://github.com/Nireus79/Socrates-ai">Source code</a></nav>
+<h1>Privacy</h1>
+<p class="lead">What Socrates stores, where it goes, and how it is removed. Last updated 4 November 2026 (beta).</p>
+<h2>In plain words</h2>
+<ul>
+<li>Your conversations, the notes the philosophers keep about you and your settings are stored <strong>only on your own device</strong>, encrypted. We (Hermes Software) run no server and receive nothing.</li>
+<li>To write a reply, the text of the conversation is sent to the <strong>AI provider you chose</strong> (Anthropic or OpenAI) with <strong>your own key</strong>. That provider's terms and privacy policy apply to what it receives. Nothing else leaves your device.</li>
+<li>On a computer you can instead choose <strong>a model on this computer</strong>: the conversation then goes to the model server whose address you entered (by default your own machine) and to no provider. What that server does with it is outside this app. Android offers only Claude and OpenAI.</li>
+<li>On a computer several people can have their own <strong>profile</strong>, each with its own folder, key, settings and optional passphrase; there is no server, so a forgotten passphrase cannot be recovered.</li>
+<li>There is no account, no analytics, no advertising and no tracking in the beta.</li>
+<li>One small request besides that: while the card at the foot of the screens is shown, the program may fetch a public data file with its messages (<code>site/cards.json</code> in the project's GitHub repository, at most once a day, over https, with no cookies, no referrer and nothing about you; GitHub sees your address as for any web page). Hiding the card stops it for that session. If the file cannot be fetched, the messages built into the app are shown.</li>
+<li>The philosophers are artificial. They are not a medical, legal or crisis service. The app is for people aged 16 and over.</li>
+</ul>
+<h2>What is stored, and where</h2>
+<ul>
+<li>A database in the app's private folder (<code>~/.socrates</code> on a computer; the app's own storage on Android, with backup switched off). The sensitive fields (message text, titles, summaries, the notes in the memory, the provider key) are sealed one by one with AES-256-GCM. The key lives in the system's keychain (Android Keystore on a phone), or is sealed by a passphrase you choose.</li>
+<li><strong>Conversations</strong>: messages, a title and a running summary per conversation.</li>
+<li><strong>Memory</strong> (can be switched off in Settings): short notes each philosopher keeps for himself, with your own words as evidence: claims, the words you defined, tensions you saw, and a few facts about your life. He never keeps health, sexual life, money, legal trouble or named third parties by design (a model decides, so check the Memory screen). You can see and delete any note. Notes are per philosopher and are not shared between philosophers.</li>
+<li><strong>Progress</strong>: how many questions you have thought through with each philosopher (no text).</li>
+<li><strong>Settings and purchases</strong>: your provider choice, your key, whether memory is on, and later the products you bought or earned.</li>
+<li><strong>Log and problem report</strong>: the engine's log is kept on your device only (on a computer in <code>~/.socrates/socrates.log</code>, cut to its last part when it grows; on the phone in the app's private folder). On the phone, "Report a problem" in Settings builds a short note (phone model, Android version, whether the engine runs, error lines), shows it to you in full, and opens your mail app with it only if you press Send.</li>
+<li><strong>Reports</strong>: "Report this reply" removes the reply from the conversation, from what the models read and from the summary. Nothing is sent. If you choose to copy the report, you send it yourself to Hermes_creative@proton.me.</li>
+</ul>
+<h2>What is never stored or logged</h2>
+<ul>
+<li>Your words, the philosophers' words and your key are never written to the log; a test starts the real program, runs a conversation and fails if any appears in the log or in plain text in any file.</li>
+<li>When a message is refused or is a crisis message, its words are not kept; only a marker that something was refused.</li>
+<li>Nothing is learned from a message while you may be hurting.</li>
+</ul>
+<h2>Where it goes</h2>
+<p>Each turn makes a few short calls to your provider: a safety check of your message, the reply, a safety check of the reply, and afterwards (in the background) a title, a running summary and the notes for the memory; "Help me answer" asks for suggestions. The text of the conversation is in those calls. The provider may keep it under its own terms; use a key with a spending limit and read its policy.</p>
+<h2>Your controls</h2>
+<ul>
+<li><strong>Memory off</strong> (Settings): no new notes, and the old ones are not told to the philosophers.</li>
+<li><strong>Delete a conversation</strong>: if the philosopher learnt something in it, you choose whether he forgets that too (forgetting is the default).</li>
+<li><strong>Export / import</strong> (Settings): one file with your conversations, notes and progress; never your key.</li>
+<li><strong>Delete everything</strong> (Settings): removes every row, your key and your settings, and compacts the file.</li>
+<li>Uninstalling the app removes all of it on a phone.</li>
+</ul>
+<h2>Known limits (see THREAT_MODEL.md)</h2>
+<p>Malware running as you can read what the app can read; a copy of an older database file is outside our control; progress and purchases are stored locally and can be edited by someone who controls their own device.</p>
+<h2>When billing and ads arrive (not in the beta)</h2>
+<p>Each service must be named here with what it receives: the store (Google Play, Steam, itch.io or a merchant of record) for purchases, an ad network for rewarded ads (with the consent screen it requires), GitHub or a tip service when you open its link. No ad will ever appear in a conversation or after a crisis step.</p>
+<footer>Socrates is published by Hermes Software. Questions and problems: <a href="mailto:Hermes_creative@proton.me">Hermes_creative@proton.me</a>, or <a href="https://github.com/Nireus79/Socrates-ai/issues">GitHub issues</a>.</footer>
+</main>
+</body>
+</html>
