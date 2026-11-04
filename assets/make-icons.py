@@ -81,9 +81,13 @@ def original_icon(size):
     from PIL import ImageChops
     o = Image.open(os.path.join(ROOT, "assets", "brand", "socrates-original.png")).convert("RGB")
     bg = Image.new("RGB", o.size, o.getpixel((2, 2)))
-    x0, y0, x1, y1 = ImageChops.difference(o, bg).point(lambda v: 255 if v > 24 else 0).getbbox()
-    side = round(max(x1 - x0, y1 - y0) * 1.14)
-    cx, cy = (x0 + x1) // 2, (y0 + y1) // 2
+    d = ImageChops.difference(o, bg).point(lambda v: 255 if v > 24 else 0)
+    x0, y0, x1, y1 = d.getbbox()
+    # the face is half a face: its straight edge (the rightmost point of the head, above the wordmark) goes in the middle, as if it were whole
+    mid = d.crop((0, 0, o.width, y0 + 186)).getbbox()[2]
+    half = max(mid - x0, x1 - mid, (y1 - y0) // 2)
+    side = round(2 * half * 1.14)
+    cx, cy = mid, (y0 + y1) // 2
     box = (cx - side // 2, cy - side // 2, cx - side // 2 + side, cy - side // 2 + side)
     return o.crop(box).resize((size, size), Image.LANCZOS).convert("RGBA")
 
