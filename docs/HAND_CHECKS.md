@@ -2,6 +2,9 @@
 
 Things only a person with the right machine, phone or key can do. The Windows build was checked by the founder on 2026-11-04; nothing was run on a Mac (dropped), and the F-Droid build was only installed as a test copy signed with a throwaway key. Use your own API key only for the checks that say so; set a spending limit at the provider first.
 
+## Mac (new in beta.6, never run on a Mac)
+Find anyone with a Mac: unzip `socrates-...-macos-universal.zip`, drag Socrates.app to Applications, open it (first time: System Settings, Privacy & Security, "Open Anyway"). Check that the window opens, the age screen appears, the key can be entered, one reply arrives, and that quitting the app stops the engine (Activity Monitor: no `socrates-engine`). Report what macOS says; record the result here.
+
 ## Windows (checked by the founder, 2026-11-04)
 1. Download `socrates-v0.1.0-beta.4-windows-amd64.zip` from the release and check it with the `.sha256` file. Unpack it into one folder (keep `socrates-engine.exe` next to `socrates-desktop.exe`).
 2. Start `socrates-desktop.exe`. Expect "Windows protected your PC": More info, Run anyway. If the window stays blank, install the WebView2 runtime (Windows 10).

@@ -12,7 +12,7 @@ Local draft, 2026-11-04, from the code, docs/PRIVACY.md and the release notes. i
 - **Release status:** Beta (or In development). CHECK.
 - **Pricing:** free download with an optional payment (itch.io: "No payments" or "$0 or donate"). Proposal, the founder decides: `$0 or donate`, suggested amount left empty, the sponsor link in the text.
 - **Genre and tags:** Education; Tool (CHECK); tags `philosophy`, `ai`, `chat`, `education`, `dialogue`, `greek`, `privacy`, `local-first`, `open-source`.
-- **Platforms:** Windows, Linux. (No macOS build. Android: link to F-Droid when listed, or the signed APK on GitHub.)
+- **Platforms:** Windows, Linux (and macOS from beta.6: upload `socrates-v<version>-macos-universal.zip`, tick macOS, say in the description that it is untested and unsigned). ( Android: link to F-Droid when listed, or the signed APK on GitHub.)
 - **Languages:** English, Greek.
 - **Generative AI disclosure** (itch.io asks for it): yes, the philosophers' replies are generated at run time by the AI model the person connects (Claude or OpenAI, with their own key). The app's code and art were not generated for sale as game content; say so only if true for the art and text (the founder to confirm). CHECK the exact wording of the question.
 - **Age:** 16 and over (the whole app, PLAN 19). CHECK the itch.io content questionnaire (it asks about violence, sensitive themes and so on; the philosophers discuss hard topics such as death, war and slavery with context).
