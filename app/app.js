@@ -593,7 +593,7 @@ async function home() {
         el("h2", {}, k.title || t("New conversation")), el("div", { class: "muted" }, who)));
     }
   }
-  mount(...screen("Socrates", body, el("span", { class: "row" }, S.profiles ? el("button", { class: "link", onclick: logOut }, t("Log out")) : null, el("button", { class: "link", onclick: () => show(progressScreen) }, t("Progress")), el("button", { class: "link", onclick: () => show(helpScreen) }, t("Help")), el("button", { class: "link", onclick: () => show(settings) }, t("Settings")))));
+  mount(...screen("Socrates", body, el("span", { class: "row" }, S.profiles ? el("button", { class: "link", onclick: logOut }, t("Log out")) : null, el("button", { class: "link", onclick: () => show(progressScreen) }, t("Progress")), el("button", { class: "link", onclick: () => show(settings) }, t("Settings")))));
 }
 
 // ---- progress: how far the person has come with every philosopher, unlocked or not
@@ -915,6 +915,9 @@ async function settings() {
   const err = errorLine();
   const body = el("div", { class: "stack" });
   const p = await api("GET", "/api/settings/llm");
+  body.append(el("div", { class: "card stack" }, el("h2", {}, t("Help")),
+    el("p", { class: "muted" }, t("What the app is, how a conversation goes, how each philosopher tends to behave, and a few tips.")),
+    el("button", { onclick: () => show(helpScreen) }, t("How Socrates works"))));
   body.append(el("div", { class: "card stack" }, el("h2", {}, t("Language")), languagePicker(settings)));
   body.append(el("div", { class: "card stack" }, el("h2", {}, t("Theme")), themePicker()));
   if (S.profiles) body.append(el("div", { class: "card stack" }, el("h2", {}, t("Profile")),
@@ -953,8 +956,7 @@ async function settings() {
     el("p", { class: "muted" }, t("How well the philosophers talk, and how reliably the safety checks work, depend on what the model behind them can do.")),
     el("p", { class: "muted" }, t("If you are thinking of hurting yourself, please call your local emergency number or a crisis line, or tell someone you trust.")),
     el("p", { class: "muted" }, t("For people aged 16 and over. ") + (st.data.version ? t("Version {v}.", { v: st.data.version }) : "")),
-    el("p", { class: "muted" }, t("Problems, questions and reports: {address} (Hermes Software).", { address: CONTACT })),
-    el("button", { onclick: () => show(helpScreen) }, t("How Socrates works"))));
+    el("p", { class: "muted" }, t("Problems, questions and reports: {address} (Hermes Software).", { address: CONTACT }))));
   body.append(el("div", { class: "card stack" }, el("h2", {}, t("Delete everything")),
     el("p", { class: "muted" }, t("Removes every conversation, your provider key and your settings from this device. It cannot be undone.")),
     confirmButton(t("Delete everything"), "danger", t("Click again to delete everything"), async () => {

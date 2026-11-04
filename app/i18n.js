@@ -6,6 +6,7 @@
   const el = {
     "Log in": "Σύνδεση",
     "Help": "Βοήθεια",
+    "What the app is, how a conversation goes, how each philosopher tends to behave, and a few tips.": "Τι είναι η εφαρμογή, πώς κυλά μια συζήτηση, πώς τείνει να συμπεριφέρεται κάθε φιλόσοφος και μερικές συμβουλές.",
     "How Socrates works": "Πώς λειτουργεί το Socrates",
     "What Socrates is": "Τι είναι το Socrates",
     "Socrates is an app for talking with four artificial Greek philosophers: Socrates, Diogenes, Plato and Aristotle. Each is made from what was written about him and after him, and imagined alive in today's world. They are not real people, and they are not a source of medical, legal or other professional advice.": "Το Socrates είναι μια εφαρμογή για να συζητάς με τέσσερις τεχνητούς Έλληνες φιλοσόφους: τον Σωκράτη, τον Διογένη, τον Πλάτωνα και τον Αριστοτέλη. Ο καθένας φτιάχτηκε από όσα γράφτηκαν γι' αυτόν και μετά από αυτόν, και φαντάζεται ζωντανός στον σημερινό κόσμο. Δεν είναι πραγματικοί άνθρωποι και δεν αποτελούν πηγή ιατρικών, νομικών ή άλλων επαγγελματικών συμβουλών.",
