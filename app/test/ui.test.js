@@ -612,12 +612,16 @@ test("settings say what the philosophers are, point to help in a crisis, and sho
   }));
   p.app.start(p.root); await settle();
   click([...p.root.querySelectorAll("button")].find((b) => b.textContent === "Settings")); await settle();
+  assert.match(text(p.root), /Version 1\.2\.3/, "the version is on the About row");
+  click([...p.root.querySelectorAll("button.linkrow")].find((b) => b.textContent.startsWith("About Socrates"))); await settle();
   const t = text(p.root);
-  assert.match(t, /artificial characters/);
+  assert.match(t, /artificial Greek philosophers/);
   assert.match(t, /not a source of medical, legal or other professional advice/);
   assert.match(t, /local emergency number or a crisis line/);
   assert.match(t, /aged 16 and over/);
   assert.match(t, /Version 1\.2\.3/);
+  assert.match(t, /Hermes_creative@proton\.me/);
+  assert.ok(!p.root.querySelector("[style]"));
 });
 
 test("the memory switch shows the current state, changes it, and goes back if the change fails", async () => {
@@ -1049,10 +1053,11 @@ test("Help explains the app, how to talk, each philosopher and tips, from Settin
   const btn = (label) => [...p.root.querySelectorAll("button")].find((b) => b.textContent === label);
   assert.ok(!btn("Help"), "no Help button in the home header");
   click(btn("Settings")); await settle();
-  click(btn("How Socrates works")); await settle();
+  click([...p.root.querySelectorAll("button.linkrow")].find((b) => b.textContent.startsWith("User manual"))); await settle();
   const text = p.root.textContent;
-  for (const w of ["What Socrates is", "How a conversation goes", "Meeting the others", "What they remember", "A few tips", "Safety, privacy and your key"]) assert.match(text, new RegExp(w));
-  const heads = [...p.root.querySelectorAll(".card h2")].map((h) => h.textContent);
+  for (const w of ["What Socrates does", "Getting started", "Talking with a philosopher", "Help me answer", "Meeting the others", "What they remember", "A few tips", "Your data and privacy", "Something is wrong"]) assert.match(text, new RegExp(w));
+  assert.ok(p.root.querySelectorAll("details.manual-section").length >= 9, "sections open and close");
+  const heads = [...p.root.querySelectorAll("h3")].map((h) => h.textContent);
   for (const n of ["Socrates", "Diogenes", "Plato", "Aristotle"]) assert.ok(heads.includes(n), n + " has a card");
   assert.ok(!/challenge|\blevels?\b|\bscores?\b/i.test(text), "no sport words for philosophers");
   assert.ok(!p.root.querySelector("[style]"), "no inline styles");
