@@ -1,12 +1,12 @@
 # What remains until release
 
-Written 2026-10-24, after commit 4039ba4. The beta is feature-complete; what is left is testing, paperwork and platform checks. "You" is the founder; "me" is Claude.
+Written 2026-10-24, after commit 4039ba4; updated 2026-11-04 (published, see "Done since" below). The beta is feature-complete; what is left is testing, paperwork and platform checks. "You" is the founder; "me" is Claude.
 
 ## Decided 2026-11-03 (founder): F-Droid first, Google Play waits
 - Signing key made (`~/android-dev/socrates/`, backed up on USB, secrets `SOCRATES_KEYSTORE_*` set in the repository). It signs only the APK on GitHub releases; F-Droid signs its own build.
 - Version lives in `mobile/android/app/build.gradle`, checked against the tag by `scripts/check-version.sh`; one `v*` tag builds desktop and Android (`release-desktop.yml`; it can also be started by hand from the Actions tab: the manual run on 2026-11-03 built Linux, Windows and a signed Android APK, verified against the new key, and made no release).
 - F-Droid recipe: `mobile/fdroid/io.github.nireus79.socrates.yml`, written to Moly's corrected recipe and its lessons (`mobile/fdroid/README.md`); never built by F-Droid yet (the merge request's own pipeline builds it); needs the full commit hash of the tag. Listing text and images: `fastlane/metadata/android/en-US/` (phone screenshots missing: add `phoneScreenshots/1.png` and more from the finished app). The unused Google services plugin was removed from the Android build for F-Droid's scanner.
-- Next: cut the first tag, run the recipe in the fdroidserver build image, then open the merge request on F-Droid's GitLab (fdroiddata).
+- Done since: tags v0.1.0-beta.4 and beta.5 are published; the merge request on F-Droid's GitLab is open (!55759, pipeline green, under review: sponsor card explained and `Ads` declared, test copy of the APK ran on the Mi A2); itch.io, the website, Obtainium, Scoop and winget (pull request 470784) are live or submitted. See `docs/WINDOWS_PACKAGES.md`, `docs/ITCH_LISTING.md`, `mobile/fdroid/README.md`.
 
 ## Needed from you
 1. **Phone run.** Done on 2026-10-26 on a Mi A2 (Android 10, arm64) with a debug build (SESSION 65); a release build and the idle restart on that phone are still to do. Original note: plug in the phone, enable USB debugging, accept the prompt. I build and install a release build and drive it with your key (you enter the key in the app yourself). First run on real arm64 hardware: Back key, engine restart after idle, signed build, keyboard. Untested: Android 8 to 12, share-in, the save-as export picker, low-memory kills.

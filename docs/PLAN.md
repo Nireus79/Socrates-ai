@@ -168,7 +168,7 @@ Socrates suggested.
 - **Desktop (main form, decided 2026-10-23)**: a standalone app for Windows, Linux, macOS: the Go engine as a child process of the app and the Moly screens in its window, with a `shim.js` for the `chrome.*` calls, the pattern that
   the Android app of Moly already uses. No native-messaging host, no installers. A Wails v2 window with the engine as a child process, the Moly screens embedded and the engine's API proxied with the token added was built and ran on Linux (experiment of 2026-10-23, session record section 14); Windows and macOS are not yet tested. There is no local model (section 19); the provider key route is the only one.
 - **Browser extension**: optional, later, as a free entry (Chrome and Edge Manifest V3 side panel, Firefox separate build). Not part of M0. The Chrome Web Store has no payments of its own.
-- **Android**: Capacitor shell with the engine embedded, copy/paste layout and share target, `play` flavor only (F-Droid is out for this product, section 15; the `foss` flavor of Moly is not carried over
+- **Android**: Capacitor shell with the engine embedded, copy/paste layout and share target, `play` flavor only at first; **F-Droid was reversed on 2026-11-03**: one build without Google services (the `foss` flavor is not needed, the app has none) is submitted to F-Droid (merge request !55759), signed by F-Droid's own key, and the signed APK is also on GitHub releases; the `foss` flavor of Moly is not carried over
   unless that changes). Provider key only, no local model, no page scanning.
 - Release trains: one `v*` tag builds desktop and Android together (the version lives in mobile/android/app/build.gradle, checked by scripts/check-version.sh; 2026-11-03). Store listings follow after the beta.
 
@@ -302,7 +302,7 @@ answers). The unlock order of the Greek roster is open (section 15). Points and 
 2. How many turns and suggestions per day for the first level, and should they shrink or cost more at higher levels?
 3. May the user ask a philosopher a question freely, or is asking also limited by turns?
 4. The score: confirm the four criteria of 12.4 (responsive, reasoned, consistent, in method), or give others.
-5. Purchases: through Play billing only, or also outside? (F-Droid is out for this product, which removes its anti-feature question.) And a clock-change cheat cannot be stopped on a local-only app; accept it?
+5. Purchases: through Play billing only, or also outside? (F-Droid was reversed on 2026-11-03: the app is submitted there with the anti-features Ads (the project's own card), NonFreeNet and Tracking.) And a clock-change cheat cannot be stopped on a local-only app; accept it?
 6. Do points and progress sync across the user's devices, or stay on each device?
 7. Does the user see points and a level bar in the chat, and is there a "profile" screen with the roster and locked characters?
 8. Can the user replay a finished philosopher, and does it cost turns?
@@ -318,7 +318,7 @@ The conversation moves to Greek between founder and Claude; the game language st
 | 2 Turns and suggestions | Not decided. Higher level = harder game. Numbers to be found by testing |
 | 3 Free questions | Claude's proposal, open for confirmation: the user may ask freely; a question costs one turn like an answer and earns no points |
 | 4 Score | Must be dynamic, never a fixed point per answer. See section 16 |
-| 5 Purchases | F-Droid is out for this product (the target group differs from Moly's). Google Play account exists; Lemon Squeezy failed on identity checks. Recommendation: Play Billing for Android, nothing paid on extension/desktop at launch |
+| 5 Purchases | *(F-Droid was out on 2026-10-23; reversed 2026-11-03 and submitted.)* Google Play account exists; Lemon Squeezy failed on identity checks. Recommendation: Play Billing for Android, nothing paid on extension/desktop at launch |
 | 6 Sync | Not decided. Recommendation: no sync; export/import as in Moly |
 | 7 Screens | The chat stays free of scores and rosters. Milestone messages only |
 | 8 Replay | Any unlocked philosopher can be played at any time |

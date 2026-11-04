@@ -1250,7 +1250,7 @@ test("every screen but the login ends with a labelled card; its links open throu
   global.window.socratesShell = { ready: Promise.resolve(), base: "", token: "t", openSponsorLink: async (u) => { asked.push(u); } };
   p.app.start(p.root); await settle(10);
   const card = p.root.querySelector(".card-area");
-  assert.ok(card && /Sponsored/.test(card.textContent) && /Hermes Software/.test(card.textContent), "labelled, with the built-in message");
+  assert.ok(card && /From the project/.test(card.textContent) && !/Sponsored/.test(card.textContent) && /Hermes Software/.test(card.textContent), "the project's own card says so and is not called an advertisement, with the built-in message");
   click([...card.querySelectorAll("button")].find((b) => b.textContent === "Sponsor")); await settle();
   assert.deepStrictEqual(asked, ["https://github.com/sponsors/Nireus79"]);
   click([...card.querySelectorAll("button")].find((b) => b.textContent === "Hide")); await settle();
@@ -1268,6 +1268,7 @@ test("the project's messages replace the built-in ones, are shown as text, and o
   p.app.start(p.root); await settle(12);
   const card = p.root.querySelector(".card-area");
   assert.match(card.textContent, /From the file/);
+  assert.match(card.querySelector(".card-label").textContent, /^Sponsored$/, "a message from someone else is still labelled Sponsored");
   assert.doesNotMatch(card.textContent, /Hermes Software|retired/);
   assert.ok(card.textContent.includes(evil) && card.querySelector("img") === null, "text, never markup");
   assert.deepStrictEqual([...card.querySelectorAll(".row button")].map((b) => b.textContent), ["Ok"]);

@@ -59,7 +59,7 @@ Socrates works with a Claude (Anthropic) or OpenAI API key that you paste in at 
 Each new tag: upload the new files (the same ones as on the GitHub release), keep the old files only if you want a version history, and paste the release notes of the tag as the devlog post. `butler` (itch.io's command-line tool) can push the builds from the release workflow later; not set up.
 
 ## Before you press Publish
-1. Someone has run the Windows zip (docs/HAND_CHECKS.md).
+1. Done (2026-11-04, founder): the Windows zip was run on Windows (docs/HAND_CHECKS.md). The page text should no longer say the Windows build is unchecked.
 2. Screenshots and the cover image exist (made); decide whether to retake one with a real reply.
 3. The generative AI disclosure and the age questionnaire are answered with the founder's own words.
 4. The page is first saved as a Draft and viewed through its private preview link.

@@ -1,6 +1,6 @@
-# Hand checks before and after publishing 0.1.0-beta.4
+# Hand checks before and after publishing (written for beta.4, kept for each release)
 
-Things only a person with the right machine, phone or key can do. Nothing here was run on a real Windows machine, a Mac or a signed F-Droid build. Use your own API key only for the checks that say so; set a spending limit at the provider first.
+Things only a person with the right machine, phone or key can do. The Windows build was checked by the founder on 2026-11-04; nothing was run on a Mac (dropped), and the F-Droid build was only installed as a test copy signed with a throwaway key. Use your own API key only for the checks that say so; set a spending limit at the provider first.
 
 ## Windows (checked by the founder, 2026-11-04)
 1. Download `socrates-v0.1.0-beta.4-windows-amd64.zip` from the release and check it with the `.sha256` file. Unpack it into one folder (keep `socrates-engine.exe` next to `socrates-desktop.exe`).

@@ -151,7 +151,7 @@ function confirmButton(label, cls, armed, action) {
 // A new screen takes the focus on its heading, so that a keyboard or screen-reader user starts at the top of what is new.
 // ---- the card at the foot of every screen
 //
-// A small card with a message from the project or from a sponsor, as Moly's: labelled "Sponsored" (the project's own too), static (text and
+// A small card with a message from the project or from a sponsor, as Moly's: labelled "From the project" when it is the project's own and "Sponsored" only for a message from someone else, static (text and
 // links only), one click hides it until the app is opened again, and it has its own area below everything, never between a philosopher's
 // replies. The messages built in here show until the engine brings the project's data file (site/cards.json, fetched by the engine at most
 // once a day with nothing about the person), which lets them change without a release. The links open in the system's browser.
@@ -189,8 +189,9 @@ function cardNode() {
   const say = (x) => (e.builtin ? t(x) : x); // the built-in words are translated; a message from the file is shown as written
   const err = errorLine();
   const links = (e.links || []).filter((l) => safeHttps(l.url));
-  const node = el("aside", { class: "card-area", "aria-label": t("Sponsored") },
-    el("div", { class: "card-head" }, el("span", { class: "card-label" }, t("Sponsored")),
+  const label = t(e.kind === "socrates" ? "From the project" : "Sponsored"); // the project's own message is not an advertisement
+  const node = el("aside", { class: "card-area", "aria-label": label },
+    el("div", { class: "card-head" }, el("span", { class: "card-label" }, label),
       el("button", { class: "link", type: "button", "aria-label": t("Hide this card"), title: t("Hide this card until you open Socrates again"), onclick: () => { hideCard(); node.remove(); } }, t("Hide"))),
     (e.marks || []).includes("hermes") ? el("span", { class: "hermes", role: "img", "aria-label": "Hermes Software" }) : null,
     el("strong", { class: "card-title" }, say(e.title)), el("p", { class: "card-text" }, say(e.text)),
@@ -973,7 +974,7 @@ function manualScreen() {
     t("A safety check runs on every message and every reply, above every philosopher. If a reply is wrong or harmful, press Report next to it."),
     t("The app uses your own key from Claude or OpenAI, which you pay the provider for; Settings explains how to get one. Your key and your conversations stay encrypted on this device. The only thing the app fetches is the sponsor card, once a day, and it sends nothing about you."),
     t("Export conversations saves your conversations in one file, never your key. Import puts such a file back. Delete everything removes every conversation, your key and your settings from this device, and it cannot be undone."),
-    t("Settings has a Language choice and a Theme: Automatic, Light or Dark. The small card at the bottom is a message from the project or a sponsor and is always labelled Sponsored; Hide removes it until you open the app again.")));
+    t("Settings has a Language choice and a Theme: Automatic, Light or Dark. The small card at the bottom is a message from the project, labelled From the project (a message from anyone else would be labelled Sponsored); Hide removes it until you open the app again.")));
   const faq = [
     [t("The engine does not answer."), t("Close Socrates completely and open it again. Your message stays in the box.")],
     [t(PROVIDER_PROBLEMS.auth), t("Copy the key again from the provider's website and paste it in Settings, under AI provider. A key from Claude starts with sk-ant, one from OpenAI with sk-.")],

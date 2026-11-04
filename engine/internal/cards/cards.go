@@ -34,7 +34,7 @@ type Link struct {
 	Primary bool   `json:"primary,omitempty"`
 }
 
-// Entry is one message. Kind is "socrates" (the project's own) or "sponsor"; every card is labelled "Sponsored" on screen, the project's own too.
+// Entry is one message. Kind is "socrates" (the project's own) or "sponsor"; on screen the project's own card is labelled "From the project" and a "sponsor" card "Sponsored".
 type Entry struct {
 	ID     string   `json:"id"`
 	Kind   string   `json:"kind"`

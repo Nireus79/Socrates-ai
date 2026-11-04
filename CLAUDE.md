@@ -12,7 +12,8 @@ Read first: `docs/PLAN.md` (architecture, layers, the game, decisions, open ques
 @docs/CHARACTER_PLATO.md
 @docs/CHARACTER_ARISTOTLE.md
 
-## State (2026-10-23, late)
+## State (2026-10-23, late; published 2026-11-04: see the line below)
+Published 2026-11-04: free beta 0.1.0-beta.5 on GitHub releases, the website (nireus79.github.io/Socrates-ai), itch.io, Obtainium, Scoop (Nireus79/scoop-socrates) and winget (pull request 470784); F-Droid merge request !55759 is under review (recipe: `mobile/fdroid/`); Google Play waits for Moly's closed test; Steam and macOS are dropped; IzzyOnDroid rejects LLM front-ends. The project's own card is labelled "From the project" (a third party's would be "Sponsored"). Notes for later are outside the repository (`~/vs_projects/notes/`).
 M0 and most of M1 to M3 are built, committed and pushed (see `docs/BUILD_PLAN.md` "Status" and the session record, sections 31 to 46). The founder speaks English from now on (Greek only if asked); documents and code are English.
 What exists:
 - `engine/` (Go, module `socrates`, `make check` is the gate): transport door, encrypted store (field-level AES-GCM), keystore, LLM layer (Claude, OpenAI, and on the computer versions a model on this computer, PLAN 19), safety stage (judge, pure decision, output gate, fixed texts), the turn (`internal/conversation`), philosophers as data, suggestions ("Help me answer"), the ledger (claims, terms, tensions, per philosopher, quote-validated), entitlements (beta grants everything), profile export/import/delete, idle report.
@@ -20,7 +21,7 @@ What exists:
 - No corpus and no retrieval (PLAN 18). Replies are brief by a `Manner` sentence per philosopher.
 The maturity score is built (PLAN 16: inquiries, challenges, five with each earlier philosopher to unlock the next; production code in `internal/progress`, bypassed in the beta unless `SOCRATES_ENFORCE_UNLOCKS=1`); philosophers pose challenges (button or at natural pauses) and learn the person through `fact` entries in the ledger.
 **What remains until release: `docs/RELEASE_TODO.md`.**
-Open: tuning of the thresholds on real conversations, daily numbers for turns and suggestions, Play Billing, store listing and signing, the live quality batteries (M4), Windows/macOS runs, the logo files (untracked, waiting for the founder).
+Open: tuning of the thresholds on real conversations, daily numbers for turns and suggestions, Play Billing, store listing and signing, the live quality batteries (M4), the logo files (untracked, waiting for the founder).
 **Testing rule (founder, 2026-10-23): all tests are simulated** (scripted mock model, stand-in model servers, jsdom, headless browser). Never use the founder's API key or any paid provider without being asked; the founder does the final manual test. Do not ask permission for every task: proceed through the build plan, and ask only for real product decisions.
 
 ## Rules
