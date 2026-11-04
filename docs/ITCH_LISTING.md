@@ -1,0 +1,63 @@
+# itch.io page: Socrates (free beta)
+
+Local draft, 2026-11-04, from the code, docs/PRIVACY.md and the release notes. itch.io's form changes: check every field against the page editor; CHECK marks my best reading, not verified. House voice: no sport or game words, no taglines about the philosophers. Do not publish before the Windows build has been run by someone (docs/HAND_CHECKS.md).
+
+## Page settings
+- **Title:** `Socrates`
+- **Project URL:** `https://<your-itch-name>.itch.io/socrates` (your choice)
+- **Short description or tagline** (one line shown in listings): `Talk with four artificial Greek philosophers. They ask; you think. Everything stays on your computer.`
+- **Kind of project:** Downloadable. CHECK: "Games" is the default class on itch.io; choose "Tool" or "Other" if offered, since Socrates is not a game in the usual sense (the founder's word is "an app").
+- **Release status:** Beta (or In development). CHECK.
+- **Pricing:** free download with an optional payment (itch.io: "No payments" or "$0 or donate"). Proposal, the founder decides: `$0 or donate`, suggested amount left empty, the sponsor link in the text.
+- **Genre and tags:** Education; Tool (CHECK); tags `philosophy`, `ai`, `chat`, `education`, `dialogue`, `greek`, `privacy`, `local-first`, `open-source`.
+- **Platforms:** Windows, Linux. (No macOS build. Android: link to F-Droid when listed, or the signed APK on GitHub.)
+- **Languages:** English, Greek.
+- **Generative AI disclosure** (itch.io asks for it): yes, the philosophers' replies are generated at run time by the AI model the person connects (Claude or OpenAI, with their own key). The app's code and art were not generated for sale as game content; say so only if true for the art and text (the founder to confirm). CHECK the exact wording of the question.
+- **Age:** 16 and over (the whole app, PLAN 19). CHECK the itch.io content questionnaire (it asks about violence, sensitive themes and so on; the philosophers discuss hard topics such as death, war and slavery with context).
+- **Files to upload** (from the GitHub release, the same files, same checksums): `socrates-v0.1.0-beta.5-windows-amd64.zip` (Windows), `socrates-v0.1.0-beta.5-linux-amd64.tar.gz` (Linux). Tick the platform for each file.
+- **Cover image** (630 x 500 recommended): to make from the logo (the vertical wordmark on the cream #E1DECF); not made yet. **Screenshots:** 3 to 5 from the desktop window (not taken yet; the window has not been seen by anyone but the founder, take them in the real app).
+- **Community:** comments on or off (the founder decides); the contact address is in the text either way.
+
+## Description (paste into the page)
+
+Ask anything. Socrates does not hand down answers: he asks, and you think. Diogenes, Plato and Aristotle each have their own way of talking with you.
+
+The philosophers are artificial characters, imagined alive in today's world and made from what was written about them and after them. They are not the real people, and they say so. They are not a medical, legal or crisis service.
+
+**How it works**
+- Choose a philosopher and write, in English or Greek.
+- He answers briefly, often with a question, and holds you to your own words.
+- Stuck? "Help me answer" offers a few ways to begin, and you may change them.
+- Now and then a philosopher puts a question to you that he thinks is worth thinking all the way through. Think enough of them through with one philosopher, and you meet the next (in this beta all four are open).
+- Each philosopher keeps short notes about what you said, only for himself. You can read and delete every one, or switch the memory off.
+
+**Private by design**
+- Your conversations stay on your computer, in an encrypted store. There is no account, no analytics and no tracking, and no Socrates server.
+- Your messages go from your computer to the AI provider you chose, with your own key. A small card with a message from the project or a sponsor may appear at the foot of the screens, never inside a conversation.
+- Several people can share one computer: each has a profile with its own folder, key and optional passphrase. A forgotten passphrase cannot be recovered.
+- Free and open source (MIT). Source: https://github.com/Nireus79/Socrates-ai
+
+**You need your own key**
+Socrates works with a Claude (Anthropic) or OpenAI API key that you paste in at setup; the app explains how to get one, with buttons to the providers' pages. A chat subscription does not include an API key. Your messages are sent to the provider under its terms, so set a spending limit there. On a computer you can instead connect a model running on your own machine; how well the philosophers talk, and how reliably the safety checks work, then depend on that model.
+
+**Install**
+- **Windows:** unzip it into a folder and run `socrates-desktop.exe`. The beta is not signed, so Windows may say "Windows protected your PC": choose "More info", then "Run anyway". It needs the WebView2 runtime (included in Windows 11). *(Add this sentence only once someone has run it: "Tested on Windows 10/11.")*
+- **Linux:** unpack the archive and run `socrates-desktop`. It needs GTK 3 and WebKitGTK 4.1 (`libgtk-3-0`, `libwebkit2gtk-4.1-0`).
+- There is no macOS build. **Android:** from F-Droid when it is listed, or the signed APK on GitHub: https://github.com/Nireus79/Socrates-ai/releases
+- Remove: close it and delete the folder; your data stays in the `.socrates` folder of your user folder (export first in Settings if you want to keep it, then delete that folder).
+
+**Good to know**
+- For people aged 16 and over. If you are thinking of hurting yourself, please call your local emergency number or a crisis line, or tell someone you trust.
+- A free beta. Questions, problems and reports: Hermes_creative@proton.me, or https://github.com/Nireus79/Socrates-ai/issues
+- Privacy policy: https://nireus79.github.io/Socrates-ai/privacy.html
+- Independent app, not made or endorsed by Anthropic or OpenAI. Made by Hermes Software.
+- Support the project: https://github.com/sponsors/Nireus79
+
+## Update notes
+Each new tag: upload the new files (the same ones as on the GitHub release), keep the old files only if you want a version history, and paste the release notes of the tag as the devlog post. `butler` (itch.io's command-line tool) can push the builds from the release workflow later; not set up.
+
+## Before you press Publish
+1. Someone has run the Windows zip (docs/HAND_CHECKS.md).
+2. Screenshots and a cover image exist.
+3. The generative AI disclosure and the age questionnaire are answered with the founder's own words.
+4. The page is first saved as a Draft and viewed through its private preview link.
