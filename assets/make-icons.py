@@ -77,7 +77,7 @@ def full_mark_on_cream(size):
 
 
 def original_icon(size):
-    """The founder's original logo (assets/brand/socrates-original.png, with its wordmark) cropped to a square around the drawing, then scaled."""
+    """The founder's original logo (assets/brand/socrates-original.png, with its wordmark) cropped to a square around the drawing, with its own margins, then scaled."""
     from PIL import ImageChops
     o = Image.open(os.path.join(ROOT, "assets", "brand", "socrates-original.png")).convert("RGB")
     bg = Image.new("RGB", o.size, o.getpixel((2, 2)))
@@ -85,10 +85,9 @@ def original_icon(size):
     x0, y0, x1, y1 = d.getbbox()
     # the face is half a face: its straight edge (the rightmost point of the head, above the wordmark) goes in the middle, as if it were whole
     mid = d.crop((0, 0, o.width, y0 + 186)).getbbox()[2]
-    half = max(mid - x0, x1 - mid, (y1 - y0) // 2)
-    side = round(2 * half * 1.14)
-    cx, cy = mid, (y0 + y1) // 2
-    box = (cx - side // 2, cy - side // 2, cx - side // 2 + side, cy - side // 2 + side)
+    # no cropping of the margins: the square is as tall as the original, with the straight edge of the face on its vertical axis
+    side = o.height
+    box = (mid - side // 2, 0, mid - side // 2 + side, side)
     return o.crop(box).resize((size, size), Image.LANCZOS).convert("RGBA")
 
 
@@ -99,7 +98,7 @@ for name, legacy, adaptive in (("mdpi", 48, 108), ("hdpi", 72, 162), ("xhdpi", 9
     save(rounded(base, 0.16), *res, "mipmap-" + name, "ic_launcher.png")
     save(circle(base), *res, "mipmap-" + name, "ic_launcher_round.png")
     fg = Image.new("RGBA", (adaptive, adaptive), CREAM)  # the cream is the adaptive background's colour, so the join does not show
-    inner = round(adaptive * 0.74)
+    inner = round(adaptive * 0.84)
     fg.alpha_composite(original_icon(inner), ((adaptive - inner) // 2, (adaptive - inner) // 2))
     save(fg, *res, "mipmap-" + name, "ic_launcher_foreground.png")
 with open(os.path.join(ROOT, *res, "values", "ic_launcher_background.xml"), "w") as f:
