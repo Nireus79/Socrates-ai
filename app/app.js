@@ -17,11 +17,52 @@ function el(tag, props, ...kids) {
   return e;
 }
 
+// ---- icons: Moly's set, one stroke style, drawn inline so that they follow the text colour (no emoji, no image files)
+const SVG_NS = "http://www.w3.org/2000/svg";
+const ICONS = {
+  plus: [["path", "M12 5v14"], ["path", "M5 12h14"]],
+  back: [["path", "M19 12H5"], ["path", "m11 18-6-6 6-6"]],
+  logout: [["path", "M9 21H5V3h4"], ["path", "M16 17l5-5-5-5"], ["path", "M21 12H9"]],
+  insight: [["path", "M9 18h6"], ["path", "M10 21h4"], ["path", "M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1 2V16h5.2v-.2c0-.8.4-1.5 1-2A6 6 0 0 0 12 3Z"]],
+  progress: [["path", "M5 20V11"], ["path", "M12 20V4"], ["path", "M19 20v-6"]],
+  settings: [["circle", { cx: 12, cy: 12, r: 3 }], ["path", "M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"]],
+  send: [["path", "M12 19V5"], ["path", "m5 12 7-7 7 7"]],
+  stop: [["rect", { x: 6.5, y: 6.5, width: 11, height: 11, rx: 2 }]],
+  spinner: [["path", "M12 3a9 9 0 1 0 9 9"]],
+  copy: [["rect", { x: 8.5, y: 8.5, width: 11, height: 11, rx: 2 }], ["path", "M15.5 8.5V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7.5a2 2 0 0 0 2 2h2.5"]],
+  trash: [["path", "M4 7h16"], ["path", "M9 7V4.5h6V7"], ["path", "M6.5 7 7.4 20h9.2L17.5 7"]],
+  chevron: [["path", "m9 5 7 7-7 7"]],
+};
+// Copies a reply to the clipboard (where the page may use it); the tooltip says so for a moment.
+function copyButton(text) {
+  const b = iconBtn("copy", t("Copy this reply"), async () => {
+    try { await navigator.clipboard.writeText(text); b.title = t("Copied."); setTimeout(() => { b.title = t("Copy this reply"); }, 1500); } catch (_) { /* no clipboard here */ }
+  }, { class: "link icon-btn copy-btn" });
+  return b;
+}
+function icon(name, cls) {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("class", "icon" + (cls ? " " + cls : ""));
+  for (const [k, v] of Object.entries({ viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "1.7", "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true", focusable: "false" })) svg.setAttribute(k, v);
+  for (const [tag, spec] of ICONS[name] || []) {
+    const n = document.createElementNS(SVG_NS, tag);
+    if (typeof spec === "string") n.setAttribute("d", spec); else for (const [k, v] of Object.entries(spec)) n.setAttribute(k, v);
+    svg.append(n);
+  }
+  return svg;
+}
+// A button that shows an icon and, for screen readers and the tooltip, says what it does in words.
+function iconBtn(name, label, onclick, extra) {
+  return el("button", Object.assign({ class: "link icon-btn", type: "button", title: label, onclick }, extra || {}), icon(name), el("span", { class: "sr" }, label));
+}
+// The back button at the left of the top bar of a screen opened from another one.
+const backButton = (label, go) => el("button", { class: "link btn-sm", type: "button", "data-back": "1", onclick: go || back }, icon("back"), label);
+
 // A shell that cannot serve /api itself (the phone app: the engine is a separate process on the loopback address) sets window.socratesShell
 // = { ready: Promise, base, token, reconnect?, saveFile? } before this script runs. The desktop window does not: it serves /api on the page's own origin.
 function shellInfo() { return typeof window !== "undefined" && window.socratesShell ? window.socratesShell : null; }
 
-async function api(method, path, body) {
+async function api(method, path, body, signal) {
   const sh = shellInfo();
   if (sh) {
     try { await sh.ready; } catch (_) { return { status: 0, data: { error: t("The engine does not answer.") } }; }
@@ -30,12 +71,13 @@ async function api(method, path, body) {
     const headers = body ? { "Content-Type": "application/json" } : {};
     let url = path;
     if (sh) { url = sh.base + path; headers["X-Socrates-Token"] = sh.token; }
-    return fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
+    return fetch(url, { method, headers, signal, body: body ? JSON.stringify(body) : undefined });
   };
   let res;
   try {
     res = await send();
   } catch (_) {
+    if (signal && signal.aborted) return { status: 0, data: { aborted: true } }; // the person pressed Stop
     // The phone stops the engine when the app has been away a while; it holds a new address and token once started again. Ask for them
     // and try once more before giving up.
     if (!(sh && sh.reconnect)) return { status: 0, data: { error: t("The engine does not answer.") } };
@@ -196,7 +238,8 @@ function unwind() { nav.stack = []; }
 // The mark, small, at the left of every header (a decoration: it has no name for a screen reader).
 const headerLogo = () => el("img", { class: "hlogo", src: "mark.png", alt: "" });
 function screen(title, body, actions) {
-  return [el("header", {}, headerLogo(), el("h1", {}, title), actions || null), el("main", {}, body)];
+  const left = actions && actions.getAttribute && actions.getAttribute("data-back") ? actions : null; // a back button comes first, as in Moly
+  return [el("header", {}, left, headerLogo(), el("h1", {}, title), left ? null : actions || null), el("main", {}, body)];
 }
 function errMsg(d) { return t((d && d.error) || "That did not work."); }
 function errorLine(text) { return el("p", { class: "error", role: "alert" }, text || ""); }
@@ -205,7 +248,7 @@ function errorLine(text) { return el("p", { class: "error", role: "alert" }, tex
 
 // "auto" follows the device; "light" and "dark" are the person's own choice. The choice is kept by the engine with the profile, and a copy
 // is kept in the page so that the screens before the login (the profiles, the passphrase) already have it.
-const THEMES = [["auto", "Automatic (follows the device)"], ["light", "Light"], ["dark", "Dark"]];
+const THEMES = [["auto", "Automatic"], ["light", "Light"], ["dark", "Dark"]];
 function applyTheme(v) {
   const root = document.documentElement;
   if (v === "light" || v === "dark") root.dataset.theme = v; else delete root.dataset.theme;
@@ -229,12 +272,17 @@ async function loadTheme() {
 }
 function themePicker() {
   const now = document.documentElement.dataset.theme || "auto";
-  const sel = el("select", { "aria-label": t("Theme") }, ...THEMES.map(([c, n]) => el("option", { value: c, selected: c === now }, t(n))));
-  sel.addEventListener("change", async () => {
-    applyTheme(sel.value);
-    await api("PUT", "/api/settings/theme", { theme: sel.value });
-  });
-  return sel;
+  const group = el("div", { class: "segmented", role: "radiogroup", "aria-label": t("Theme") });
+  for (const [c, n] of THEMES) {
+    const b = el("button", { type: "button", role: "radio", "aria-checked": String(c === now), class: c === now ? "active" : "" }, t(n));
+    b.addEventListener("click", async () => {
+      applyTheme(c);
+      for (const x of group.children) { x.classList.toggle("active", x === b); x.setAttribute("aria-checked", String(x === b)); }
+      await api("PUT", "/api/settings/theme", { theme: c });
+    });
+    group.append(b);
+  }
+  return group;
 }
 
 // ---- profiles (the desktop app: several people on one computer)
@@ -593,7 +641,7 @@ async function home() {
         el("h2", {}, k.title || t("New conversation")), el("div", { class: "muted" }, who)));
     }
   }
-  mount(...screen("Socrates", body, el("span", { class: "row" }, S.profiles ? el("button", { class: "link", onclick: logOut }, t("Log out")) : null, el("button", { class: "link", onclick: () => show(progressScreen) }, t("Progress")), el("button", { class: "link", onclick: () => show(settings) }, t("Settings")))));
+  mount(...screen("Socrates", body, el("span", { class: "header-actions" }, S.profiles ? iconBtn("logout", t("Log out"), logOut) : null, iconBtn("progress", t("Progress"), () => show(progressScreen)), iconBtn("settings", t("Settings"), () => show(settings)))));
 }
 
 // ---- progress: how far the person has come with every philosopher, unlocked or not
@@ -620,7 +668,7 @@ async function progressScreen() {
     }
     body.append(card);
   }
-  mount(...screen(t("Progress"), body, el("button", { class: "link", onclick: back }, t("Done"))));
+  mount(...screen(t("Progress"), body, backButton(t("Back"))));
 }
 
 async function startWith(p) {
@@ -667,7 +715,7 @@ const REASONS = { harmful: "It was harmful", hateful: "It was hateful or insulti
   };
   const add = (m) => {
     if (m.role === "philosopher" && m.id) {
-      const bubble = el("div", { class: "msg philosopher" }, m.text, " ", el("button", { class: "link small", type: "button", "aria-label": t("Report this reply"), onclick: () => { if (!bubble.nextSibling || !bubble.nextSibling.classList || !bubble.nextSibling.classList.contains("help")) report(m, bubble); } }, t("Report")));
+      const bubble = el("div", { class: "msg philosopher" }, m.text, " ", copyButton(m.text), el("button", { class: "link small", type: "button", "aria-label": t("Report this reply"), onclick: () => { if (!bubble.nextSibling || !bubble.nextSibling.classList || !bubble.nextSibling.classList.contains("help")) report(m, bubble); } }, t("Report")));
       list.append(bubble);
       return;
     }
@@ -778,22 +826,27 @@ const REASONS = { harmful: "It was harmful", hateful: "It was hateful or insulti
   };
   helpBtn.addEventListener("click", showSuggestions);
   input.addEventListener("input", () => { if (!input.value.trim()) fromSuggestion = false; });
-  const send = el("button", { class: "primary", type: "submit" }, t("Send"));
+  const send = el("button", { class: "primary send", type: "submit", title: t("Send") });
+  const sendIcon = (waiting) => send.replaceChildren(icon(waiting ? "spinner" : "send", waiting ? "spin" : ""), el("span", { class: "sr" }, t("Send")));
+  sendIcon(false);
+  let ctl = null; // lets Stop cancel the request: the engine then keeps nothing of the turn
+  const stop = iconBtn("stop", t("Stop"), () => { if (ctl) ctl.abort(); }, { hidden: true });
   const err = errorLine();
   let busy = false;
   const submit = async (ev) => {
     ev.preventDefault();
     const text = input.value.trim();
     if (!text || busy) return;
-    busy = true; send.disabled = true; err.textContent = "";
+    busy = true; send.disabled = true; err.textContent = ""; stop.hidden = false; sendIcon(true); ctl = new AbortController();
     const mine = el("div", { class: "msg user" }, text);
-    const typing = el("div", { class: "msg philosopher typing" }, t("{name} is thinking…", { name: who.name }));
+    const typing = el("div", { class: "msg philosopher typing" }, el("i"), el("i"), el("i"), el("span", { class: "sr" }, t("{name} is thinking…", { name: who.name })));
     list.append(mine, typing); input.value = ""; main.scrollTop = main.scrollHeight;
     const flag = fromSuggestion; fromSuggestion = false; helpBox.hidden = true;
-    const res = await api("POST", "/api/conversations/" + encodeURIComponent(id) + "/messages", flag ? { text, suggested: true } : { text });
+    const res = await api("POST", "/api/conversations/" + encodeURIComponent(id) + "/messages", flag ? { text, suggested: true } : { text }, ctl.signal);
     typing.remove();
-    busy = false; send.disabled = false;
+    busy = false; send.disabled = false; stop.hidden = true; sendIcon(false); ctl = null;
     const d = res.data;
+    if (d.aborted) { mine.remove(); input.value = text; fromSuggestion = flag; refreshHelp(); input.focus(); return; } // stopped: nothing was kept, the words are back in the box
     if (res.status === 200 && d.outcome === "ended") { mine.remove(); return ended(d.text); }
     if (res.status === 200) {
       // A refused message is not kept, so the page does not keep it either; the fixed text stands in its place.
@@ -813,10 +866,9 @@ const REASONS = { harmful: "It was harmful", hateful: "It was hateful or insulti
     refreshHelp(); main.scrollTop = main.scrollHeight; input.focus();
   };
   input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) submit(e); });
-  const form = el("form", { class: "composer", onsubmit: submit }, input, send);
-  mount(el("header", {}, el("button", { class: "link", onclick: back }, t("← Back")), headerLogo(), el("h1", {}, who.name),
-    el("button", { class: "link", onclick: () => show(() => memory(who)) }, t("Memory")),
-    el("button", { class: "link", onclick: showDelete }, t("Delete"))),
+  const form = el("form", { class: "composer", onsubmit: submit }, input, stop, send);
+  mount(el("header", {}, iconBtn("back", t("Back"), back), headerLogo(), el("h1", {}, who.name),
+    el("span", { class: "header-actions" }, iconBtn("insight", t("Memory"), () => show(() => memory(who))), iconBtn("trash", t("Delete"), showDelete))),
     progressLine, el("div", { class: "chatwrap" }, el("div", { class: "watermark", "aria-hidden": "true" }), main), err, helpBox, challengeBar, deleteBox, el("div", { class: "helpbar" }, helpBtn, challengeBtn), form);
   refreshHelp(); main.scrollTop = main.scrollHeight; input.focus();
 }
@@ -848,7 +900,7 @@ async function memory(who) {
     if (d.status === 204) return memory(who);
     err.textContent = errMsg(d.data);
   }));
-  mount(...screen(t("What {name} remembers", { name: who.name }), body, el("button", { class: "link", onclick: back }, t("Back"))));
+  mount(...screen(t("What {name} remembers", { name: who.name }), body, backButton(t("Back"))));
 }
 
 function ended(text) {
@@ -932,7 +984,7 @@ function manualScreen() {
     [t("Something else, or it keeps happening"), t("Problems, questions and reports: {address} (Hermes Software).", { address: CONTACT }) + " " + t("Please leave out your conversations and any key.")],
   ];
   sec(t("Something is wrong"), false, el("dl", { class: "faq" }, ...faq.flatMap(([q, a]) => [el("dt", {}, q), el("dd", {}, a)])));
-  mount(...screen(t("User manual"), body, el("button", { class: "link", onclick: back }, t("Back"))));
+  mount(...screen(t("User manual"), body, backButton(t("Settings"))));
 }
 
 // About: what it is, who makes it, how to reach us, and under what terms.
@@ -962,7 +1014,7 @@ async function aboutScreen() {
     P(t("Socrates is free. If it helps you, please sponsor its development, or tell a friend.")),
     el("div", { class: "row" }, el("button", { class: "primary small-btn", onclick: () => openCardLink("https://github.com/sponsors/Nireus79", err) }, t("Sponsor")), el("button", { class: "small-btn", onclick: () => openCardLink(REPO, err) }, "GitHub")));
   card(t("Licence"), P(t("Socrates is free and open source under the MIT licence: you may use, copy and change it as long as the licence notice stays with it. It comes without warranty.")));
-  mount(...screen(t("About Socrates"), body, el("button", { class: "link", onclick: back }, t("Back"))));
+  mount(...screen(t("About Socrates"), body, backButton(t("Settings"))));
 }
 
 // "Report a problem" (the phone app, as in Moly): the report is built on the phone and shown in full; it leaves the phone only when the
@@ -996,16 +1048,17 @@ function reportCard() {
 async function settings() {
   const err = errorLine();
   const body = el("div", { class: "stack" });
+  const cards = {};
   const p = await api("GET", "/api/settings/llm");
-  body.append(el("div", { class: "card stack" }, el("h2", {}, t("Language")), languagePicker(settings)));
-  body.append(el("div", { class: "card stack" }, el("h2", {}, t("Theme")), themePicker()));
-  if (S.profiles) body.append(el("div", { class: "card stack" }, el("h2", {}, t("Profile")),
+  cards.language = el("div", { class: "card stack" }, el("h2", {}, t("Language")), languagePicker(settings));
+  cards.theme = el("div", { class: "card stack" }, el("h2", {}, t("Appearance")), el("p", { class: "muted" }, t("Socrates follows your device by default.")), themePicker());
+  if (S.profiles) cards.profile = (el("div", { class: "card stack" }, el("h2", {}, t("Profile")),
     el("p", { class: "muted" }, S.profile && !S.profile.legacy ? t("Signed in as {name}.", { name: S.profile.name }) : t("Signed in to the existing data.")),
     el("button", { onclick: logOut }, t("Log out"))));
-  body.append(el("div", { class: "card stack" }, el("h2", {}, t("AI provider")),
+  cards.provider = (el("div", { class: "card stack" }, el("h2", {}, t("AI provider")),
     el("p", { class: "muted" }, p.data.provider ? t("{provider}, models {fast} and {reply}", { provider: p.data.provider === "claude" ? "Claude (Anthropic)" : p.data.provider === "openai" ? "OpenAI" : p.data.provider === "ollama" ? t("A model on this computer") : p.data.provider, fast: p.data.fastModel, reply: p.data.replyModel }) : t("Not set up.")),
     el("button", { onclick: () => show(() => providerScreen(false, back)) }, t("Change provider or key"))));
-  body.append(el("div", { class: "card stack" }, el("h2", {}, t("Your data")),
+  cards.data = (el("div", { class: "card stack" }, el("h2", {}, t("Your data")),
     el("p", { class: "muted" }, t("Conversations are stored encrypted on this device only. An export holds your conversations and never your key.")),
     el("div", { class: "row" },
       el("button", { onclick: exportData }, t("Export conversations")),
@@ -1018,7 +1071,7 @@ async function settings() {
     err.textContent = r.status === 200 ? "" : (errMsg(r.data));
     if (r.status === 200) home();
   } });
-  body.append(importInput);
+  cards.import = importInput;
   const mem = await api("GET", "/api/settings/memory");
   const box = el("input", { type: "checkbox", id: "memory-on", class: "check" });
   box.checked = mem.data.enabled !== false;
@@ -1026,23 +1079,32 @@ async function settings() {
     const r = await api("PUT", "/api/settings/memory", { enabled: box.checked });
     if (r.status !== 200) { box.checked = !box.checked; err.textContent = errMsg(r.data); }
   });
-  body.append(el("div", { class: "card stack" }, el("h2", {}, t("Memory")),
+  cards.memory = (el("div", { class: "card stack" }, el("h2", {}, t("Memory")),
     el("div", { class: "row" }, box, el("label", { for: "memory-on", class: "inline" }, t("The philosophers remember what I tell them"))),
     el("p", { class: "muted" }, t("Each keeps short notes with your own words, only for himself, stored encrypted on this device. Turning this off stops new notes and stops him using the old ones; it does not delete them. You can see and delete them from the Memory button inside a conversation."))));
   const st = await api("GET", "/api/status");
-  const row = (title, sub, go) => el("button", { class: "linkrow", onclick: () => show(go) }, el("span", {}, el("strong", {}, title), el("small", {}, sub)), el("span", { "aria-hidden": "true" }, "›"));
-  const report = reportCard();
-  if (report) body.append(report);
-  body.append(el("div", { class: "card stack" }, el("h2", {}, t("About and help")),
+  const row = (title, sub, go) => el("button", { class: "linkrow", onclick: () => show(go) }, el("span", {}, el("strong", {}, title), el("small", {}, sub)), icon("chevron"));
+  cards.report = reportCard();
+  cards.help = (el("div", { class: "card stack" }, el("h2", {}, t("About and help")),
     row(t("About Socrates"), t("What it is, who makes it, how to reach us") + (st.data.version ? " · " + t("Version {v}.", { v: st.data.version }) : ""), aboutScreen),
     row(t("User manual"), t("How to use Socrates, step by step, and what to do when something is wrong"), manualScreen)));
-  body.append(el("div", { class: "card stack" }, el("h2", {}, t("Delete everything")),
+  cards.delete = (el("div", { class: "card stack" }, el("h2", {}, t("Delete everything")),
     el("p", { class: "muted" }, t("Removes every conversation, your provider key and your settings from this device. It cannot be undone.")),
     confirmButton(t("Delete everything"), "danger", t("Click again to delete everything"), async () => {
       const r = await api("DELETE", "/api/profile", { confirm: "delete" });
       if (r.status === 204) boot(); else err.textContent = errMsg(r.data);
     })));
-  mount(...screen(t("Settings"), body, el("button", { class: "link", onclick: back }, t("Done"))));
+  if (S.profiles) {
+    // The computer app: its version and where to look for a newer one (nothing is looked up by itself), and how to remove it.
+    cards.app = el("div", { class: "card stack" }, el("h2", {}, t("Socrates app")),
+      el("p", { class: "muted" }, (st.data.version ? t("Version {v}.", { v: st.data.version }) + " " : "") + t("Socrates does not look for updates by itself and sends nothing about you. To see whether a newer version exists, open the releases page.")),
+      el("div", { class: "row" }, el("button", { onclick: () => openCardLink(REPO + "/releases", err) }, t("Open the releases page"))));
+    cards.remove = el("div", { class: "card stack" }, el("h2", {}, t("Remove Socrates")),
+      el("ol", { class: "muted" }, ...[t("Close Socrates and log out of every profile."), t("Delete the folder you unpacked Socrates into."),
+        t("Your conversations and profiles stay in the .socrates folder of your user folder. Export what you want to keep first, then delete that folder too.")].map((x) => el("li", {}, x))));
+  }
+  for (const k of ["provider", "profile", "app", "theme", "language", "memory", "data", "import", "report", "remove", "delete", "help"]) if (cards[k]) body.append(cards[k]);
+  mount(...screen(t("Settings"), body, backButton(t("Back"))));
 }
 
 async function exportData() {

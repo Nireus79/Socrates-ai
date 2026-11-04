@@ -672,7 +672,7 @@ test("the on-screen Back and Done buttons use the same steps", async () => {
   p.app.start(p.root); await settle();
   for (let i = 0; i < 3; i++) {
     click([...p.root.querySelectorAll("button")].find((b) => b.textContent === "Settings")); await settle();
-    click([...p.root.querySelectorAll("button")].find((b) => b.textContent === "Done")); await settle();
+    click([...p.root.querySelectorAll("button")].find((b) => b.textContent === "Back")); await settle();
     assert.match(text(p.root), /Talk with/);
   }
   assert.equal(pressBack(p), false, "the steps did not pile up: after leaving Settings three times we are at the first screen");
@@ -963,11 +963,12 @@ test("the theme is the profile's own choice: the saved one is applied, a new one
   p.app.start(p.root); await settle(10);
   assert.equal(p.dom.window.document.documentElement.dataset.theme, "dark");
   click(button(p.root, "Settings")); await settle(10);
-  const sel = [...p.root.querySelectorAll("select")].find((s) => [...s.options].some((o) => o.value === "light"));
-  assert.equal(sel.value, "dark", "the picker shows the saved choice");
-  sel.value = "light"; sel.dispatchEvent(new p.dom.window.Event("change", { bubbles: true })); await settle();
+  const seg = (name) => [...p.root.querySelectorAll(".segmented button")].find((b) => b.textContent === name);
+  assert.equal(seg("Dark").getAttribute("aria-checked"), "true", "the picker shows the saved choice");
+  click(seg("Light")); await settle();
   assert.equal(p.dom.window.document.documentElement.dataset.theme, "light");
-  sel.value = "auto"; sel.dispatchEvent(new p.dom.window.Event("change", { bubbles: true })); await settle();
+  assert.equal(seg("Light").getAttribute("aria-checked"), "true");
+  click(seg("Automatic")); await settle();
   assert.equal(p.dom.window.document.documentElement.dataset.theme, undefined, "automatic leaves the device to decide");
   assert.deepStrictEqual(saved, ["light", "auto"]);
 });
@@ -988,8 +989,7 @@ test("in the desktop window the page follows the system's own dark or light, and
   assert.equal(root.dataset.device, "dark", "the system said dark");
   assert.equal(root.dataset.theme, undefined, "the person's choice is still automatic");
   click(button(p.root, "Settings")); await settle(10);
-  const sel = [...p.root.querySelectorAll("select")].find((s) => [...s.options].some((o) => o.value === "light"));
-  assert.equal(sel.value, "auto", "the picker must not show the system's answer as if it were a choice");
+  assert.equal([...p.root.querySelectorAll(".segmented button")].find((b) => b.textContent === "Automatic").getAttribute("aria-checked"), "true", "the picker must not show the system's answer as if it were a choice");
   answer = "light"; p.dom.window.dispatchEvent(new p.dom.window.Event("focus")); await settle();
   assert.equal(root.dataset.device, "light", "coming back to the window re-reads the system");
   answer = ""; p.dom.window.dispatchEvent(new p.dom.window.Event("focus")); await settle();
@@ -1061,8 +1061,8 @@ test("Help explains the app, how to talk, each philosopher and tips, from Settin
   for (const n of ["Socrates", "Diogenes", "Plato", "Aristotle"]) assert.ok(heads.includes(n), n + " has a card");
   assert.ok(!/challenge|\blevels?\b|\bscores?\b/i.test(text), "no sport words for philosophers");
   assert.ok(!p.root.querySelector("[style]"), "no inline styles");
-  click(btn("Back")); await settle();
-  assert.ok(btn("Done"), "back to Settings");
+  click(btn("Settings")); await settle();
+  assert.ok(btn("Back"), "back to Settings");
 });
 
 test("Report a problem appears only where the phone can build a report, shows all of it, and sends only on Send", async () => {
@@ -1073,7 +1073,7 @@ test("Report a problem appears only where the phone can build a report, shows al
   assert.ok(!btn("Prepare report"), "no report card without a phone bridge");
   const sent = [];
   global.window.socratesShell = { ready: Promise.resolve(), base: "", token: "t", buildReport: async () => "Socrates report\nEngine lines: none", shareReport: async (x) => { sent.push(x); } };
-  click(btn("Done")); await settle();
+  click(btn("Back")); await settle();
   click(btn("Settings")); await settle();
   click(btn("Prepare report")); await settle();
   const areas = p.root.querySelectorAll("textarea.report-text");
@@ -1085,6 +1085,64 @@ test("Report a problem appears only where the phone can build a report, shows al
   assert.equal(sent.length, 1);
   assert.match(sent[0], /^the reply was odd\n\n---\nSocrates report/);
   delete global.window.socratesShell;
+});
+
+test("Settings follows Moly's order; the computer app also has its own section and the removal steps, the phone and the browser do not", async () => {
+  const heads = (root) => [...root.querySelectorAll("main .card > h2")].map((h) => h.textContent);
+  const plain = page(ready({ "GET /api/settings/llm": [200, { provider: "claude", fastModel: "a", replyModel: "b" }] }));
+  plain.app.start(plain.root); await settle();
+  click(button(plain.root, "Settings")); await settle(10);
+  const h = heads(plain.root);
+  assert.deepStrictEqual(h.slice(0, 2), ["AI provider", "Appearance"]);
+  assert.equal(h[h.length - 1], "About and help");
+  assert.equal(h[h.length - 2], "Delete everything");
+  assert.ok(!h.includes("Remove Socrates") && !h.includes("Socrates app"), "no computer-only sections here");
+  assert.ok(plain.root.querySelectorAll(".linkrow svg.icon").length === 2, "link rows end in a chevron");
+  const shell = { profiles: [{ id: "p1", name: "Anna" }], active: "p1" };
+  const desk = withProfiles(shell, { "GET /api/status": [200, { status: "ok", version: "0.1.0" }], "GET /api/settings/llm": [200, { provider: "claude", fastModel: "a", replyModel: "b" }] });
+  desk.app.start(desk.root); await settle(10);
+  click(button(desk.root, "Settings")); await settle(10);
+  const d = heads(desk.root);
+  assert.ok(d.indexOf("Socrates app") > d.indexOf("Profile") && d.indexOf("Socrates app") < d.indexOf("Appearance"));
+  assert.ok(d.indexOf("Remove Socrates") > d.indexOf("Your data") && d.indexOf("Remove Socrates") < d.indexOf("Delete everything"));
+  assert.match(text(desk.root), /Version 0\.1\.0\./);
+});
+
+test("the header actions are icons with a name for screen readers and a tooltip, and the back button comes first", async () => {
+  const p = page(ready());
+  p.app.start(p.root); await settle();
+  const hb = [...p.root.querySelectorAll("header .icon-btn")];
+  assert.deepStrictEqual(hb.map((b) => b.textContent), ["Progress", "Settings"]);
+  for (const b of hb) { assert.ok(b.querySelector("svg.icon"), "an icon"); assert.equal(b.title, b.textContent); }
+  click(button(p.root, "Settings")); await settle(10);
+  const first = p.root.querySelector("header").firstElementChild;
+  assert.equal(first.textContent, "Back");
+  assert.ok(first.querySelector("svg.icon"));
+  assert.ok(!p.root.querySelector("[style]"));
+});
+
+test("a reply has a copy button; Stop cancels the waiting request, and the words come back to the box with nothing kept on the page", async () => {
+  const p = page(ready({ "GET /api/conversations/c1": [200, { conversation: { id: "c1", philosopherId: "socrates", title: "" }, messages: [{ id: "m1", role: "philosopher", text: "What is courage?" }] }] }));
+  const base = global.fetch; let signal = null;
+  global.fetch = (url, init = {}) => (init.method === "POST" && url.endsWith("/messages")
+    ? new Promise((_, reject) => { signal = init.signal; init.signal.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" }))); })
+    : base(url, init));
+  p.app.start(p.root); await settle();
+  click(p.root.querySelector(".card.click")); await settle();
+  assert.ok(button(p.root, "Copy this reply"), "a copy button on the reply");
+  const stop = button(p.root, "Stop");
+  assert.ok(stop.hidden, "Stop is only there while a reply is awaited");
+  const ta = p.root.querySelector("textarea"), form = p.root.querySelector("form");
+  ta.value = "Courage is not fear."; form.dispatchEvent(new p.dom.window.Event("submit", { cancelable: true })); await settle();
+  assert.ok(!stop.hidden);
+  assert.ok(p.root.querySelector(".msg.typing i"), "three dots while he thinks");
+  click(stop); await settle();
+  assert.ok(signal.aborted);
+  assert.equal(ta.value, "Courage is not fear.");
+  assert.ok(!p.root.querySelector(".msg.user"), "the stopped message is not shown as sent");
+  assert.ok(!p.root.querySelector(".msg.typing"));
+  assert.ok(stop.hidden);
+  assert.ok(!p.root.querySelector("p.error").textContent, "stopping is not an error");
 });
 
 test("the progress screen shows every philosopher, unlocked or not, with the questions thought through and the question in progress", async () => {
@@ -1108,7 +1166,7 @@ test("the progress screen shows every philosopher, unlocked or not, with the que
   assert.deepEqual(bars(cards[2]), [], "the last philosopher leads nowhere and has no open question");
   assert.match(cards[0].textContent, /Toward meeting Diogenes, Plato: 5 of 5/);
   assert.ok(!p.root.querySelector("[style]"), "the page's policy blocks inline styles");
-  click([...p.root.querySelectorAll("button.link")].find((b) => b.textContent === "Done")); await settle();
+  click([...p.root.querySelectorAll("button.link")].find((b) => b.textContent === "Back")); await settle();
   assert.ok(p.root.querySelector(".card.click"), "Done goes back to the philosophers");
 });
 
