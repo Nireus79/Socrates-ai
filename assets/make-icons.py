@@ -95,10 +95,13 @@ def original_icon(size):
 # Android launcher: legacy square and round icons, and the adaptive foreground (108 dp, the visible part is the middle 66 dp)
 res = ("mobile", "android", "app", "src", "main", "res")
 for name, legacy, adaptive in (("mdpi", 48, 108), ("hdpi", 72, 162), ("xhdpi", 96, 216), ("xxhdpi", 144, 324), ("xxxhdpi", 192, 432)):
-    base = head_on(legacy, 0.74, CREAM)
+    base = original_icon(legacy)
     save(rounded(base, 0.16), *res, "mipmap-" + name, "ic_launcher.png")
     save(circle(base), *res, "mipmap-" + name, "ic_launcher_round.png")
-    save(head_on(adaptive, 0.52, (0, 0, 0, 0)), *res, "mipmap-" + name, "ic_launcher_foreground.png")
+    fg = Image.new("RGBA", (adaptive, adaptive), CREAM)  # the cream is the adaptive background's colour, so the join does not show
+    inner = round(adaptive * 0.74)
+    fg.alpha_composite(original_icon(inner), ((adaptive - inner) // 2, (adaptive - inner) // 2))
+    save(fg, *res, "mipmap-" + name, "ic_launcher_foreground.png")
 with open(os.path.join(ROOT, *res, "values", "ic_launcher_background.xml"), "w") as f:
     f.write('<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_background">#E1DECF</color>\n</resources>\n')
 
