@@ -22,6 +22,9 @@ mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources" "$work/arm64" "$work/am
 make frontend
 
 ldflags="-X main.version=${version}"
+# what `wails build` passes on a Mac and a plain `go build` does not: the Apple framework the window needs (the link failed without it), and the oldest macOS
+export CGO_LDFLAGS="-framework UniformTypeIdentifiers -mmacosx-version-min=11.0"
+export CGO_CFLAGS="-mmacosx-version-min=11.0"
 for arch in arm64 amd64; do
   (cd ../engine && GOOS=darwin GOARCH=$arch CGO_ENABLED=0 go build -trimpath -ldflags "$ldflags" -o "$work/$arch/socrates-engine" ./cmd/socrates-engine)
   GOOS=darwin GOARCH=$arch CGO_ENABLED=1 go build -trimpath -tags production -o "$work/$arch/socrates-desktop" .
