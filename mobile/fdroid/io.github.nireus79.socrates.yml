@@ -1,4 +1,8 @@
 AntiFeatures:
+  Ads:
+    en-US: A small card at the bottom of the chat shows the project's own message,
+      a request to sponsor it. It is not third-party advertising, there is no ad network,
+      and it can be hidden.
   NonFreeNet:
     en-US: Sends your messages to the AI provider you choose (Claude or OpenAI) with
       your own key; those services are not free software.
