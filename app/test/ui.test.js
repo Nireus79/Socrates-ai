@@ -1299,4 +1299,5 @@ test("a chat with no question under way shows no stray text beside the count, an
   assert.equal(line.textContent.trim(), "Questions thought through: 0", "no 'null' or other leftovers after the count");
   assert.ok(!/null|undefined/.test(p.root.textContent), "no null or undefined anywhere on the screen");
   assert.match(fs.readFileSync(path.join(__dirname, "../style.css"), "utf8"), /\[hidden\]\s*\{\s*display:\s*none\s*!important/, "an icon button's display rule must not show a hidden Stop button");
+  assert.match(fs.readFileSync(path.join(__dirname, "../style.css"), "utf8"), /input\.check\s*\{[^}]*width:\s*auto/, "a checkbox must not take the full width of the generic input rule");
 });
