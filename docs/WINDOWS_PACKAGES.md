@@ -12,6 +12,7 @@ Three files for the beta.5 zip (`Nireus79.Socrates`): version, installer, defaul
 - Review: the pull request is scanned and installed by Microsoft's pipeline; an unsigned app may draw a SmartScreen or antivirus flag. Expect a few days.
 
 ## Scoop (`packaging/scoop/socrates.json`)
+Published 2026-11-04: https://github.com/Nireus79/scoop-socrates (the file lives in `bucket/socrates.json`; it was not installed through Scoop on a real Windows machine). Update it by hand per release.
 Not for the main bucket (it wants stable, popular apps). Own bucket: create a repository `scoop-socrates` with the file in `bucket/socrates.json`; users run
 `scoop bucket add socrates https://github.com/Nireus79/scoop-socrates` then `scoop install socrates`. Scoop starts the real file (not a link), so the engine is found. Update by hand per release (version, url, hash).
 

@@ -11,6 +11,7 @@ and [docs/PLAN.md](docs/PLAN.md) for the product.
 ## Get it
 - Website: [nireus79.github.io/Socrates-ai](https://nireus79.github.io/Socrates-ai/) (download page and privacy policy).
 - Windows, Linux and Android (APK): the [releases page](https://github.com/Nireus79/Socrates-ai/releases) or the [itch.io page](https://nireus79.itch.io/socrates).
+- Scoop (Windows): `scoop bucket add socrates https://github.com/Nireus79/scoop-socrates`, then `scoop install socrates`. Needs the WebView2 runtime (part of Windows 11).
 - Obtainium (Android, updates itself from the releases): [add Socrates](obtainium://add/https://github.com/Nireus79/Socrates-ai), or paste `https://github.com/Nireus79/Socrates-ai` into Obtainium's "Add app". Turn on "Include prereleases", because the beta releases are marked as pre-releases.
 - Android through F-Droid: submitted, waiting for review.
 
