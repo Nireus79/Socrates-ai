@@ -1,5 +1,7 @@
 # itch.io page: Socrates (free beta)
 
+Published 2026-11-04 at https://nireus79.itch.io/socrates (beta.5 files; status In development).
+
 Local draft, 2026-11-04, from the code, docs/PRIVACY.md and the release notes. itch.io's form changes: check every field against the page editor; CHECK marks my best reading, not verified. House voice: no sport or game words, no taglines about the philosophers. Do not publish before the Windows build has been run by someone (docs/HAND_CHECKS.md).
 
 ## Page settings
