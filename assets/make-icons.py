@@ -121,6 +121,16 @@ save(original_icon(512), "mobile", "store", "play-icon-512.png", rgb=True)
 save(original_icon(512), "fastlane", "metadata", "android", "en-US", "images", "icon.png", rgb=True)
 save(full_mark_on_cream((1024, 500)), "mobile", "store", "feature-graphic-1024x500.png", rgb=True)
 
+# itch.io cover: 630x500 is the recommended size (315x250 the smallest); made at twice that. The original logo, as for the store icons, on its own cream.
+def itch_cover(size):
+    w, h = size
+    c = Image.new("RGBA", size, CREAM)
+    side = h
+    c.alpha_composite(original_icon(side).convert("RGBA"), ((w - side) // 2, 0))
+    return c
+
+save(itch_cover((1260, 1000)), "mobile", "store", "itch-cover-1260x1000.png", rgb=True)
+
 # Desktop window and the screens (shared by the desktop window and the phone)
 save(original_icon(512), "desktop", "icon.png")
 save(original_icon(192), "app", "icon.png")
