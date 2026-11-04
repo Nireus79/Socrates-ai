@@ -29,6 +29,8 @@ Builds:
       - apt-get update
       - apt-get install -y -t forky golang-1.26-go nodejs npm
       - update-alternatives --auto java
+    gradle:
+      - yes
     prebuild:
       - (cd ../.. && npm ci)
       - (cd ../../../engine && GOTOOLCHAIN=local /usr/lib/go-1.26/bin/go mod download)
