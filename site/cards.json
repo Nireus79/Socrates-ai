@@ -2,15 +2,29 @@
   "version": 1,
   "entries": [
     {
-      "id": "about-socrates",
-      "kind": "socrates",
-      "title": "Socrates AI is made by Hermes Software",
+      "id": "created-by-hermes",
+      "kind": "sponsor",
+      "title": "Created by Hermes Software",
+      "text": "Free software, made by one person. If you would like it to go on, please sponsor.",
       "marks": ["hermes"],
-      "text": "A free beta, made by one person. If you would like it to go on, please sponsor.",
       "links": [
         { "text": "Sponsor", "url": "https://github.com/sponsors/Nireus79", "primary": true },
-        { "text": "GitHub", "url": "https://github.com/Nireus79/Socrates-ai" },
-        { "text": "Hermes Software", "url": "https://hermesoftware.wordpress.com/" }
+        { "text": "GitHub", "url": "https://github.com/Nireus79" },
+        { "text": "Hermes", "url": "https://hermesoftware.wordpress.com/" }
+      ],
+      "active": true
+    }
+  ],
+  "cards": [
+    {
+      "id": "created-by-hermes",
+      "layout": "credit-row",
+      "credit": "Created by",
+      "logo": { "mark": "hermes" },
+      "buttons": [
+        { "text": "Sponsor", "url": "https://github.com/sponsors/Nireus79", "primary": true },
+        { "text": "GitHub", "url": "https://github.com/Nireus79" },
+        { "text": "Hermes", "url": "https://hermesoftware.wordpress.com/" }
       ],
       "active": true
     }
