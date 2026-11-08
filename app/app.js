@@ -151,16 +151,15 @@ function confirmButton(label, cls, armed, action) {
 // A new screen takes the focus on its heading, so that a keyboard or screen-reader user starts at the top of what is new.
 // ---- the card at the foot of every screen
 //
-// A small card with a message from the project or from a sponsor, as Moly's: labelled "From the project" when it is the project's own and "Sponsored" only for a message from someone else, static (text and
+// A small card, the same in Socrates and Moly: always labelled "Sponsored" (decided 2026-11-08: the label is mandatory on every card). What it shows comes from the card file (docs/CARD_FORMAT.md): a layout, a credit line or a logo, link buttons and perhaps a message; static (text, a PNG and
 // links only), one click hides it until the app is opened again, and it has its own area below everything, never between a philosopher's
 // replies. The messages built in here show until the engine brings the project's data file (site/cards.json, fetched by the engine at most
 // once a day with nothing about the person), which lets them change without a release. The links open in the system's browser.
 const CARD_KEY = "socrates_card_hidden";
 const BUILTIN_CARDS = [{
-  id: "about-socrates", kind: "socrates", active: true, builtin: true, marks: ["hermes"],
-  title: "Socrates AI is made by Hermes Software",
-  text: "A free beta, made by one person. If you would like it to go on, please sponsor.",
-  links: [{ text: "Sponsor", url: "https://github.com/sponsors/Nireus79", primary: true }, { text: "GitHub", url: "https://github.com/Nireus79/Socrates-ai" }, { text: "Hermes Software", url: "https://hermesoftware.wordpress.com/" }],
+  id: "created-by-hermes", layout: "credit-row", active: true, builtin: true,
+  credit: "Created by", logo: { mark: "hermes" },
+  buttons: [{ text: "Sponsor", url: "https://github.com/sponsors/Nireus79", primary: true }, { text: "GitHub", url: "https://github.com/Nireus79" }, { text: "Hermes", url: "https://hermesoftware.wordpress.com/" }],
 }];
 const cardHidden = () => { if (S.cardGone) return true; try { return window.sessionStorage.getItem(CARD_KEY) === "1"; } catch (_) { return false; } };
 const hideCard = () => { S.cardGone = true; try { window.sessionStorage.setItem(CARD_KEY, "1"); } catch (_) { /* hidden until the next screen is drawn */ } };
@@ -182,20 +181,48 @@ async function openCardLink(url, err) {
     err.textContent = t("The browser could not be opened. Go to {url} yourself.", { url });
   }
 }
+// A card from the file is data: a layout from a short fixed list, a credit line, a message, a logo (the built-in Hermes mark, or a small PNG
+// embedded in the file) and buttons. The engine has checked all of it; this checks the parts that reach the page once more. Whatever fails is
+// dropped. The label, the Hide button and how links open belong to the app, never to the file.
+const CARD_LAYOUTS = ["credit-row", "logo-center", "logo-text"];
+const PNG_URI = /^data:image\/png;base64,iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$/;
+function validCard(c) {
+  if (!c || typeof c !== "object" || !CARD_LAYOUTS.includes(c.layout) || typeof c.id !== "string") return null;
+  let logo = null;
+  if (c.logo) {
+    if (c.logo.mark === "hermes") logo = { mark: "hermes" };
+    else if (typeof c.logo.image === "string" && c.logo.image.length <= 36000 && PNG_URI.test(c.logo.image) && typeof c.logo.alt === "string" && c.logo.alt) logo = { image: c.logo.image, alt: c.logo.alt, tint: c.logo.tint === true };
+    else return null;
+  }
+  const text = typeof c.text === "string" ? c.text : "";
+  if (c.layout === "credit-row" && !c.credit) return null;
+  if (c.layout !== "credit-row" && !logo) return null;
+  if (c.layout === "logo-text" && !text) return null;
+  return { id: c.id, layout: c.layout, active: true, credit: c.layout === "credit-row" ? String(c.credit || "") : "", text: c.layout === "logo-center" ? "" : text, logo, buttons: (Array.isArray(c.buttons) ? c.buttons : []).filter((l) => l && typeof l.text === "string" && safeHttps(l.url)).slice(0, 4) };
+}
+// A card of the first format (title, text, links, marks), which older files still carry, drawn as a credit row.
+const cardFromEntry = (e) => ({ id: e.id, layout: "credit-row", active: true, credit: e.title, text: e.text || "", logo: (e.marks || []).includes("hermes") ? { mark: "hermes" } : null, buttons: e.links || [] });
+const logoNode = (logo) => !logo ? null : logo.mark === "hermes"
+  ? el("span", { class: "hermes", role: "img", "aria-label": "Hermes Software" })
+  : el("img", { class: "card-logo" + (logo.tint ? " tint" : ""), src: logo.image, alt: logo.alt });
 function cardNode() {
   if (cardHidden()) return null;
   const e = pickCard(S.cardFeed && S.cardFeed.length ? S.cardFeed : BUILTIN_CARDS);
   if (!e) return null;
   const say = (x) => (e.builtin ? t(x) : x); // the built-in words are translated; a message from the file is shown as written
   const err = errorLine();
-  const links = (e.links || []).filter((l) => safeHttps(l.url));
-  const label = t(e.kind === "socrates" ? "From the project" : "Sponsored"); // the project's own message is not an advertisement
-  const node = el("aside", { class: "card-area", "aria-label": label },
+  const buttons = (e.buttons || []).filter((l) => safeHttps(l.url));
+  const label = t("Sponsored"); // on every card, whoever it is from
+  const row = buttons.length ? el("div", { class: "row" }, ...buttons.map((l) => el("button", { type: "button", class: l.primary ? "primary small-btn" : "small-btn", onclick: () => openCardLink(l.url, err) }, say(l.text)))) : null;
+  const text = e.text ? el("p", { class: "card-text" }, say(e.text)) : null;
+  let body;
+  if (e.layout === "logo-center") body = el("div", { class: "card-body" }, logoNode(e.logo), row);
+  else if (e.layout === "logo-text") body = el("div", { class: "card-body" }, el("div", { class: "card-media" }, logoNode(e.logo), text), row);
+  else body = el("div", { class: "card-body" }, el("div", { class: "created" }, el("strong", { class: "card-title" }, say(e.credit)), logoNode(e.logo)), row);
+  const node = el("aside", { class: "card-area layout-" + e.layout, "aria-label": label },
     el("div", { class: "card-head" }, el("span", { class: "card-label" }, label),
       el("button", { class: "link", type: "button", "aria-label": t("Hide this card"), title: t("Hide this card until you open Socrates again"), onclick: () => { hideCard(); node.remove(); } }, t("Hide"))),
-    (e.marks || []).includes("hermes") ? el("span", { class: "hermes", role: "img", "aria-label": "Hermes Software" }) : null,
-    el("strong", { class: "card-title" }, say(e.title)), el("p", { class: "card-text" }, say(e.text)),
-    links.length ? el("div", { class: "row" }, ...links.map((l) => el("button", { type: "button", class: l.primary ? "primary small-btn" : "small-btn", onclick: () => openCardLink(l.url, err) }, say(l.text)))) : null, err);
+    body, e.layout === "credit-row" ? text : null, err);
   return node;
 }
 // The project's messages, once per session (the engine fetches the file at most once a day); nothing is asked while the card is hidden.
@@ -205,7 +232,8 @@ async function refreshCards() {
   try {
     const r = await api("GET", "/api/cards");
     if (r.status === 200) {
-      S.cardFeed = (r.data.entries || []).filter((e) => e && e.active);
+      const cards = (Array.isArray(r.data.cards) ? r.data.cards : []).map(validCard).filter(Boolean);
+      S.cardFeed = cards.length ? cards : (r.data.entries || []).filter((e) => e && e.active).map(cardFromEntry);
       const old = S.root.querySelector(".card-area");
       const fresh = cardNode();
       if (old && fresh) old.replaceWith(fresh);
@@ -974,7 +1002,7 @@ function manualScreen() {
     t("A safety check runs on every message and every reply, above every philosopher. If a reply is wrong or harmful, press Report next to it."),
     t("The app uses your own key from Claude or OpenAI, which you pay the provider for; Settings explains how to get one. Your key and your conversations stay encrypted on this device. The only thing the app fetches is the sponsor card, once a day, and it sends nothing about you."),
     t("Export conversations saves your conversations in one file, never your key. Import puts such a file back. Delete everything removes every conversation, your key and your settings from this device, and it cannot be undone."),
-    t("Settings has a Language choice and a Theme: Automatic, Light or Dark. The small card at the bottom is a message from the project, labelled From the project (a message from anyone else would be labelled Sponsored); Hide removes it until you open the app again.")));
+    t("Settings has a Language choice and a Theme: Automatic, Light or Dark. The small card at the bottom is labelled Sponsored; Hide removes it until you open the app again.")));
   const faq = [
     [t("The engine does not answer."), t("Close Socrates completely and open it again. Your message stays in the box.")],
     [t(PROVIDER_PROBLEMS.auth), t("Copy the key again from the provider's website and paste it in Settings, under AI provider. A key from Claude starts with sk-ant, one from OpenAI with sk-.")],

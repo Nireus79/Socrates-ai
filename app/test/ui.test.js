@@ -1250,7 +1250,12 @@ test("every screen but the login ends with a labelled card; its links open throu
   global.window.socratesShell = { ready: Promise.resolve(), base: "", token: "t", openSponsorLink: async (u) => { asked.push(u); } };
   p.app.start(p.root); await settle(10);
   const card = p.root.querySelector(".card-area");
-  assert.ok(card && /From the project/.test(card.textContent) && !/Sponsored/.test(card.textContent) && /Hermes Software/.test(card.textContent), "the project's own card says so and is not called an advertisement, with the built-in message");
+  assert.ok(card && card.querySelector(".card-label").textContent === "Sponsored", "every card, the project's own included, is labelled Sponsored");
+  assert.ok(card.querySelector(".created .card-title").textContent === "Created by" && card.querySelector(".created .hermes"), "the credit line is Created by, followed by the Hermes logo");
+  assert.equal(card.querySelector(".created").nextElementSibling.tagName, "DIV", "the buttons come after the credit line");
+  assert.equal(card.querySelector(".card-text"), null, "the built-in card has no message line");
+  assert.deepStrictEqual([...card.querySelectorAll(".row button")].map((b) => b.textContent), ["Sponsor", "GitHub", "Hermes"]);
+  assert.ok(!/From the project|Socrates AI/.test(card.textContent));
   click([...card.querySelectorAll("button")].find((b) => b.textContent === "Sponsor")); await settle();
   assert.deepStrictEqual(asked, ["https://github.com/sponsors/Nireus79"]);
   click([...card.querySelectorAll("button")].find((b) => b.textContent === "Hide")); await settle();
@@ -1286,7 +1291,7 @@ test("a hidden card asks the engine for nothing, and the chat has the card below
   q.app.start(q.root); await settle(10);
   click(q.root.querySelector(".card.click")); await settle(12);
   assert.ok(q.root.querySelector(".chatwrap .watermark"), "the mark is behind the chat");
-  assert.equal(q.root.lastElementChild.className, "card-area", "the card is below the writing box");
+  assert.ok(q.root.lastElementChild.classList.contains("card-area"), "the card is below the writing box");
   assert.equal(q.root.lastElementChild.previousElementSibling.tagName, "FORM");
 });
 
@@ -1301,4 +1306,50 @@ test("a chat with no question under way shows no stray text beside the count, an
   assert.ok(!/null|undefined/.test(p.root.textContent), "no null or undefined anywhere on the screen");
   assert.match(fs.readFileSync(path.join(__dirname, "../style.css"), "utf8"), /\[hidden\]\s*\{\s*display:\s*none\s*!important/, "an icon button's display rule must not show a hidden Stop button");
   assert.match(fs.readFileSync(path.join(__dirname, "../style.css"), "utf8"), /input\.check\s*\{[^}]*width:\s*auto/, "a checkbox must not take the full width of the generic input rule");
+});
+
+// ---- the cards of the card file (docs/CARD_FORMAT.md)
+const PNG1 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+const btn = [{ text: "Visit", url: "https://example.org/x", primary: true }, { text: "Bad", url: "http://example.org/" }, { text: "Worse", url: "javascript:alert(1)" }];
+async function cardPage(cards, entries = []) {
+  const p = page(ready({ "GET /api/conversations": [200, { conversations: [] }], "GET /api/cards": [200, { entries, cards }] }));
+  p.app.start(p.root); await settle(12);
+  return { p, card: p.root.querySelector(".card-area") };
+}
+
+test("a card from the file draws each layout, always labelled Sponsored, with only https buttons", async () => {
+  let { card } = await cardPage([{ id: "c", layout: "logo-center", active: true, logo: { image: PNG1, alt: "Acme", tint: true }, text: "ignored", credit: "ignored", buttons: btn }]);
+  assert.ok(card.classList.contains("layout-logo-center"));
+  assert.equal(card.querySelector(".card-label").textContent, "Sponsored");
+  const img = card.querySelector("img.card-logo.tint");
+  assert.ok(img && img.getAttribute("src") === PNG1 && img.getAttribute("alt") === "Acme", "the embedded PNG, with its alt text");
+  assert.equal(card.querySelector(".card-text"), null, "a centred logo is a logo and buttons only");
+  assert.equal(card.querySelector(".card-title"), null);
+  assert.deepStrictEqual([...card.querySelectorAll(".row button")].map((b) => b.textContent), ["Visit"], "only the https button");
+  assert.ok(card.querySelector(".card-head button"), "Hide is always there");
+
+  ({ card } = await cardPage([{ id: "t", layout: "logo-text", active: true, logo: { image: PNG1, alt: "Acme" }, text: "Hello <b>there</b>", buttons: btn }]));
+  assert.ok(card.classList.contains("layout-logo-text") && card.querySelector(".card-media img.card-logo") && card.querySelector(".card-media .card-text").textContent === "Hello <b>there</b>", "logo beside the message, as text");
+  assert.equal(card.querySelector("b"), null);
+
+  ({ card } = await cardPage([{ id: "r", layout: "credit-row", active: true, credit: "Created by", logo: { mark: "hermes" }, buttons: btn }]));
+  assert.ok(card.classList.contains("layout-credit-row") && card.querySelector(".created .card-title").textContent === "Created by" && card.querySelector(".created .hermes"));
+});
+
+test("a card that fails the page's own checks is dropped, and the first format still shows when there is no card", async () => {
+  const bad = [
+    { id: "a", layout: "banner", active: true, credit: "x" },
+    { id: "b", layout: "logo-center", active: true, logo: { image: "http://example.org/x.png", alt: "x" } },
+    { id: "c", layout: "logo-center", active: true, logo: { image: "data:image/svg+xml;base64,PHN2Zy8+", alt: "x" } },
+    { id: "d", layout: "logo-center", active: true, logo: { image: PNG1 } },
+    { id: "e", layout: "logo-text", active: true, logo: { mark: "hermes" } },
+    { id: "f", layout: "credit-row", active: true },
+    { id: "g", layout: "logo-center", active: true, logo: { mark: "acme" } },
+  ];
+  const { card } = await cardPage(bad, [{ id: "old", kind: "sponsor", active: true, title: "From the old file", text: "Old message", links: [{ text: "Go", url: "https://example.org/" }] }]);
+  assert.ok(card.classList.contains("layout-credit-row") && /From the old file/.test(card.textContent) && /Old message/.test(card.textContent), "every bad card was dropped; the first-format entry is drawn");
+  assert.equal(card.querySelector(".card-label").textContent, "Sponsored");
+  assert.equal(card.querySelector("img"), null);
+  const none = await cardPage(bad, []);
+  assert.match(none.card.textContent, /Created by/, "nothing valid at all: the built-in card");
 });

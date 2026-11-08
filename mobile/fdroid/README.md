@@ -11,7 +11,7 @@ Before the merge request:
 
 Rules that F-Droid's checks enforce:
 - The review of 2026-11-04 (merge request !55759) asked for: the once-a-day fetch of the sponsor card flagged as the `Tracking` anti-feature (separate from `NonFreeNet`); no `update-alternatives --auto java` line in `sudo:`; and a reason for the second `npm ci --offline` in `build:`. The maintainer later rewrote the build section himself (plain `cd` lines, `sdkmanager` in `prebuild:`, no `npm ci --offline`) and the pipeline passed, so the line is gone; the recipe in this folder is the one from the merge request.
-- Second review (same day): sponsor card explained to the maintainer (the project's own message only, no ads; the label "Sponsored" may be renamed "From the project" if he asks; if a third party's message is ever added, declare the `Ads` anti-feature). Go comes from Debian's `golang-go` (forky has 1.27, our `go.mod` needs 1.26 or newer), not from `golang-1.26-go`.
+- Second review (same day): sponsor card explained to the maintainer (the project's own message only, no ads; the label "Sponsored" may be renamed "From the project" if he asks (superseded 2026-11-08: the founder made "Sponsored" mandatory on every card, so do not rename it); if a third party's message is ever added, declare the `Ads` anti-feature). Go comes from Debian's `golang-go` (forky has 1.27, our `go.mod` needs 1.26 or newer), not from `golang-1.26-go`.
 - No comments in the yml (`fdroid rewritemeta` moves things around and wraps the anti-feature text).
 - `AutoUpdateMode: Version` (plain) when `UpdateCheckMode` is `Tags`.
 - The `sudo:` block must not install Java: the build image already has JDK 21. Go (`golang-go`), Node and npm come from Debian forky.

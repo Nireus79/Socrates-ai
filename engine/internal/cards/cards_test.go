@@ -97,7 +97,7 @@ func TestNothingValidMeansNothing(t *testing.T) {
 	for _, tc := range []struct {
 		body string
 		code int
-	}{{good, 404}, {`{"version":1,"entries":[]}` + strings.Repeat(" ", 70000), 200}, {"nope", 200}, {good, 302}} {
+	}{{good, 404}, {`{"version":1,"entries":[]}` + strings.Repeat(" ", 140000), 200}, {"nope", 200}, {good, 302}} {
 		f := NewFeedWith("", server(t, tc.body, tc.code, &hits))
 		f.url = feedURL
 		if e := f.Entries(context.Background()); e != nil {
@@ -116,6 +116,13 @@ func TestOnlyHTTPSIsFetched(t *testing.T) {
 	var nilFeed *Feed
 	if nilFeed.Entries(context.Background()) != nil {
 		t.Fatal("no feed means no entries")
+	}
+}
+
+func TestTheTextIsOptionalButBounded(t *testing.T) {
+	e, ok := Parse([]byte(`{"version":1,"entries":[{"id":"a","kind":"sponsor","title":"Created by","active":true,"marks":["hermes"],"links":[{"text":"Go","url":"https://example.org/x"}]},{"id":"b","kind":"sponsor","title":"T","text":"` + strings.Repeat("x", 281) + `","active":true}]}`))
+	if !ok || len(e) != 1 || e[0].ID != "a" || e[0].Text != "" || len(e[0].Links) != 1 {
+		t.Fatalf("a card without a message is valid, one with an overlong message is not: %+v", e)
 	}
 }
 

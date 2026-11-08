@@ -27,6 +27,14 @@ Written 2026-10-24, after commit 4039ba4; updated 2026-11-04 (published, see "Do
 - Tune the question-finishing thresholds on real people (`progress.Default`).
 - Stricter age limits (the whole app is 16+ for now).
 
+## Next version (beta.6): the card (decided 2026-11-08, built, not released)
+- **What changes.** One unified card in both apps: the label "Sponsored", then "Created by" with the Hermes logo, then Sponsor, GitHub (founder's profile) and Hermes. The card is now described by data (`site/cards.json`, format in `docs/CARD_FORMAT.md`): three layouts (`credit-row`, `logo-center`, `logo-text`), a logo that is the built-in Hermes mark or a small PNG embedded in the file, up to four https buttons, optional from and until days. The founder can change the card from GitHub at any time with no release. The label, Hide and link opening stay fixed in the app.
+- **Already live without a release (pushed 2026-11-08, commit 80940ef).** `site/cards.json` holds an entry of the old format with a message, so installed apps (beta.5 and Moly's current versions) show the unified card in their old layout within a day. They never learn the new layouts.
+- **Needs this release.** The new renderer (`engine/internal/cards/card.go`, `app/app.js`, `app/style.css`, `app/i18n.js`), its tests, and `docs/CARD_FORMAT.md` are written and uncommitted: commit them with the version bump. Moly has the same in `moly-extension` (see its CHANGES.md, 0.1.2).
+- **Release notes line.** "The sponsor card can now be updated by the project without a new version; it is labelled Sponsored."
+- **Stores.** No change for the push. With this release: F-Droid recipe moves to the new tag as usual (`Ads` is already declared); a Play submission (not yet made) must say a sponsor card may appear and tick "contains ads".
+- **Before a third party's card is shown:** hand check of the three layouts in the real window and on the phone; the `background` colour option (yes, wanted, not built) if a sponsor's logo needs it.
+
 ## Known limits
 - Local models were removed (PLAN 19): Claude or OpenAI with the person's own key only.
 - Greek: screens, fixed texts and answers are covered; store listing, privacy page and character sheets stay English. Only a spot check of Greek fidelity exists (12 questions).
