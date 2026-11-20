@@ -4,7 +4,7 @@ State: the Windows build (`socrates-vX-windows-amd64.zip`: `socrates-desktop.exe
 The window needs the WebView2 runtime (part of Windows 11; Windows 10 may lack it).
 
 ## winget (`packaging/winget/`)
-Three files for the beta.5 zip (`Nireus79.Socrates`): version, installer, default locale. Submitted as a pull request to github.com/microsoft/winget-pkgs under
+Three files for the beta.6 zip (the open pull request 470784 is for beta.5; do not open another for a new version until it is merged) (`Nireus79.Socrates`): version, installer, default locale. Submitted as a pull request to github.com/microsoft/winget-pkgs under
 `manifests/n/Nireus79/Socrates/0.1.0-beta.5/`. Needs a GitHub account (the author's) and signing the CLA the bot asks for.
 - Check before submitting: `winget validate --manifest <folder>` and `winget install --manifest <folder>` on Windows (needs "Enable local manifest files" in `winget settings`). Tool: `wingetcreate` can also build and submit the pull request (`wingetcreate update Nireus79.Socrates --version X --urls <zip url> --submit`) for later versions.
 - Installer type is a zip with a nested portable: winget unpacks the whole zip into its package folder, so the engine sits beside the window, and makes a command `socrates` for the window. **Not verified:** the window finds the engine from its own path (`desktop/main.go` `enginePath`); if winget starts it through a link the path may be the link's folder. Test the installed command before submitting. If it fails, the fix is in `enginePath` (resolve links).
