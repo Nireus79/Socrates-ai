@@ -105,7 +105,7 @@ func ResolveRoleModels(provider string, list *ModelList, table ApprovedTable) (R
 }
 
 // dynamicPick chooses by the family words the providers themselves use: Claude "haiku" for fast and "sonnet" for replies; OpenAI the
-// highest version of "mini" (or "nano") for fast and of the plain model for replies. Ollama has no families: the caller chooses.
+// highest version of "mini" (or "nano") for fast and of "mini" for replies (the plain model only if there is no mini). Ollama has no families: the caller chooses.
 func dynamicPick(provider, role string, list *ModelList) string {
 	switch strings.ToLower(provider) {
 	case "claude":
@@ -185,7 +185,9 @@ func pickOpenAI(role string, list *ModelList) string {
 	if role == "fast" {
 		return best(1, 2, 0)
 	}
-	return best(0)
+	// The replies use the mini, not the flagship: the flagship is slower and dearer on the person's own key (founder, 2026-11-20, as in
+	// Moly). The plain model is used only when the list has no mini.
+	return best(1, 0)
 }
 
 // ---- listing

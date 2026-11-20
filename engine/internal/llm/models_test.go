@@ -78,7 +78,14 @@ func TestWhenNothingFitsTheProvidersSuggestionIsUsedAndAnEmptyListIsAnError(t *t
 func TestOpenAIModelsAreFoundByVersionAndSize(t *testing.T) {
 	l := listOf("gpt-6-pro", "gpt-5.5", "gpt-5.5-2026-08-01", "gpt-5.5-mini", "gpt-5", "gpt-5-codex", "gpt-4o", "o3", "gpt-5-search-preview")
 	got, err := ResolveRoleModels("openai", l, ApprovedTable{})
-	if err != nil || got.Reply != "gpt-5.5" || got.Fast != "gpt-5.5-mini" {
+	if err != nil || got.Reply != "gpt-5.5-mini" || got.Fast != "gpt-5.5-mini" {
+		t.Fatalf("%+v %v", got, err)
+	}
+}
+
+func TestOpenAIRepliesFallBackToThePlainModelWhenThereIsNoMini(t *testing.T) {
+	got, err := ResolveRoleModels("openai", listOf("gpt-5.5", "gpt-5"), ApprovedTable{})
+	if err != nil || got.Reply != "gpt-5.5" || got.Fast != "gpt-5.5" {
 		t.Fatalf("%+v %v", got, err)
 	}
 }
