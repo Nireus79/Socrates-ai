@@ -12,7 +12,8 @@
 <main>
 <nav><a href="index.html">Socrates</a> <a href="download.html">Download</a> <a href="privacy.html">Privacy</a> <a href="terms.html">Terms</a> <a href="https://github.com/Nireus79/Socrates-ai">Source code</a></nav>
 <h1>Download Socrates</h1>
-<p class="lead">A free beta. You need your own Claude or OpenAI key. All files and their checksums are on the <a href="https://github.com/Nireus79/Socrates-ai/releases">releases page</a>.</p>
+<p class="lead">A free beta. You need your own Claude or OpenAI key (<a href="#key">how to get one</a>). All files and their checksums are on the <a href="https://github.com/Nireus79/Socrates-ai/releases">releases page</a>.</p>
+<p id="version" class="note"></p>
 
 <div class="card" id="itch">
 <h2>itch.io</h2>
@@ -34,26 +35,31 @@
 
 <div class="card" id="android">
 <h2>Android</h2>
-<p>Android 7 or newer, on 64-bit ARM phones (almost every phone made after 2017). Install it from F-Droid once it is listed there, or download the signed APK from the releases page and open it (your phone asks once to allow installing from your browser). Closing the app stops its engine.</p>
-<p><a class="btn" href="https://github.com/Nireus79/Socrates-ai/releases">Releases page</a></p>
+<p>Android 7 or newer, on 64-bit ARM phones (almost every phone made after 2017). Download the signed APK and open it (your phone asks once to allow installing from your browser). Closing the app stops its engine.</p>
+<p><a class="btn" id="dl-android" href="https://github.com/Nireus79/Socrates-ai/releases">Download the APK</a> <a href="https://github.com/Nireus79/Socrates-ai/releases">All releases</a></p>
 </div>
 
 <div class="card" id="linux">
 <h2>Linux</h2>
 <p>For Intel and AMD 64-bit computers (there is no ARM build yet). Download the Linux archive, unpack it and run <code>socrates-desktop</code>. It needs GTK 3 and WebKitGTK 4.1 (<code>libgtk-3-0</code>, <code>libwebkit2gtk-4.1-0</code>).</p>
-<p><a class="btn" href="https://github.com/Nireus79/Socrates-ai/releases">Releases page</a></p>
+<p><a class="btn" id="dl-linux" href="https://github.com/Nireus79/Socrates-ai/releases">Download for Linux</a> <a href="https://github.com/Nireus79/Socrates-ai/releases">All releases</a></p>
 </div>
 
 <div class="card" id="windows">
 <h2>Windows</h2>
 <p>For Intel and AMD 64-bit computers (there is no ARM build yet; Windows on ARM may run it through its own emulation, which has not been tried). Download the Windows archive, unpack it and run <code>socrates-desktop.exe</code>. The beta is not signed, so Windows may say "Windows protected your PC": choose "More info", then "Run anyway". It needs the WebView2 runtime (included in Windows 11). The author has checked the Windows build on a Windows computer.</p>
-<p><a class="btn" href="https://github.com/Nireus79/Socrates-ai/releases">Releases page</a></p>
+<p><a class="btn" id="dl-windows" href="https://github.com/Nireus79/Socrates-ai/releases">Download for Windows</a> <a href="https://github.com/Nireus79/Socrates-ai/releases">All releases</a></p>
 </div>
 
 <div class="card" id="macos">
 <h2>macOS</h2>
 <p>Download the macOS archive, unpack it and drag <code>Socrates.app</code> to Applications. The beta is not notarised by Apple, so the first start is refused: open System Settings, Privacy &amp; Security, and choose "Open Anyway". <strong>The author has not run the macOS build on a Mac yet</strong>, so it may have problems; please report them.</p>
-<p><a class="btn" href="https://github.com/Nireus79/Socrates-ai/releases">Releases page</a></p>
+<p><a class="btn" id="dl-macos" href="https://github.com/Nireus79/Socrates-ai/releases">Download for macOS</a> <a href="https://github.com/Nireus79/Socrates-ai/releases">All releases</a></p>
+</div>
+
+<div class="card" id="key">
+<h2>How to get a key</h2>
+<p>Socrates talks to Claude or OpenAI with a key that belongs to you. A ChatGPT or Claude chat subscription does not include one. Create an account with a provider, add a small credit and a spending limit, and make a key: <a href="https://platform.claude.com/settings/keys">Claude keys</a> or <a href="https://platform.openai.com/api-keys">OpenAI keys</a>. The app shows the same steps and pastes the key into an encrypted store on your device.</p>
 </div>
 
 <div class="card" id="uninstall">
@@ -62,6 +68,24 @@
 </div>
 
 <footer>Socrates is published by Hermes Software. Questions and problems: <a href="mailto:Hermes_creative@proton.me">Hermes_creative@proton.me</a>, or <a href="https://github.com/Nireus79/Socrates-ai/issues">GitHub issues</a>.</footer>
+<script>
+// Points each download button at the newest release file; without it the buttons go to the releases page.
+(function () {
+  fetch('https://api.github.com/repos/Nireus79/Socrates-ai/releases?per_page=10')
+    .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+    .then(function (list) {
+      var rel = list.filter(function (r) { return !r.draft; })[0];
+      if (!rel) return;
+      var want = { android: /-android\.apk$/, linux: /-linux-amd64\.tar\.gz$/, windows: /-windows-amd64\.zip$/, macos: /-macos-universal\.zip$/ };
+      Object.keys(want).forEach(function (k) {
+        var a = rel.assets.filter(function (x) { return want[k].test(x.name); })[0];
+        if (a) document.getElementById('dl-' + k).href = a.browser_download_url;
+      });
+      document.getElementById('version').textContent = 'Newest version: ' + rel.tag_name.replace(/^v/, '') + (rel.prerelease ? ' (beta)' : '') + '.';
+    })
+    .catch(function () {});
+})();
+</script>
 </main>
 </body>
 </html>
