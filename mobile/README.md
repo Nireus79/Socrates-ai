@@ -9,7 +9,7 @@ Needs Go, Node 22, JDK 21, the Android SDK (platform 36, build-tools 36) and NDK
 
 ```bash
 cd mobile
-scripts/build-engine.sh            # libsocratesengine.so for arm64-v8a (ABIS="arm64-v8a x86_64" adds the emulator)
+scripts/build-engine.sh            # libsocratesengine.so for arm64-v8a and x86_64 (ABIS="arm64-v8a" builds the phones alone)
 scripts/build-apk.sh debug         # screens + sync + gradle; prints the APK path
 ```
 

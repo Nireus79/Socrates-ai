@@ -1,7 +1,8 @@
 #!/bin/bash
 # Builds the Go engine as libsocratesengine.so for each Android CPU type into the app's jniLibs (Android runs files from there).
-# Needs Go and the Android NDK (ANDROID_NDK_HOME, or ANDROID_HOME/ndk/<version>). Default: arm64-v8a (the phones);
-# ABIS="arm64-v8a x86_64" adds the emulator.
+# Needs Go and the Android NDK (ANDROID_NDK_HOME, or ANDROID_HOME/ndk/<version>). Default: arm64-v8a (the phones) and x86_64 (emulators,
+# Chromebooks and x86 devices). The x86_64 engine is there because an arm64-only app runs through the system's ARM translation on an
+# x86_64 emulator, and the engine crashed there (F-Droid's tester, beta.6); ABIS="arm64-v8a" builds the phones alone.
 # GO_TAGS=testprovider is for the emulator test runs only (see engine/cmd/socrates-engine/provider_options_testprovider.go); build-apk.sh
 # refuses to make a release or bundle from an engine built that way (it leaves a marker).
 set -euo pipefail
@@ -10,7 +11,7 @@ NDK=${ANDROID_NDK_HOME:-$(ls -d "${ANDROID_HOME:?set ANDROID_HOME or ANDROID_NDK
 BIN=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin
 API=24
 OUT=$PWD/android/app/src/main/jniLibs
-ABIS=${ABIS:-"arm64-v8a"}
+ABIS=${ABIS:-"arm64-v8a x86_64"}
 VERSION=${VERSION:-$(git describe --tags --always --dirty 2>/dev/null || echo dev)}
 rm -rf "$OUT" .test-engine-build
 case " ${GO_TAGS:-} " in *testprovider*) touch .test-engine-build ;; esac

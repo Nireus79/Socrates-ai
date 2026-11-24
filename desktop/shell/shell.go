@@ -89,11 +89,17 @@ func (e *Engine) Stop() {
 // Done is closed when the engine process has ended.
 func (e *Engine) Done() <-chan struct{} { return e.done }
 
+// proxyClient is the client the proxy uses for the engine. It has no time limit of its own: the engine bounds its own work (a model on
+// this computer may be given 20 minutes for one call, and a turn makes several), and the request ends when the page gives up, for
+// instance when the window closes. A limit here, shorter than the engine's, made a slow local model look like an engine that does not
+// answer (a 5-minute limit did: "The engine does not answer." while the engine was still working).
+func proxyClient() *http.Client { return &http.Client{} }
+
 // Proxy answers the page's requests for /api/ by forwarding them to the engine with the token added and no Origin header. Anything else
 // is not the engine's business and is refused, so the page cannot reach the engine's other paths.
 func (e *Engine) Proxy(client *http.Client) http.Handler {
 	if client == nil {
-		client = &http.Client{Timeout: 5 * time.Minute}
+		client = proxyClient()
 	}
 	base := fmt.Sprintf("http://127.0.0.1:%d", e.Hand.Port)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -50,6 +50,8 @@ type Manager struct {
 	enginePath string
 	wait       time.Duration
 
+	secrets Secrets
+
 	mu     sync.Mutex
 	eng    *Engine
 	active string
@@ -58,11 +60,15 @@ type Manager struct {
 
 // NewManager makes a manager for the profiles under base.
 func NewManager(base, enginePath string) *Manager {
-	return &Manager{base: base, enginePath: enginePath, wait: 30 * time.Second}
+	return &Manager{base: base, enginePath: enginePath, wait: 30 * time.Second, secrets: systemSecrets{}}
 }
 
 type file struct {
 	Profiles []Profile `json:"profiles"`
+	// Last is the profile that was opened last; the login screen offers it first. Stay says the person asked to stay signed in on this
+	// computer: the window then opens Last by itself (see remember.go).
+	Last string `json:"last,omitempty"`
+	Stay bool   `json:"stay,omitempty"`
 }
 
 func (m *Manager) load() ([]Profile, error) {
@@ -87,10 +93,25 @@ func (m *Manager) load() ([]Profile, error) {
 }
 
 func (m *Manager) save(list []Profile) error {
+	meta, _ := m.readFile()
+	return m.write(file{Profiles: list, Last: meta.Last, Stay: meta.Stay})
+}
+
+func (m *Manager) readFile() (file, error) {
+	var f file
+	b, err := os.ReadFile(filepath.Join(m.base, registry))
+	if err != nil {
+		return f, err
+	}
+	err = json.Unmarshal(b, &f)
+	return f, err
+}
+
+func (m *Manager) write(f file) error {
 	if err := os.MkdirAll(m.base, 0o700); err != nil {
 		return err
 	}
-	b, _ := json.Marshal(file{Profiles: list})
+	b, _ := json.Marshal(f)
 	tmp, err := os.CreateTemp(m.base, registry+".tmp*")
 	if err != nil {
 		return err
@@ -263,6 +284,7 @@ func (m *Manager) Remove(id string) error {
 	if err := m.save(kept); err != nil {
 		return err
 	}
+	m.forgetLocked(id)
 	return os.RemoveAll(dir)
 }
 
@@ -283,7 +305,9 @@ func (m *Manager) Handler() http.Handler {
 	mux.HandleFunc("GET /shell/profiles", m.handleList)
 	mux.HandleFunc("POST /shell/profiles", m.handleCreate)
 	mux.HandleFunc("POST /shell/open", m.handleOpen)
-	mux.HandleFunc("POST /shell/close", func(w http.ResponseWriter, r *http.Request) { m.Close(); writeJSON(w, 200, map[string]string{}) })
+	mux.HandleFunc("POST /shell/close", m.handleClose)
+	mux.HandleFunc("POST /shell/stay", m.handleStay)
+	mux.HandleFunc("POST /shell/autologin", m.handleAutoLogin)
 	mux.HandleFunc("POST /shell/remove", m.handleRemove)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		m.mu.Lock()
@@ -322,7 +346,7 @@ func (m *Manager) handleList(w http.ResponseWriter, r *http.Request) {
 	if list == nil {
 		list = []Profile{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"profiles": list, "active": m.Active()})
+	writeJSON(w, http.StatusOK, m.listView(list))
 }
 
 func (m *Manager) handleCreate(w http.ResponseWriter, r *http.Request) {
@@ -352,6 +376,7 @@ func (m *Manager) handleOpen(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
+	m.setLast(body.ID)
 	writeJSON(w, http.StatusOK, map[string]string{})
 }
 

@@ -28,7 +28,8 @@ var assets embed.FS
 //go:embed icon.png
 var icon []byte
 
-// App is what the page may call in the window: opening the key pages of the providers in the person's browser, nothing else.
+// App is what the page may call in the window: opening the key pages of the providers and the sponsor card's links in the person's browser,
+// the system's theme, and making a menu entry for the program. Nothing else.
 type App struct{ ctx context.Context }
 
 func (a *App) startup(ctx context.Context) { a.ctx = ctx }
@@ -50,6 +51,12 @@ func (a *App) OpenSponsorLink(url string) error {
 	wruntime.BrowserOpenURL(a.ctx, url)
 	return nil
 }
+
+// ShortcutNeeded says whether to offer a menu entry for Socrates (not when it is there, not on macOS, not for a copy a package manager made).
+func (a *App) ShortcutNeeded() bool { return shell.ShortcutNeeded() }
+
+// InstallShortcut puts Socrates in the person's applications menu, and on the desktop when asked (shell.InstallShortcut).
+func (a *App) InstallShortcut(onDesktop bool) error { return shell.InstallShortcut(icon, onDesktop) }
 
 // SystemTheme tells the page whether the desktop is set to "dark" or "light" ("" when unknown), because the web view may not follow it.
 func (a *App) SystemTheme() string { return shell.SystemTheme() }

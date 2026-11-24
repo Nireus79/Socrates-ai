@@ -1353,3 +1353,225 @@ test("a card that fails the page's own checks is dropped, and the first format s
   const none = await cardPage(bad, []);
   assert.match(none.card.textContent, /Created by/, "nothing valid at all: the built-in card");
 });
+
+// ---- the list that opens from a select is drawn by the page, in the theme's colours (the browser's own list is white on some systems)
+function pressKey(el, k, extra = {}) { el.dispatchEvent(new global.window.KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true, ...extra })); }
+function mouseDown(el) { const e = new global.window.MouseEvent("mousedown", { bubbles: true, cancelable: true }); el.dispatchEvent(e); return e; }
+
+test("a select opens the page's own list instead of the browser's, a click on an item chooses it and tells the page, and the list closes", async () => {
+  const p = providerPage();
+  p.app.start(p.root); await settle(10);
+  const sel = p.root.querySelector("select");
+  let changes = 0; sel.addEventListener("change", () => changes++);
+  const e = mouseDown(sel);
+  assert.ok(e.defaultPrevented, "the browser's own list is not opened");
+  const list = global.document.querySelector("ul.dd-list[role=listbox]");
+  assert.ok(list, "the page's list is open");
+  assert.deepStrictEqual([...list.querySelectorAll("[role=option]")].map((o) => o.textContent), ["Claude (Anthropic)", "OpenAI"]);
+  assert.equal(list.querySelector('[aria-selected="true"]').textContent, "Claude (Anthropic)");
+  mouseDown(list.querySelectorAll("[role=option]")[1]);
+  assert.equal(sel.value, "openai"); assert.equal(changes, 1);
+  assert.equal(global.document.querySelector("ul.dd-list"), null, "the list closed");
+  assert.match(text(p.root), /platform\.openai\.com\/api-keys/, "the screen reacted to the change as it does to the native one");
+  // choosing what is already chosen changes nothing
+  mouseDown(sel); mouseDown(global.document.querySelectorAll("ul.dd-list [role=option]")[1]);
+  assert.equal(changes, 1);
+});
+
+test("the list works from the keyboard: Enter or Alt+Down opens it, the arrows move, Enter chooses, Escape closes without choosing", async () => {
+  const p = providerPage();
+  p.app.start(p.root); await settle(10);
+  const sel = p.root.querySelector("select");
+  pressKey(sel, "Enter");
+  assert.ok(global.document.querySelector("ul.dd-list"));
+  pressKey(sel, "ArrowDown"); pressKey(sel, "Enter");
+  assert.equal(sel.value, "openai"); assert.equal(global.document.querySelector("ul.dd-list"), null);
+  pressKey(sel, "ArrowDown", { altKey: true });
+  assert.ok(global.document.querySelector("ul.dd-list"));
+  pressKey(sel, "ArrowUp"); pressKey(sel, "Escape");
+  assert.equal(sel.value, "openai", "Escape does not choose"); assert.equal(global.document.querySelector("ul.dd-list"), null);
+  // a key that is not the list's is left alone
+  pressKey(sel, "a"); assert.equal(global.document.querySelector("ul.dd-list"), null);
+});
+
+test("an open list does not outlive its screen or its select: leaving the select, or drawing another screen, closes it", async () => {
+  const p = providerPage();
+  p.app.start(p.root); await settle(10);
+  const sel = p.root.querySelector("select");
+  mouseDown(sel); assert.ok(global.document.querySelector("ul.dd-list"));
+  sel.dispatchEvent(new global.window.Event("blur")); assert.equal(global.document.querySelector("ul.dd-list"), null);
+  mouseDown(sel); assert.ok(global.document.querySelector("ul.dd-list"));
+  p.app.start(p.root); await settle(10);
+  assert.equal(global.document.querySelector("ul.dd-list"), null);
+});
+
+test("the stylesheet gives the list the theme's own colours, not a fixed white", () => {
+  const css = fs.readFileSync(path.join(__dirname, "../style.css"), "utf8");
+  const rule = css.match(/\.dd-list\s*\{[^}]*\}/)[0];
+  assert.match(rule, /background:\s*var\(--panel\)/); assert.match(rule, /color:\s*var\(--ink\)/);
+  assert.doesNotMatch(rule, /#fff|white/i);
+});
+
+// ---- remembering the login on the desktop
+
+test("the login screen offers the profile used last, with the cursor in the passphrase box", async () => {
+  const shell = { profiles: [{ id: "p1", name: "Anna" }, { id: "p2", name: "Ben" }], active: "", last: "p2", canRemember: true };
+  const p = withProfiles(shell);
+  p.app.start(p.root); await settle();
+  assert.equal(p.root.querySelector("form select").value, "p2");
+  assert.equal(global.document.activeElement, p.root.querySelector("input[type=password]"));
+  // a last profile that is no longer on the list is ignored
+  const gone = withProfiles({ profiles: [{ id: "p1", name: "Anna" }], active: "", last: "zz" });
+  gone.app.start(gone.root); await settle();
+  assert.equal(gone.root.querySelector("form select").value, "p1");
+});
+
+test("staying signed in is offered only where it can work, and says what it costs", async () => {
+  const yes = withProfiles({ profiles: [{ id: "p1", name: "Anna" }], active: "", canRemember: true });
+  yes.app.start(yes.root); await settle();
+  const box = yes.root.querySelector("#stay");
+  assert.ok(box && !box.checked && !box.closest(".row").hidden, "off until the person turns it on");
+  assert.match(text(yes.root), /Anyone who can use this computer account can then open your conversations/);
+  const no = withProfiles({ profiles: [{ id: "p1", name: "Anna" }, { id: "p2", name: "Cy", open: true }], active: "", canRemember: false });
+  no.app.start(no.root); await settle();
+  assert.equal(no.root.querySelector("#stay").closest(".row").hidden, true, "no secure storage: a profile with a passphrase cannot stay");
+  const sel = no.root.querySelector("form select"); sel.value = "p2"; sel.dispatchEvent(new no.dom.window.Event("change", { bubbles: true }));
+  assert.equal(no.root.querySelector("#stay").closest(".row").hidden, false, "a profile without a passphrase needs no storage");
+  assert.match(text(no.root), /open this profile by itself/);
+});
+
+test("when the box is ticked the passphrase goes to the window once, after the engine accepted it; unticked, nothing is asked of the window", async () => {
+  for (const ticked of [true, false]) {
+    const shell = { profiles: [{ id: "p1", name: "Anna" }], active: "", canRemember: true };
+    let unlocked = false;
+    const stays = [];
+    const p = withProfiles(shell, {
+      "GET /api/status": () => (unlocked ? [200, { status: "ok" }] : [423, {}]),
+      "GET /api/keystore/status": () => [200, { state: unlocked ? "ready" : "locked" }],
+      "POST /api/keystore/unlock": (b) => { if (b.passphrase !== "right passphrase!") return [403, { error: "That passphrase is not right." }]; unlocked = true; return [200, {}]; },
+      "POST /shell/stay": (b) => { stays.push(b); return [200, {}]; },
+    });
+    p.app.start(p.root); await settle();
+    const box = p.root.querySelector("#stay"); box.checked = ticked;
+    p.root.querySelector("input[type=password]").value = "wrong one";
+    submit(p, p.root.querySelector("form")); await settle(12);
+    assert.deepStrictEqual(stays, [], "nothing is kept for a passphrase the engine refused");
+    p.root.querySelector("input[type=password]").value = "right passphrase!";
+    submit(p, p.root.querySelector("form")); await settle(14);
+    assert.match(text(p.root), /Talk with/);
+    assert.deepStrictEqual(stays, ticked ? [{ id: "p1", stay: true, passphrase: "right passphrase!" }] : []);
+  }
+});
+
+test("if the window cannot keep the login the person is told, and is still signed in", async () => {
+  const shell = { profiles: [{ id: "p1", name: "Anna" }], active: "", canRemember: true };
+  let unlocked = false;
+  const p = withProfiles(shell, {
+    "GET /api/status": () => (unlocked ? [200, { status: "ok" }] : [423, {}]),
+    "GET /api/keystore/status": () => [200, { state: unlocked ? "ready" : "locked" }],
+    "POST /api/keystore/unlock": () => { unlocked = true; return [200, {}]; },
+    "POST /shell/stay": [500, { error: "The passphrase could not be kept on this computer." }],
+  });
+  p.app.start(p.root); await settle();
+  p.root.querySelector("#stay").checked = true;
+  p.root.querySelector("input[type=password]").value = "right passphrase!";
+  submit(p, p.root.querySelector("form")); await settle(14);
+  assert.match(text(p.root), /Talk with/);
+  assert.match(text(p.root), /staying signed in did not work/);
+});
+
+test("a profile that stayed signed in is opened at the start without a login screen; a refusal shows the login screen once and does not try again", async () => {
+  const shell = { profiles: [{ id: "p1", name: "Anna" }, { id: "p2", name: "Ben" }], active: "", last: "p2", stay: true, canRemember: true };
+  const p = withProfiles(shell, {
+    "GET /api/status": () => (shell.active ? [200, { status: "ok" }] : [409, {}]),
+    "POST /shell/autologin": (b) => { p.posted.push(["autologin", b.id]); shell.active = b.id; return [200, {}]; },
+  });
+  p.app.start(p.root); await settle(14);
+  assert.deepStrictEqual(p.posted, [["autologin", "p2"]]);
+  assert.match(text(p.root), /Talk with/);
+  assert.ok(!p.root.querySelector("form select"), "no login screen was shown");
+
+  const shell2 = { profiles: [{ id: "p1", name: "Anna" }], active: "", last: "p1", stay: true, canRemember: true };
+  const q = withProfiles(shell2, { "POST /shell/autologin": () => { q.posted.push(["autologin"]); shell2.stay = false; return [401, { error: "Sign in again." }]; } });
+  q.app.start(q.root); await settle(14);
+  assert.deepStrictEqual(q.posted, [["autologin"]], "one attempt");
+  assert.ok(q.root.querySelector("form select"), "the login screen is shown");
+  assert.equal(q.root.querySelector("form select").value, "p1");
+
+  // a refusal that left the flag on (the engine did not start) still shows the login screen and does not loop
+  const shell3 = { profiles: [{ id: "p1", name: "Anna" }], active: "", last: "p1", stay: true, canRemember: true };
+  const r = withProfiles(shell3, { "POST /shell/autologin": () => { r.posted.push(["autologin"]); return [502, { error: "The engine did not start." }]; } });
+  r.app.start(r.root); await settle(14);
+  assert.deepStrictEqual(r.posted, [["autologin"]]);
+  assert.ok(r.root.querySelector("form select"));
+  r.app.start(r.root); await settle(14); // the screen is drawn again (for instance after a profile was removed): still the one attempt
+  assert.deepStrictEqual(r.posted, [["autologin"]]);
+});
+
+test("with nothing remembered the window starts at the login screen and asks for nothing", async () => {
+  const p = withProfiles({ profiles: [{ id: "p1", name: "Anna" }], active: "", last: "p1", stay: false, canRemember: true }, {
+    "POST /shell/autologin": () => { p.posted.push(["autologin"]); return [401, { error: "Sign in again." }]; },
+  });
+  p.app.start(p.root); await settle(10);
+  assert.deepStrictEqual(p.posted, []);
+  assert.ok(p.root.querySelector("form select"));
+});
+
+// ---- an icon to start Socrates (the desktop window offers to make the menu entry itself)
+
+function withShortcut(needed, extra = {}) {
+  const made = [];
+  global.window.go = { main: { App: Object.assign({ ShortcutNeeded: async () => needed, InstallShortcut: async (d) => { made.push(d); } }, extra) } };
+  return made;
+}
+const homePage = () => page(ready({ "GET /api/profile": [200, { ageConfirmed: true, hasProvider: true }], "GET /api/conversations": [200, { conversations: [] }] }));
+
+test("the home screen offers the menu entry once, makes it as asked, and does not ask again after Not now or after it was made", async () => {
+  for (const choice of ["menu", "desktop", "later"]) {
+    const p = homePage();
+    const made = withShortcut(true);
+    try { global.window.localStorage.clear(); } catch (_) {}
+    p.app.start(p.root); await settle(12);
+    assert.match(text(p.root), /Start Socrates like any other program/);
+    if (choice === "menu") { click(button(p.root, "Add to the menu")); await settle(); assert.deepStrictEqual(made, [false]); assert.match(text(p.root), /Done\. You will find Socrates/); }
+    if (choice === "desktop") { click(button(p.root, "Add to the menu and the desktop")); await settle(); assert.deepStrictEqual(made, [true]); }
+    if (choice === "later") { click(button(p.root, "Not now")); await settle(); assert.deepStrictEqual(made, []); assert.ok(!p.root.querySelector(".shortcut"), "the offer is gone"); }
+    p.app.start(p.root); await settle(12);
+    assert.ok(!p.root.querySelector(".shortcut"), "asked once (" + choice + ")");
+    delete global.window.go;
+  }
+});
+
+test("the offer is not shown where there is nothing to make, and a failure is told plainly", async () => {
+  const none = homePage();
+  withShortcut(false); none.app.start(none.root); await settle(12);
+  assert.ok(!none.root.querySelector(".shortcut"), "already in the menu");
+  delete global.window.go;
+  const plain = homePage(); // a plain browser or the phone: no window to ask
+  plain.app.start(plain.root); await settle(12);
+  assert.ok(!plain.root.querySelector(".shortcut"));
+  const bad = homePage();
+  withShortcut(true, { InstallShortcut: async () => { throw new Error("no"); } });
+  try { global.window.localStorage.clear(); } catch (_) {}
+  bad.app.start(bad.root); await settle(12);
+  click(button(bad.root, "Add to the menu")); await settle();
+  assert.match(text(bad.root), /could not add itself to the menu/);
+  assert.ok(button(bad.root, "Add to the menu"), "the buttons stay so the person can try again");
+  delete global.window.go;
+});
+
+test("Settings always has the card: it can make the entry, or only the desktop icon when the entry is there", async () => {
+  const a = homePage(); const made = withShortcut(true);
+  a.app.start(a.root); await settle(12);
+  click([...a.root.querySelectorAll("button")].find((b) => b.textContent === "Settings")); await settle(12);
+  assert.ok(a.root.querySelector(".shortcut"), "the card is in Settings");
+  click(button(a.root, "Add to the menu")); await settle(); assert.deepStrictEqual(made, [false]);
+  delete global.window.go;
+  const b = homePage(); const made2 = withShortcut(false);
+  b.app.start(b.root); await settle(12);
+  click([...b.root.querySelectorAll("button")].find((x) => x.textContent === "Settings")); await settle(12);
+  assert.match(text(b.root), /Socrates is in your applications menu/);
+  assert.ok(!button(b.root, "Add to the menu"), "no second menu entry offered");
+  click(button(b.root, "Add an icon to the desktop")); await settle(); assert.deepStrictEqual(made2, [true]);
+  delete global.window.go;
+});

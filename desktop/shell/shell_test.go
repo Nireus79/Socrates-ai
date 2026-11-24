@@ -140,3 +140,20 @@ func TestTheProxyForwardsOnlyTheAPIWithTheTokenAndNoOrigin(t *testing.T) {
 		t.Fatalf("%v %v", r.URL, r.Header)
 	}
 }
+
+func TestTheProxyHasNoTimeLimitShorterThanTheEngines(t *testing.T) {
+	if d := proxyClient().Timeout; d != 0 {
+		t.Fatalf("the proxy gives up after %v; a slow model on this computer would show as an engine that does not answer", d)
+	}
+	// and a slow answer is passed on whole
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(1500 * time.Millisecond)
+		w.Write([]byte(`{"text":"late but whole"}`))
+	}))
+	defer slow.Close()
+	port, _ := strconv.Atoi(slow.URL[strings.LastIndex(slow.URL, ":")+1:])
+	e := &Engine{Hand: Handshake{Port: port, Token: "t"}}
+	if code, body := get(t, e.Proxy(nil), "POST", "/api/conversations/1/messages", ""); code != 200 || !strings.Contains(body, "late but whole") {
+		t.Fatalf("slow answer: %d %s", code, body)
+	}
+}

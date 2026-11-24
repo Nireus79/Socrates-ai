@@ -28,6 +28,10 @@ select { color-scheme: light; }
 :root[data-theme="dark"] select, :root[data-device="dark"]:not([data-theme="light"]) select { color-scheme: dark; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]):not([data-device="light"]) select { color-scheme: dark; } }
 select option, select optgroup { background-color: var(--panel); color: var(--ink); }
+.dd-list { position: fixed; z-index: 50; margin: 0; padding: 4px; list-style: none; max-height: 40vh; overflow-y: auto; background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 20px rgba(0, 0, 0, .25); }
+.dd-item { padding: 8px 10px; border-radius: 6px; cursor: pointer; }
+.dd-item.active, .dd-item:hover { background: var(--panel2); }
+.dd-item[aria-selected="true"] { font-weight: 600; }
 .logo { display: block; width: 160px; max-width: 60%; margin: 0 auto 4px; }
 /* the mark is black line art on a transparent ground: on the dark theme it is turned to light lines */
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]):not([data-device="light"]) .logo { filter: invert(1); } }

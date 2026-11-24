@@ -1,0 +1,1 @@
+- Fixed the engine crash on x86_64 devices and emulators: the app now carries engines for arm64 and x86_64

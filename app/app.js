@@ -125,7 +125,7 @@ async function loadLang() {
 }
 // A choice of language; the screen is drawn again in the new one.
 function languagePicker(redraw) {
-  const sel = el("select", { "aria-label": "Language" }, ...LANGUAGES.map(([c, n]) => el("option", { value: c, selected: c === S.lang }, n)));
+  const sel = themedSelect(el("select", { "aria-label": "Language" }, ...LANGUAGES.map(([c, n]) => el("option", { value: c, selected: c === S.lang }, n))));
   sel.addEventListener("change", async () => {
     S.lang = sel.value;
     await api("PUT", "/api/settings/language", { language: S.lang });
@@ -242,10 +242,86 @@ async function refreshCards() {
 }
 
 function mount(...nodes) {
+  closeDropdown();
   S.root.replaceChildren(...nodes, ...(S.noCard ? [] : [cardNode()].filter(Boolean)));
   const h = S.root.querySelector("h1");
   if (h) { h.setAttribute("tabindex", "-1"); h.focus({ preventScroll: true }); }
 }
+// ---- a list that opens from a select, drawn here
+// The browser draws the list of a select itself, in the system's colours: white in a dark window on some systems, and no CSS reaches it.
+// So the list is drawn by the page, from the select, which stays the source of truth (its value, its options, its change event,
+// and the keys that change it while it is closed).
+let openList = null;
+function closeDropdown() { if (openList) { const l = openList; openList = null; l.remove(); } }
+function themedSelect(sel) {
+  const open = () => {
+    closeDropdown();
+    const opts = [...sel.options];
+    if (!opts.length) return;
+    let active = Math.max(0, sel.selectedIndex);
+    const list = el("ul", { class: "dd-list", role: "listbox", "aria-label": sel.getAttribute("aria-label") || "" });
+    const items = opts.map((o, i) => {
+      const li = el("li", { role: "option", "aria-selected": String(i === sel.selectedIndex), class: "dd-item" }, o.textContent);
+      li.addEventListener("mousedown", (e) => { e.preventDefault(); choose(i); });
+      list.append(li);
+      return li;
+    });
+    const mark = () => items.forEach((li, i) => li.classList.toggle("active", i === active));
+    const choose = (i) => {
+      closeDropdown();
+      if (i !== sel.selectedIndex) { sel.selectedIndex = i; sel.dispatchEvent(new window.Event("change", { bubbles: true })); }
+      sel.focus();
+    };
+    list.keyStep = (e) => {
+      if (e.key === "ArrowDown") active = Math.min(items.length - 1, active + 1);
+      else if (e.key === "ArrowUp") active = Math.max(0, active - 1);
+      else if (e.key === "Home") active = 0;
+      else if (e.key === "End") active = items.length - 1;
+      else if (e.key === "Enter" || e.key === " ") { choose(active); return true; }
+      else if (e.key === "Escape" || e.key === "Tab") { closeDropdown(); return e.key === "Escape"; }
+      else return false;
+      mark();
+      items[active].scrollIntoView && items[active].scrollIntoView({ block: "nearest" });
+      return true;
+    };
+    const r = sel.getBoundingClientRect();
+    list.style.left = r.left + "px"; list.style.top = r.bottom + 2 + "px"; list.style.minWidth = r.width + "px";
+    document.body.append(list);
+    openList = list;
+    mark();
+  };
+  sel.addEventListener("mousedown", (e) => { e.preventDefault(); sel.focus(); openList ? closeDropdown() : open(); });
+  sel.addEventListener("keydown", (e) => {
+    if (openList) { if (openList.keyStep(e)) e.preventDefault(); return; }
+    if (e.key === "Enter" || e.key === " " || (e.altKey && e.key === "ArrowDown")) { e.preventDefault(); open(); }
+  });
+  sel.addEventListener("blur", () => closeDropdown());
+  return sel;
+}
+
+// ---- an icon to start Socrates (the desktop window only)
+// The release is an unpacked folder, so the window offers to put Socrates in the applications menu (and on the desktop) itself.
+const boundApp = () => (typeof window !== "undefined" && window.go && window.go.main && window.go.main.App) || null;
+const shortcutAsked = () => { if (S.shortcutAsked) return true; try { return window.localStorage.getItem("shortcutAsked") === "1"; } catch (_) { return false; } };
+const markShortcutAsked = () => { S.shortcutAsked = true; try { window.localStorage.setItem("shortcutAsked", "1"); } catch (_) { /* asked again in the next session */ } };
+function shortcutCard(b, needed, notNow) {
+  const out = el("p", { class: "muted", role: "status" });
+  const make = (onDesktop) => async () => {
+    out.textContent = "";
+    try { await b.InstallShortcut(onDesktop); markShortcutAsked(); out.textContent = t("Done. You will find Socrates in your applications menu."); card.querySelector(".shortcut-buttons").hidden = true; }
+    catch (_) { out.textContent = t("Socrates could not add itself to the menu on this computer."); }
+  };
+  const buttons = el("div", { class: "row shortcut-buttons" },
+    needed ? el("button", { class: "primary", onclick: make(false) }, t("Add to the menu")) : null,
+    el("button", { onclick: make(true) }, needed ? t("Add to the menu and the desktop") : t("Add an icon to the desktop")),
+    notNow ? el("button", { class: "link", onclick: () => { markShortcutAsked(); notNow(); } }, t("Not now")) : null);
+  const card = el("div", { class: "card stack shortcut" }, el("h2", {}, t("Start Socrates like any other program")),
+    el("p", { class: "muted" }, needed ? t("Add Socrates to your applications menu, so that you can start it from there.") : t("Socrates is in your applications menu.")),
+    buttons, out);
+  return card;
+}
+async function shortcutNeeded(b) { try { return !!(await b.ShortcutNeeded()); } catch (_) { return false; } }
+
 // A card that acts like a button answers Enter and Space.
 function activate(fn) { return (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fn(); } }; }
 // Navigation. A screen reached from another is a step on a stack of how to draw it, so Back goes to the screen before. The page does not use
@@ -332,7 +408,7 @@ async function shellPost(path, body) {
 }
 async function logOut() {
   await shellPost("/shell/close");
-  S.profile = null; S.opened = null; S.philosophers = [];
+  S.profile = null; S.opened = null; S.philosophers = []; S.noAuto = false;
   boot();
 }
 // Waits until the engine of the open profile answers about its key (it needs a moment after it starts).
@@ -374,16 +450,27 @@ function authScreen(info, tab) {
   const tabs = el("div", { class: "tabs", role: "tablist" },
     ...[["login", t("Log in")], ["register", t("Register")]].map(([k, label]) =>
       el("button", { type: "button", role: "tab", class: "tab", "aria-selected": String(k === tab), onclick: () => authScreen(info, k) }, label)));
-  let form;
+  let form, focusAfter = null;
   if (tab === "login") {
-    const sel = el("select", { "aria-label": t("Profile") }, ...profiles.map((p) => el("option", { value: p.id }, p.legacy ? t("Existing data") : p.name)));
+    const sel = themedSelect(el("select", { "aria-label": t("Profile") }, ...profiles.map((p) => el("option", { value: p.id }, p.legacy ? t("Existing data") : p.name))));
+    if (info.last && profiles.some((p) => p.id === info.last)) sel.value = info.last; // the profile used last is offered first
     const pass = passField(t("Passphrase"), "current-password");
     const note = el("p", { class: "muted" });
     const isLegacy = () => { const p = profiles.find((x) => x.id === sel.value) || {}; return p.legacy || p.open; };
+    // Staying signed in: a profile with a passphrase needs the system's secure storage to keep it; one without needs nothing.
+    const stay = el("input", { type: "checkbox", id: "stay", class: "check" });
+    const stayExplain = el("p", { class: "muted" });
+    const stayRow = el("div", { class: "row" }, stay, el("label", { for: "stay", class: "inline" }, t("Keep me signed in on this computer")));
     const sync = () => {
       const legacy = isLegacy();
       pass.label.hidden = pass.input.hidden = legacy; // the data from before profiles, and a profile made without a passphrase, open without one
       note.textContent = legacy ? t("Made before profiles existed. It opens the way it always did.") : "";
+      const can = legacy || !!info.canRemember;
+      stayRow.hidden = stayExplain.hidden = !can;
+      if (!can) stay.checked = false;
+      stayExplain.textContent = legacy
+        ? t("Socrates will open this profile by itself next time. Log out to stop that.")
+        : t("The passphrase is kept in this computer's secure storage, so you are not asked again. Anyone who can use this computer account can then open your conversations. Log out to forget it.");
     };
     sel.addEventListener("change", sync);
     const go = el("button", { class: "primary", type: "submit" }, t("Log in"));
@@ -412,10 +499,15 @@ function authScreen(info, tab) {
         if (u.status !== 200) { err.textContent = errMsg(u.data); busy(go, false); pass.input.value = ""; pass.input.focus(); return; }
       }
       S.opened = null;
+      if (stay.checked) {
+        const k = await shellPost("/shell/stay", { id: p.id, stay: true, passphrase: p.legacy || p.open ? undefined : pass.input.value });
+        if (k.status !== 200) S.notice = t("You are signed in, but staying signed in did not work on this computer.");
+      }
       boot(); // ready (the old data), or still to be set up: the engine's own gate screens take over
     } },
-      el("label", {}, t("Profile")), sel, pass.label, pass.input, note, err, showBox([pass.input]), go);
+      el("label", {}, t("Profile")), sel, pass.label, pass.input, note, showBox([pass.input]), stayRow, stayExplain, err, go);
     sync();
+    if (info.last && !isLegacy()) focusAfter = pass.input; // the profile used last is already chosen: the cursor goes where the person types next
   } else {
     const name = el("input", { type: "text", maxlength: "40", autocomplete: "username", "aria-label": t("Name") });
     const one = passField(t("Passphrase"), "new-password"), two = passField(t("Repeat the passphrase"), "new-password");
@@ -469,7 +561,7 @@ function authScreen(info, tab) {
   S.noCard = true; // the card is not shown on the login page
   mount(...screen("Socrates", body));
   S.noCard = false;
-  const first = S.root.querySelector("form input:not([hidden]), form select");
+  const first = focusAfter || S.root.querySelector("form input:not([hidden]), form select");
   if (first) first.focus({ preventScroll: true });
 }
 
@@ -480,6 +572,14 @@ async function boot() {
   const pr = await desktopProfiles();
   if (pr) {
     S.profiles = true;
+    if (!pr.active && pr.stay && pr.last && !S.noAuto) {
+      // The person asked to stay signed in: the window opens that profile by itself (it unlocks it too, with the passphrase it kept).
+      mount(...screen("Socrates", el("p", { class: "muted" }, t("Starting…"))));
+      const a = await shellPost("/shell/autologin", { id: pr.last });
+      if (a.status === 200) { S.profile = pr.profiles.find((p) => p.id === pr.last) || null; return boot(); }
+      S.noAuto = true; // once: a failure shows the login screen, it does not try again by itself
+      return authScreen(await desktopProfiles() || pr);
+    }
     if (!pr.active) return authScreen(pr);
     S.profile = S.profile || pr.profiles.find((p) => p.id === pr.active) || null;
   }
@@ -602,12 +702,12 @@ async function providerScreen(first, back) {
   // A model server on this computer is looked for by itself, and the models it holds are offered in a list: nothing to type.
   const lookFor = async (endpoint) => { const r = await api("GET", "/api/settings/llm/local-models" + (endpoint ? "?endpoint=" + encodeURIComponent(endpoint) : "")); return r.status === 200 ? r.data : { models: [], endpoint: "" }; };
   const found = localAllowed ? await lookFor("") : { models: [] };
-  if (localAllowed) options.push(el("option", { value: "ollama" }, found.models.length ? t("A model on this computer ({n} found)", { n: found.models.length }) : t("A model on this computer")));
-  const provider = el("select", { "aria-label": t("Provider") }, ...options);
+  if (localAllowed) options.push(el("option", { value: "ollama" }, found.models.length ? t("A model on this computer, experimental ({n} found)", { n: found.models.length }) : t("A model on this computer, experimental")));
+  const provider = themedSelect(el("select", { "aria-label": t("Provider") }, ...options));
   const key = el("input", { type: "password", autocomplete: "off", placeholder: t("Paste your API key"), "aria-label": t("API key") });
   const keyBox = el("div", {}, el("label", {}, t("Your API key")), key, el("p", { class: "muted" }, t("The key stays on this device, encrypted. It is tested once, then used only to talk to your provider.")));
   const endpoint = el("input", { type: "text", value: (cur.data && cur.data.ollamaEndpoint) || "http://127.0.0.1:11434", "aria-label": t("Address of the model server") });
-  const modelSel = el("select", { "aria-label": t("Model") });
+  const modelSel = themedSelect(el("select", { "aria-label": t("Model") }));
   const noModel = el("p", { class: "muted" }, t("No model was found on this computer. Start your model server (for example Ollama) and press Look again."));
   const fillModels = (d) => {
     modelSel.replaceChildren(...d.models.map((m) => el("option", { value: m }, m)));
@@ -618,7 +718,7 @@ async function providerScreen(first, back) {
   const again = el("button", { class: "link", type: "button", onclick: async () => fillModels(await lookFor(endpoint.value)) }, t("Look again"));
   const epBox = el("div", { hidden: true }, el("label", {}, t("Model")), modelSel, noModel, again, el("label", {}, t("Address of the model server")), endpoint,
     el("p", { class: "muted" }, t("The server of a model that runs on this computer, for example Ollama. Nothing leaves the computer if the address is this computer.")),
-    el("p", { class: "notice", role: "note" }, t("How well the philosophers talk, and how reliably the safety checks work, depend on what the model can do. A small model understands Greek and instructions less well, may answer badly, and may judge a risky message wrongly. Choose the strongest model you can run.")));
+    el("p", { class: "notice", role: "note" }, t("Experimental. How well the philosophers talk, and how reliably the safety checks work, depend on what the model can do. The philosophers speak from what the model already knows of their books, and a small model often does not know them: it may misremember what they said, invent examples and attribute them to them, write poor Greek, and judge a risky message wrongly. Claude or OpenAI is recommended for the philosophers; use a model on this computer to try it, and choose the strongest model you can run.")));
   const help = el("div", {}, keyHelp(provider.value, err));
   const helpCard = el("div", { class: "card" }, help);
   provider.addEventListener("change", () => {
@@ -649,6 +749,11 @@ async function home() {
   const byId = Object.fromEntries(S.philosophers.map((p) => [p.id, p]));
   const body = el("div", {});
   if (S.notice) { body.append(errorLine(S.notice)); S.notice = ""; }
+  const bound = boundApp();
+  if (bound && bound.InstallShortcut && bound.ShortcutNeeded && !shortcutAsked() && await shortcutNeeded(bound)) {
+    const offer = shortcutCard(bound, true, () => offer.remove());
+    body.append(offer); // asked once: "Not now" or making the entry ends it
+  }
   body.append(el("h2", { class: "muted" }, t("Talk with")));
   for (const p of S.philosophers) {
     if (p.unlocked === false) {
@@ -1029,7 +1134,7 @@ async function aboutScreen() {
   card(t("What Socrates is"),
     P(t("Socrates is an app for talking with four artificial Greek philosophers: Socrates, Diogenes, Plato and Aristotle. Each is made from what was written about him and after him, and imagined alive in today's world. They are not real people, and they are not a source of medical, legal or other professional advice.")),
     P(t("It keeps your conversations in an encrypted store on this device and talks to the AI model you choose: your own Claude or OpenAI key, or on a computer a model of your own. There is no Socrates server, no sign-up, no analytics and no tracking.")),
-    P(t("How well the philosophers talk, and how reliably the safety checks work, depend on what the model behind them can do."), "muted"),
+    P(t("How well the philosophers talk, and how reliably the safety checks work, depend on what the model behind them can do. A model on this computer is experimental: small models often misremember the books and invent details."), "muted"),
     P(t("If you are thinking of hurting yourself, please call your local emergency number or a crisis line, or tell someone you trust."), "muted"),
     P(t("For people aged 16 and over."), "muted"));
   card(t("Who makes it"), P(t("Socrates is made by Hermes Software, one person, in the same family as the writing coach Moly.")));
@@ -1083,6 +1188,7 @@ async function settings() {
   const p = await api("GET", "/api/settings/llm");
   cards.language = el("div", { class: "card stack" }, el("h2", {}, t("Language")), languagePicker(settings));
   cards.theme = el("div", { class: "card stack" }, el("h2", {}, t("Appearance")), el("p", { class: "muted" }, t("Socrates follows your device by default.")), themePicker());
+  { const b = boundApp(); if (b && b.InstallShortcut && b.ShortcutNeeded) cards.shortcut = shortcutCard(b, await shortcutNeeded(b)); }
   if (S.profiles) cards.profile = (el("div", { class: "card stack" }, el("h2", {}, t("Profile")),
     el("p", { class: "muted" }, S.profile && !S.profile.legacy ? t("Signed in as {name}.", { name: S.profile.name }) : t("Signed in to the existing data.")),
     el("button", { onclick: logOut }, t("Log out"))));
@@ -1132,9 +1238,10 @@ async function settings() {
       el("div", { class: "row" }, el("button", { onclick: () => openCardLink(REPO + "/releases", err) }, t("Open the releases page"))));
     cards.remove = el("div", { class: "card stack" }, el("h2", {}, t("Remove Socrates")),
       el("ol", { class: "muted" }, ...[t("Close Socrates and log out of every profile."), t("Delete the folder you unpacked Socrates into."),
+        t("If you added Socrates to the menu or the desktop, delete those shortcuts too: on Linux the file socrates.desktop in ~/.local/share/applications (and Socrates.desktop on the desktop), on Windows the Socrates shortcuts in the Start menu and on the desktop."),
         t("Your conversations and profiles stay in the .socrates folder of your user folder. Export what you want to keep first, then delete that folder too.")].map((x) => el("li", {}, x))));
   }
-  for (const k of ["provider", "profile", "app", "theme", "language", "memory", "data", "import", "report", "remove", "delete", "help"]) if (cards[k]) body.append(cards[k]);
+  for (const k of ["provider", "profile", "app", "shortcut", "theme", "language", "memory", "data", "import", "report", "remove", "delete", "help"]) if (cards[k]) body.append(cards[k]);
   mount(...screen(t("Settings"), body, backButton(t("Back"))));
 }
 
