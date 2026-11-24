@@ -1,11 +1,11 @@
 {
-    "version": "0.1.0-beta.6",
+    "version": "0.1.0-beta.7",
     "description": "Talk with four artificial Greek philosophers, using your own Claude or OpenAI key.",
     "homepage": "https://nireus79.github.io/Socrates-ai/",
     "license": "MIT",
     "notes": "Needs the WebView2 runtime (already part of Windows 11; install it first on Windows 10). Beta, unsigned.",
-    "url": "https://github.com/Nireus79/Socrates-ai/releases/download/v0.1.0-beta.6/socrates-v0.1.0-beta.6-windows-amd64.zip",
-    "hash": "66aeee686c0c8d600ebef002a88b0744653382f5918ef5513cfadac007dd82b8",
+    "url": "https://github.com/Nireus79/Socrates-ai/releases/download/v0.1.0-beta.7/socrates-v0.1.0-beta.7-windows-amd64.zip",
+    "hash": "0afee65f55684c88c4289b1e173e4dce9e5886a5e735708691f1fff17e064a17",
     "bin": "socrates-desktop.exe",
     "shortcuts": [["socrates-desktop.exe", "Socrates"]]
 }

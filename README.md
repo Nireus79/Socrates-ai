@@ -5,7 +5,7 @@ questions, do not give verdicts, remember what you told them (in your own words,
 It runs on your own AI provider key (Claude or OpenAI). No server of ours, no ads in the chat, nothing you write in a log,
 conversations encrypted on your device.
 
-Status: free beta (0.1.0-beta.6). The Windows build was checked on a Windows computer, the Android app on a phone, the desktop window on Linux. The macOS build (added in beta.6) has never been run on a Mac. The OpenAI models have not been tested; the replies were checked by hand on Claude. See [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md) for what is done and what is open, and [docs/PLAN.md](docs/PLAN.md) for the product.
+Status: free beta (0.1.0-beta.7). The Windows build was checked on a Windows computer, the Android app on a phone, the desktop window on Linux. The macOS build (added in beta.6) has never been run on a Mac. The OpenAI models have not been tested; the replies were checked by hand on Claude. See [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md) for what is done and what is open, and [docs/PLAN.md](docs/PLAN.md) for the product.
 
 You need your own Claude or OpenAI API key (a chat subscription does not include one); the app explains how to get it. Ages 16 and over. The philosophers are artificial characters, can be wrong, and are not a medical, legal or crisis service.
 

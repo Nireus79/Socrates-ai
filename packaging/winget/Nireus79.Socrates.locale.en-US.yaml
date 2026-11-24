@@ -1,5 +1,5 @@
 PackageIdentifier: Nireus79.Socrates
-PackageVersion: 0.1.0-beta.6
+PackageVersion: 0.1.0-beta.7
 PackageLocale: en-US
 Publisher: Hermes Software
 PublisherUrl: https://hermesoftware.wordpress.com/
@@ -19,6 +19,6 @@ Tags:
   - ai
   - chat
   - education
-ReleaseNotesUrl: https://github.com/Nireus79/Socrates-ai/releases/tag/v0.1.0-beta.6
+ReleaseNotesUrl: https://github.com/Nireus79/Socrates-ai/releases/tag/v0.1.0-beta.7
 ManifestType: defaultLocale
 ManifestVersion: 1.6.0

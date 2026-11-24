@@ -1,5 +1,5 @@
 PackageIdentifier: Nireus79.Socrates
-PackageVersion: 0.1.0-beta.6
+PackageVersion: 0.1.0-beta.7
 InstallerType: zip
 NestedInstallerType: portable
 NestedInstallerFiles:
@@ -10,7 +10,7 @@ Dependencies:
     - PackageIdentifier: Microsoft.EdgeWebView2Runtime
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/Nireus79/Socrates-ai/releases/download/v0.1.0-beta.6/socrates-v0.1.0-beta.6-windows-amd64.zip
-    InstallerSha256: 66AEEE686C0C8D600EBEF002A88B0744653382F5918EF5513CFADAC007DD82B8
+    InstallerUrl: https://github.com/Nireus79/Socrates-ai/releases/download/v0.1.0-beta.7/socrates-v0.1.0-beta.7-windows-amd64.zip
+    InstallerSha256: 0AFEE65F55684C88C4289B1E173E4DCE9E5886A5E735708691F1FFF17E064A17
 ManifestType: installer
 ManifestVersion: 1.6.0
