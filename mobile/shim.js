@@ -23,5 +23,8 @@
   // "Report a problem": the text is built on the phone and shown; it goes to the mail app only when the person chooses to send it.
   shell.buildReport = function () { return plugin.buildReport().then(function (r) { return r.text; }); };
   shell.shareReport = function (text) { return plugin.shareReport({ text: text }); };
+  // The notice of the engine's service: whether the phone still has to be asked, and the asking (after the page has explained it).
+  shell.notificationsNeeded = function () { return plugin.notificationsNeeded().then(function (r) { return !!r.needed; }); };
+  shell.askNotifications = function () { return plugin.askNotifications(); };
   window.socratesShell = shell;
 })();

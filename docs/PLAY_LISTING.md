@@ -44,6 +44,6 @@ GOOD TO KNOW
 - **Ads:** none in the beta (answer "no"). Change before any ad or sponsor card ships.
 - **App access:** reviewers need an API key. Give instructions and a key with a small spend limit, revoked afterwards. This is the main practical blocker (founder's key, final stage only).
 - **Data safety (CHECK):** collects/shares: the text of conversations is sent to the AI provider the user chose (data shared with a third party, for app functionality; the user configures it). No data is collected by the developer. Data is encrypted at rest; the user can delete all data in the app (no account, so no deletion URL needed; CHECK whether Play wants one).
-- **Permissions:** INTERNET, foreground service (data sync) with the "running" notice, POST_NOTIFICATIONS. No storage, contacts, location, camera or microphone.
+- **Permissions:** INTERNET, foreground service (data sync) with the "running" notice, POST_NOTIFICATIONS, asked after a sentence of explanation inside the app, not at start. No storage, contacts, location, camera or microphone.
 - **Purchases:** none in the beta. After the beta: one-time products per philosopher and a bundle (docs/MONETIZATION.md).
 - **Target API level / 64-bit:** SDK 36, arm64-v8a (the engine library is arm64 and x86_64 for the emulator).

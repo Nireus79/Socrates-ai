@@ -1575,3 +1575,39 @@ test("Settings always has the card: it can make the entry, or only the desktop i
   click(button(b.root, "Add an icon to the desktop")); await settle(); assert.deepStrictEqual(made2, [true]);
   delete global.window.go;
 });
+
+// ---- the phone's question about notices
+
+function withPhone(needed, extra = {}) {
+  const calls = [];
+  global.window.socratesShell = Object.assign({ ready: Promise.resolve(), base: "", token: "", notificationsNeeded: async () => needed, askNotifications: async () => { calls.push("ask"); } }, extra);
+  return calls;
+}
+
+test("the phone is not asked at the start: a card explains first, asks only on Allow, and is not shown again after either answer", async () => {
+  for (const choice of ["allow", "later"]) {
+    const p = homePage(); const calls = withPhone(true);
+    try { global.window.localStorage.clear(); } catch (_) {}
+    p.app.start(p.root); await settle(12);
+    assert.deepStrictEqual(calls, [], "the phone was asked before the person chose");
+    assert.match(text(p.root), /A small notice while Socrates works/);
+    click(button(p.root, choice === "allow" ? "Allow the notice" : "Not now")); await settle();
+    assert.deepStrictEqual(calls, choice === "allow" ? ["ask"] : []);
+    assert.ok(!p.root.querySelector(".notice-offer"));
+    p.app.start(p.root); await settle(12);
+    assert.ok(!p.root.querySelector(".notice-offer"), "asked once (" + choice + ")");
+    delete global.window.socratesShell;
+  }
+});
+
+test("no card where the phone needs no question (permission given, or Android before 13) or when it cannot be asked", async () => {
+  const given = homePage(); withPhone(false);
+  given.app.start(given.root); await settle(12);
+  assert.ok(!given.root.querySelector(".notice-offer"));
+  delete global.window.socratesShell;
+  const broken = homePage(); withPhone(true, { notificationsNeeded: async () => { throw new Error("x"); } });
+  try { global.window.localStorage.clear(); } catch (_) {}
+  broken.app.start(broken.root); await settle(12);
+  assert.ok(!broken.root.querySelector(".notice-offer"));
+  delete global.window.socratesShell;
+});

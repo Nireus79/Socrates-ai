@@ -1,6 +1,8 @@
 package io.github.nireus79.socrates;
 
+import android.Manifest;
 import android.app.Activity;
+import android.content.pm.PackageManager;
 import android.content.Context;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
@@ -50,6 +52,23 @@ public class SocratesEnginePlugin extends Plugin {
             }
             call.reject("The engine did not start.");
         }).start();
+    }
+
+    // Android 13 and later asks before an app may show a notice (the "Socrates is running" notice of the engine's service). Whether to ask:
+    // only there, and only while it has not been given.
+    @PluginMethod
+    public void notificationsNeeded(PluginCall call) {
+        JSObject r = new JSObject();
+        r.put("needed", Build.VERSION.SDK_INT >= 33
+                && getContext().checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED);
+        call.resolve(r);
+    }
+
+    // The system's own question; the page asks it after explaining, never at start.
+    @PluginMethod
+    public void askNotifications(PluginCall call) {
+        if (Build.VERSION.SDK_INT >= 33) getActivity().requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 1);
+        call.resolve();
     }
 
     // The key help: open a provider's page in the phone's browser. Only the two sites where a key is made, over https, are opened; the

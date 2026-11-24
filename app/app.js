@@ -322,6 +322,21 @@ function shortcutCard(b, needed, notNow) {
 }
 async function shortcutNeeded(b) { try { return !!(await b.ShortcutNeeded()); } catch (_) { return false; } }
 
+// ---- the phone's question about notices (Android 13 and later)
+// The engine's service shows a small "Socrates is running" notice. The phone asks before an app may show one; that question comes after a
+// sentence of explanation, once, not at the first start.
+const noticeAsked = () => { if (S.noticeAsked) return true; try { return window.localStorage.getItem("noticeAsked") === "1"; } catch (_) { return false; } };
+const markNoticeAsked = () => { S.noticeAsked = true; try { window.localStorage.setItem("noticeAsked", "1"); } catch (_) { /* asked again in the next session */ } };
+function noticeCard(sh, done) {
+  const finish = () => { markNoticeAsked(); done(); };
+  return el("div", { class: "card stack notice-offer" }, el("h2", {}, t("A small notice while Socrates works")),
+    el("p", { class: "muted" }, t("While Socrates works, the phone can show a small notice that it is running. It lets a reply finish if you leave the app for a moment, and it shows that the app is active. You can say no: the app works either way.")),
+    el("div", { class: "row" },
+      el("button", { class: "primary", onclick: async () => { try { await sh.askNotifications(); } catch (_) { /* the phone said no or could not ask */ } finish(); } }, t("Allow the notice")),
+      el("button", { class: "link", onclick: finish }, t("Not now"))));
+}
+async function noticeNeeded(sh) { try { return !!(await sh.notificationsNeeded()); } catch (_) { return false; } }
+
 // A card that acts like a button answers Enter and Space.
 function activate(fn) { return (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fn(); } }; }
 // Navigation. A screen reached from another is a step on a stack of how to draw it, so Back goes to the screen before. The page does not use
@@ -753,6 +768,11 @@ async function home() {
   if (bound && bound.InstallShortcut && bound.ShortcutNeeded && !shortcutAsked() && await shortcutNeeded(bound)) {
     const offer = shortcutCard(bound, true, () => offer.remove());
     body.append(offer); // asked once: "Not now" or making the entry ends it
+  }
+  const phone = shellInfo();
+  if (phone && phone.notificationsNeeded && phone.askNotifications && !noticeAsked() && await noticeNeeded(phone)) {
+    const ask = noticeCard(phone, () => ask.remove());
+    body.append(ask); // asked once
   }
   body.append(el("h2", { class: "muted" }, t("Talk with")));
   for (const p of S.philosophers) {
